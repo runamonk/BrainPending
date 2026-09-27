@@ -780,7 +780,13 @@ public partial class RichEditor
             Rect target = blockCaretRect is { } br
                 ? MapDocToView(new Rect(br.X, Math.Max(0, br.Y - m), 2, br.Height + 2 * m))
                 : MapDocToView(new Rect(_lastCaretPoint.X, Math.Max(0, _lastCaretPoint.Y - m), 2, _lastCaretHeight + 2 * m));
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => { try { this.BringIntoView(target); } catch (Exception ex) { RichEditorDiagnostics.Report(ex); } });
+            var document = Document;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                if (!ReferenceEquals(Document, document)) return;
+                try { this.BringIntoView(target); }
+                catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
+            });
         }
     }
 

@@ -69,6 +69,111 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void SwitchingNotesRestoresEachSelectionAndIndependentScrollPosition()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var text = string.Join("\n", Enumerable.Range(1, 100).Select(i => $"Line {i}"));
+        var first = workspace.CreateNote(_root, "First", NoteWorkspace.PlainTextRtf(text));
+        var second = workspace.CreateNote(_root, "Second", NoteWorkspace.PlainTextRtf("Short note"));
+        var window = OpenWindow();
+        Select(window, first.Path);
+        var view = window.FindControl<RichEditorView>("EditorView")!;
+        using var bitmap = new RenderTargetBitmap(new PixelSize(1240, 820));
+        void Render()
+        {
+            window.UpdateLayout();
+            bitmap.Render(window);
+            Dispatcher.UIThread.RunJobs();
+        }
+        view.Editor.FindNext("Line 60", false);
+        Render();
+        var firstText = view.Editor.CaptureTextPosition();
+        view.ScrollOffset = new Vector(0, 900); // viewport need not follow the caret
+        Render();
+        var firstScroll = view.ScrollOffset;
+        Select(window, second.Path);
+        view.Editor.FocusDocumentEnd();
+        Render();
+        var secondText = view.Editor.CaptureTextPosition();
+        var secondScroll = view.ScrollOffset;
+        for (var i = 0; i < 2; i++)
+        {
+            Select(window, first.Path);
+            Render();
+            Assert.Equal(firstText, view.Editor.CaptureTextPosition());
+            Assert.Equal(firstScroll, view.ScrollOffset);
+            Assert.False(view.Editor.IsModified);
+            Select(window, second.Path);
+            Render();
+            Assert.Equal(secondText, view.Editor.CaptureTextPosition());
+            Assert.Equal(secondScroll, view.ScrollOffset);
+        }
+    }
+
+    [AvaloniaFact]
+    public void ClickingVisibleTextInNewNoteDoesNotScroll()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var text = string.Join("\n", Enumerable.Range(1, 100).Select(i => $"Line {i}"));
+        var note = workspace.CreateNote(_root, "Click me", NoteWorkspace.PlainTextRtf(text));
+        var window = OpenWindow();
+        Select(window, note.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        var scroller = editor.FindAncestorOfType<ScrollViewer>()!;
+        using var bitmap = new RenderTargetBitmap(new PixelSize(1240, 820));
+        bitmap.Render(window);
+        Dispatcher.UIThread.RunJobs();
+        var before = scroller.Offset;
+        var point = editor.TranslatePoint(new Point(30, 12), window)!.Value;
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        Assert.Equal(before, scroller.Offset);
+        for (var i = 0; i < 3; i++)
+        {
+            window.UpdateLayout();
+            bitmap.Render(window);
+            Dispatcher.UIThread.RunJobs();
+        }
+        Assert.True(editor.IsFocused);
+        Assert.Equal(before, scroller.Offset);
+        Assert.True(editor.FindNext("Line 90", false));
+        bitmap.Render(window);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(scroller.Offset.Y > before.Y); // explicit caret scrolling still works
+    }
+
+    [AvaloniaFact]
+    public void SwitchingToUnopenedNoteStartsAtTopAfterPreviousNoteWasScrolled()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var text = string.Join("\n", Enumerable.Range(1, 100).Select(i => $"Line {i}"));
+        var first = workspace.CreateNote(_root, "First", NoteWorkspace.PlainTextRtf(text));
+        var second = workspace.CreateNote(_root, "Second", NoteWorkspace.PlainTextRtf(text));
+        var window = OpenWindow();
+        Select(window, first.Path);
+        var view = window.FindControl<RichEditorView>("EditorView")!;
+        var scroller = view.Editor.FindAncestorOfType<ScrollViewer>()!;
+        using var bitmap = new RenderTargetBitmap(new PixelSize(1240, 820));
+        bitmap.Render(window);
+        Dispatcher.UIThread.RunJobs();
+        scroller.Offset = new Vector(0, 300);
+        window.UpdateLayout();
+        Assert.True(scroller.Offset.Y > 0);
+        view.Editor.FindNext("Line 90", false);
+        bitmap.Render(window); // queue a caret scroll from the old document
+        Select(window, second.Path);
+        for (var i = 0; i < 3; i++)
+        {
+            window.UpdateLayout();
+            bitmap.Render(window);
+            Dispatcher.UIThread.RunJobs();
+        }
+        Assert.Equal(0, scroller.Offset.Y);
+        Assert.Equal(1, view.Editor.GetStatus().line);
+        Assert.False(view.Editor.IsModified);
+    }
+
+    [AvaloniaFact]
     public void InlineTitleRenameSavesEditsAndUpdatesRememberedNote()
     {
         var workspace = new NoteWorkspace(_root);

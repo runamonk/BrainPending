@@ -152,6 +152,7 @@ public partial class RichEditor
         var first = GetAllParagraphsInOrder().FirstOrDefault();
         _caretPosition = new TextPointer(first, 0);
         CollapseSelectionToCaret();
+        _bringCaretIntoView = false; // do not carry a pending caret scroll into the new document
         _undoManager = new UndoManager();
         MarkSaved(); // freshly loaded content is the baseline, not a pending modification
         InvalidateVisual();

@@ -121,6 +121,16 @@ public class RichEditorView : UserControl
     private readonly LayoutTransformControl _zoomHost;
     private readonly ScrollViewer _scroller;
 
+    /// <summary>Resets the document viewport to its top-left corner.</summary>
+    public void ScrollToTop() => _scroller.Offset = new Vector(0, 0);
+
+    /// <summary>The document viewport offset, in scaled pixels.</summary>
+    public Vector ScrollOffset
+    {
+        get => _scroller.Offset;
+        set => _scroller.Offset = value;
+    }
+
     /// <summary>Creates the bundled toolbar + scrolling editor view.</summary>
     public RichEditorView()
     {
@@ -156,6 +166,9 @@ public class RichEditorView : UserControl
         {
             Content = _zoomHost,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            // The editor scrolls its caret explicitly. Scrolling the whole control on focus
+            // hides its top margin and shifts the text under the first pointer click.
+            BringIntoViewOnFocusChange = false,
         };
         UpdateHorizontalScroll();
         // Make the editor at least as tall as the viewport, so the empty area below short content is part

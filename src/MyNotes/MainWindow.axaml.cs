@@ -437,6 +437,14 @@ public partial class MainWindow : Window
     }
 
     private readonly List<string> _recentNotes = [];
+    private readonly Dictionary<string, (EditorTextPosition Text, Vector Scroll)> _notePositions =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+    private void RememberNotePosition()
+    {
+        if (_note != null)
+            _notePositions[_note.Path] = (EditorView.Editor.CaptureTextPosition(), EditorView.ScrollOffset);
+    }
 
     private void LoadNote(NoteSnapshot note)
     {
@@ -446,7 +454,9 @@ public partial class MainWindow : Window
         _loading = true;
         try
         {
+            RememberNotePosition();
             EditorView.Editor.LoadRtf(note.Rtf);
+            EditorView.ScrollToTop();
             _note = note;
             _dirty = false;
             _autosave.Stop();
@@ -454,6 +464,13 @@ public partial class MainWindow : Window
             Breadcrumb.Text = (_workspace!.IsInTrash(note.Path) ? "Trash  /  " + Path.GetRelativePath(_workspace.TrashPath, note.Path) : "Notebook  /  " + Path.GetRelativePath(_workspace.Root, note.Path)).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
             EditorView.IsVisible = true;
             Welcome.IsVisible = false;
+            if (_notePositions.TryGetValue(note.Path, out var position))
+            {
+                EditorView.Editor.RestoreTextPosition(position.Text);
+                // Measure the new document before restoring an offset beyond the old extent.
+                UpdateLayout();
+                EditorView.ScrollOffset = position.Scroll;
+            }
             SaveStatus.Text = "Saved locally";
             Title = NoteTitle.Text + " — MyNotes";
         }
@@ -465,6 +482,7 @@ public partial class MainWindow : Window
 
     private void ClearNote(bool forget = true)
     {
+        RememberNotePosition();
         CloseFind(false);
         CancelTitleEditing();
         if (forget && _note != null) RememberOpenNote(null);

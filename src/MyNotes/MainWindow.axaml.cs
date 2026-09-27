@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     private readonly string? _settingsPath;
     private PixelPoint? _normalPosition;
     private Size _normalSize;
-    private readonly MenuFlyout _recentNotebooksMenu = new();
+    private readonly Flyout _recentNotebooksMenu = new();
     private readonly string? _startupPath;
     private bool _closed;
     private string? _titleEditingPath;
@@ -270,34 +270,71 @@ public partial class MainWindow : Window
     {
         var settings = NotebookSettings.Read(_settingsPath);
         var paths = settings.RecentNotebooks ?? (settings.NotebookPath is string last ? new[] { last } : []);
-        var items = new List<MenuItem>();
+        var items = new StackPanel { Spacing = 4 };
         foreach (var path in paths)
         {
             var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
-            var entry = new MenuItem
+            var removeIcon = new Avalonia.Controls.Shapes.Path
+            {
+                Width = 16, Height = 18, StrokeThickness = 1.4,
+                Data = Geometry.Parse("M 2,4 L 14,4 M 5,4 L 5,1 L 11,1 L 11,4 M 4,4 L 5,17 L 11,17 L 12,4 M 7,7 L 7,14 M 9,7 L 9,14")
+            };
+            removeIcon.Bind(Avalonia.Controls.Shapes.Shape.StrokeProperty, new DynamicResourceExtension("AppIconBrush"));
+            var remove = new Button
+            {
+                Name = "RemoveRecentNotebookButton", Content = removeIcon,
+                Classes = { "quiet" }, Width = 30, Height = 30,
+                Padding = new Thickness(6), Margin = new Thickness(12, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            ToolTip.SetTip(remove, "Remove from recent notebooks");
+            Avalonia.Automation.AutomationProperties.SetName(remove, "Remove " + name + " from recent notebooks");
+            remove.Click += async (_, e) =>
+            {
+                e.Handled = true;
+                _recentNotebooksMenu.Hide();
+                await Run(async () =>
+                {
+                    if (!await Confirm("Remove recent notebook?",
+                        $"Remove ‘{name}’ from recent notebooks? The notebook and its notes will remain unchanged.", "Remove")) return;
+                    _settings = NotebookSettings.Read(_settingsPath).RemoveRecentNotebook(path);
+                    _settings.Save(_settingsPath);
+                    RefreshRecentNotebooks();
+                });
+            };
+            var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            var label = new StackPanel
+            {
+                Spacing = 2,
+                Children =
+                {
+                    new TextBlock { Text = string.IsNullOrEmpty(name) ? path : name },
+                    new TextBlock { Text = path, FontSize = 11, Opacity = 0.6, MaxWidth = 440, TextTrimming = TextTrimming.CharacterEllipsis }
+                }
+            };
+            Grid.SetColumn(remove, 1);
+            header.Children.Add(remove);
+            var entry = new Button
             {
                 Tag = path,
-                Header = new StackPanel
-                {
-                    Spacing = 2,
-                    Children =
-                    {
-                        new TextBlock { Text = string.IsNullOrEmpty(name) ? path : name },
-                        new TextBlock { Text = path, FontSize = 11, Opacity = 0.6, MaxWidth = 440, TextTrimming = TextTrimming.CharacterEllipsis }
-                    }
-                }
+                Content = label,
+                Classes = { "quiet" },
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left
             };
             ToolTip.SetTip(entry, path);
             entry.Click += async (_, _) => await Run(() =>
             {
+                _recentNotebooksMenu.Hide();
                 if (!Directory.Exists(path)) throw new IOException("This notebook is no longer available: " + path);
                 if (SaveCurrent()) SetWorkspace(path);
                 return Task.CompletedTask;
             });
-            items.Add(entry);
+            header.Children.Add(entry);
+            items.Children.Add(header);
         }
-        if (items.Count == 0) items.Add(new MenuItem { Header = "No recent notebooks", IsEnabled = false });
-        _recentNotebooksMenu.ItemsSource = items;
+        if (items.Children.Count == 0) items.Children.Add(new TextBlock { Text = "No recent notebooks" });
+        _recentNotebooksMenu.Content = items;
     }
 
     private int _checkQueued;

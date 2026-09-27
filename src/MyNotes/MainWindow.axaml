@@ -3,6 +3,7 @@
         xmlns:local="using:MyNotes"
         xmlns:rte="using:AvaloniaRichEditor.Controls"
         x:Class="MyNotes.MainWindow"
+        Icon="/Assets/MyNotes.ico"
         Title="MyNotes" Width="1240" Height="820" MinWidth="850" MinHeight="550"
         Background="{DynamicResource AppSurfaceBrush}">
   <Grid RowDefinitions="64,*,36">

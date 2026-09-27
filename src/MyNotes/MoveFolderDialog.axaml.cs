@@ -7,23 +7,31 @@ namespace MyNotes;
 
 public partial class MoveFolderDialog : Window
 {
-    private readonly NoteWorkspace _workspace;
-    private readonly BrowserItem _item;
-    private readonly Func<string, bool> _move;
-    private readonly string _sourceFolder;
-    private string _folder;
+    private readonly NoteWorkspace? _workspace;
+    private readonly BrowserItem? _item;
+    private readonly Func<string, bool>? _move;
+    private readonly string _sourceFolder = "";
+    private string _folder = "";
     private bool _refreshing;
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-    public MoveFolderDialog(NoteWorkspace workspace, BrowserItem item, Func<string, bool> move)
+    // Avalonia's runtime XAML loader needs a public parameterless constructor.
+    public MoveFolderDialog()
+    {
+        InitializeComponent();
+        HomeButton.IsEnabled = false;
+        MoveButton.IsEnabled = false;
+    }
+
+    public MoveFolderDialog(NoteWorkspace workspace, BrowserItem item, Func<string, bool> move) : this()
     {
         _workspace = workspace;
         _item = item;
         _move = move;
         _sourceFolder = Path.GetDirectoryName(item.Path)!;
         _folder = _sourceFolder;
-        InitializeComponent();
+        HomeButton.IsEnabled = true;
         MoveHeading.Text = $"Move “{item.Name}”";
         Navigate(_folder);
         KeyDown += (_, e) =>
@@ -36,6 +44,7 @@ public partial class MoveFolderDialog : Window
 
     private void Navigate(string folder)
     {
+        if (_workspace == null || _item == null) return;
         try
         {
             folder = _workspace.CheckPath(folder);
@@ -72,10 +81,14 @@ public partial class MoveFolderDialog : Window
         if (!_refreshing && Folders.SelectedItem is BrowserItem item) Navigate(item.Path);
     }
 
-    private void Home_Click(object? sender, RoutedEventArgs e) => Navigate(_workspace.Root);
+    private void Home_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_workspace != null) Navigate(_workspace.Root);
+    }
     private void Cancel_Click(object? sender, RoutedEventArgs e) => Close();
     private void Move_Click(object? sender, RoutedEventArgs e)
     {
+        if (_move == null) return;
         try
         {
             if (_move(_folder)) Close();

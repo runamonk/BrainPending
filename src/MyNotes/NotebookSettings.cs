@@ -22,12 +22,18 @@ internal sealed record NotebookSettings(string? NotebookPath = null, bool DarkTh
     public NotebookSettings RememberNotebook(string path)
     {
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        var recent = new[] { path }.Concat(RecentNotebooks ?? [])
-            .Concat(NotebookPath is null ? [] : new[] { NotebookPath })
+        var recent = new[] { path }.Concat(RecentNotebooks ?? (NotebookPath is null ? [] : new[] { NotebookPath }))
             .Where(p => !string.IsNullOrWhiteSpace(p))
             .Select(p => Path.TrimEndingDirectorySeparator(Path.GetFullPath(p)))
             .Distinct(comparer).Take(10).ToArray();
         return this with { NotebookPath = recent[0], RecentNotebooks = recent, SkipAutomaticNotebook = false };
+    }
+
+    public NotebookSettings RemoveRecentNotebook(string path)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var recent = RecentNotebooks ?? (NotebookPath is null ? [] : new[] { NotebookPath });
+        return this with { RecentNotebooks = recent.Where(p => !string.Equals(p, path, comparison)).ToArray() };
     }
 
     private static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MyNotes", "settings.json");

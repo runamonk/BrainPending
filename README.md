@@ -43,6 +43,8 @@ dotnet run --project src/MyNotes -- --notes ./Notes
 - Light/dark themes.
 - Split Open notebook button: click the label to browse, or the arrow for the ten
   most recently opened notebooks, remembered between sessions.
+- Each recent notebook has a trashcan button to remove it from the menu without
+  deleting its files or changing the currently open notebook.
 - Dark mode uses the Dracula palette, including the editor, toolbar, dialogs,
   cyan folder icons, purple accents and muted selection backgrounds.
   Dark document ink is lightened for display without changing saved RTF colours.

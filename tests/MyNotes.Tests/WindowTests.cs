@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.Styling;
+using Avalonia.VisualTree;
 using AvaloniaRichEditor.Controls;
 using MyNotes.Core;
 
@@ -89,7 +90,7 @@ public sealed class WindowTests : IDisposable
         first.Close();
         var reopened = OpenWindow();
         Assert.Equal("Resume here", reopened.FindControl<TextBlock>("NoteTitle")!.Text);
-        Assert.Equal("Projects", reopened.FindControl<TextBlock>("FolderHeading")!.Text);
+        Assert.Contains(reopened.FindControl<ListBox>("Browser")!.ItemsSource!.Cast<BrowserItem>(), i => i.IsUp && i.Path == _root);
         Assert.Equal(note.Path, ((BrowserItem)reopened.FindControl<ListBox>("Browser")!.SelectedItem!).Path);
         Assert.True(reopened.FindControl<RichEditorView>("EditorView")!.IsVisible);
         Assert.Equal(note.Revision, workspace.Read(note.Path).Revision);
@@ -162,9 +163,9 @@ public sealed class WindowTests : IDisposable
         _windows.Add(second);
         second.Show();
         Assert.Equal("Choose a notebook", second.FindControl<TextBlock>("SaveStatus")!.Text);
-        var menu = (MenuFlyout)second.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
-        menu.Items.OfType<MenuItem>().Single(i => Equals(i.Tag, _root))
-            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        var menu = (Flyout)second.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
+        RecentButtons(menu).Single(i => Equals(i.Tag, _root))
+            .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Equal(_root, second.FindControl<TextBlock>("NotebookPath")!.Text);
         Assert.False(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
         Assert.False(second.FindControl<Border>("Notice")!.IsVisible);
@@ -185,6 +186,69 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task RecentNotebookTrashButtonRequiresConfirmationAndRemovesOnlyTheMenuEntry()
+    {
+        var second = Path.Combine(_root, "Other notebook");
+        var other = new NoteWorkspace(second);
+        var note = other.CreateNote(second, "Keep me");
+        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
+        new NotebookSettings().RememberNotebook(second).Save(settingsPath);
+        var window = OpenWindow();
+        var menu = (Flyout)window.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
+        var item = RecentButtons(menu).Single(i => Equals(i.Tag, second));
+        menu.ShowAt(window.FindControl<SplitButton>("OpenNotebookButton")!);
+        window.UpdateLayout();
+        item = RecentButtons(menu).Single(i => Equals(i.Tag, second));
+        var remove = ((Grid)item.Parent!).Children.OfType<Button>().Single(b => b.Name == "RemoveRecentNotebookButton");
+        ClickControl(remove);
+        var dialog = Assert.Single(window.OwnedWindows);
+        Assert.Contains(second, NotebookSettings.Read(settingsPath).RecentNotebooks!);
+        ClickControl(dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Cancel")));
+        await Task.Yield();
+        Assert.Contains(second, NotebookSettings.Read(settingsPath).RecentNotebooks!);
+        menu.ShowAt(window.FindControl<SplitButton>("OpenNotebookButton")!);
+        window.UpdateLayout();
+        item = RecentButtons(menu).Single(i => Equals(i.Tag, second));
+        remove = ((Grid)item.Parent!).Children.OfType<Button>().Single(b => b.Name == "RemoveRecentNotebookButton");
+        ClickControl(remove);
+        dialog = Assert.Single(window.OwnedWindows);
+        ClickControl(dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Remove")));
+        await Task.Yield();
+        Assert.DoesNotContain(second, NotebookSettings.Read(settingsPath).RecentNotebooks!);
+        Assert.DoesNotContain(RecentButtons(menu), i => Equals(i.Tag, second));
+        Assert.Equal(_root, window.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.Equal(note.Revision, other.Read(note.Path).Revision);
+        window.Close();
+    }
+
+    private static IEnumerable<Button> RecentButtons(Flyout menu) =>
+        ((StackPanel)menu.Content!).Children.OfType<Grid>().SelectMany(g => g.Children.OfType<Button>()).Where(b => b.Tag is string);
+
+    private static void ClickControl(Control control)
+    {
+        Dispatcher.UIThread.RunJobs();
+        var root = TopLevel.GetTopLevel(control)!;
+        root.UpdateLayout();
+        var point = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), root)!.Value;
+        Assert.True(control.Bounds.Width > 0 && control.Bounds.Height > 0, $"Invalid bounds {control.Bounds}");
+        root.MouseMove(point);
+        root.MouseDown(point, MouseButton.Left);
+        root.MouseUp(point, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    [Fact]
+    public void RemovingRecentEntryPreservesStartupChoiceAndDoesNotReinsertItWhenOpeningAnother()
+    {
+        var other = Path.Combine(_root, "Other");
+        var settings = new NotebookSettings().RememberNotebook(_root).RemoveRecentNotebook(_root);
+        Assert.Equal(_root, settings.NotebookPath);
+        Assert.Empty(settings.RecentNotebooks!);
+        settings = settings.RememberNotebook(other);
+        Assert.Equal(other, Assert.Single(settings.RecentNotebooks!));
+    }
+
+    [AvaloniaFact]
     public void RecentNotebookSwitchSavesEditsAndRemembersMostRecentFirst()
     {
         var workspace = new NoteWorkspace(_root);
@@ -197,9 +261,9 @@ public sealed class WindowTests : IDisposable
         Select(window, note.Path);
         window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Saved before switching");
         var button = window.FindControl<SplitButton>("OpenNotebookButton")!;
-        var menu = Assert.IsType<MenuFlyout>(button.Flyout);
-        var entry = menu.Items.OfType<MenuItem>().Single(i => Equals(i.Tag, second));
-        entry.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        var menu = Assert.IsType<Flyout>(button.Flyout);
+        var entry = RecentButtons(menu).Single(i => Equals(i.Tag, second));
+        entry.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Equal(second, window.FindControl<TextBlock>("NotebookPath")!.Text);
         Assert.Contains("Saved before switching", workspace.Read(note.Path).Rtf);
         window.Close();
@@ -213,9 +277,9 @@ public sealed class WindowTests : IDisposable
         new NotebookSettings().RememberNotebook(missing)
             .Save(Path.Combine(_root, ".mynotes", "settings.json"));
         var window = OpenWindow();
-        var menu = (MenuFlyout)window.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
-        menu.Items.OfType<MenuItem>().Single(i => Equals(i.Tag, missing))
-            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        var menu = (Flyout)window.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
+        RecentButtons(menu).Single(i => Equals(i.Tag, missing))
+            .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.False(Directory.Exists(missing));
         Assert.Equal(_root, window.FindControl<TextBlock>("NotebookPath")!.Text);
         Assert.Contains("no longer available", window.FindControl<TextBlock>("NoticeText")!.Text);
@@ -408,7 +472,7 @@ public sealed class WindowTests : IDisposable
         Assert.Contains(rows, r => r.Name == "Ideas");
         Select(window, parent);
         await Task.Delay(180, TestContext.Current.CancellationToken);
-        Assert.Equal("Projects", window.FindControl<TextBlock>("FolderHeading")!.Text);
+        Assert.Contains(window.FindControl<ListBox>("Browser")!.ItemsSource!.Cast<BrowserItem>(), i => i.Path == child);
         window.Close();
     }
 
@@ -447,7 +511,7 @@ public sealed class WindowTests : IDisposable
         Assert.False(trash.CanManage);
         Assert.Empty(window.CreateItemMenu(trash).Items);
         Select(window, workspace.TrashPath);
-        Assert.Equal("Trash", window.FindControl<TextBlock>("FolderHeading")!.Text);
+        Assert.Contains(browser.ItemsSource!.Cast<BrowserItem>(), i => i.Path == trashed);
         Assert.Equal(workspace.Root, Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => i.IsUp).Path);
         Select(window, trashed);
         var item = Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => i.Path == trashed);

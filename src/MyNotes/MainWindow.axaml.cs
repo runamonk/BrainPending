@@ -372,7 +372,7 @@ public partial class MainWindow : Window
             Browser.SelectedItem = rows.FirstOrDefault(e => e.Path == _note?.Path);
         }
         finally { _refreshing = false; }
-        FolderEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? (_workspace.IsTrash(_folder) ? "Trash is empty." : "A fresh start.\nCreate your first note here.") : "No matching titles.";
+        FolderEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? (_workspace.IsTrash(_folder) ? "Trash is empty." : "Create your first note here.") : "No matching titles.";
         FolderEmpty.IsVisible = rows.All(r => r.IsUp);
         ItemCount.Text = $"{entries.Count(e => !e.IsFolder)} notes · {entries.Count(e => e.IsFolder)} folders";
     }
@@ -471,8 +471,8 @@ public partial class MainWindow : Window
         _autosave.Stop();
         EditorView.IsVisible = false;
         Welcome.IsVisible = true;
-        NoteTitle.Text = "Make room for an idea.";
-        Breadcrumb.Text = "Your notebook";
+        NoteTitle.Text = "";
+        Breadcrumb.Text = "";
         Title = "MyNotes";
     }
 

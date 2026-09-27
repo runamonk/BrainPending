@@ -60,7 +60,7 @@
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-            <TextBlock x:Name="FolderEmpty" IsVisible="False" Opacity="0.5" Margin="12,35,12,30" TextWrapping="Wrap" />
+            <TextBlock x:Name="FolderEmpty" IsVisible="False" IsHitTestVisible="False" Opacity="0.5" Margin="12,50,50,30" TextWrapping="Wrap" />
           </Grid>
           <TextBlock x:Name="ItemCount" Grid.Row="4" FontSize="11" Opacity="0.5" Margin="10,14,0,0" />
         </Grid>
@@ -70,15 +70,15 @@
         <Border BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1" Padding="28,20,28,18">
           <Grid RowDefinitions="Auto,Auto,Auto">
             <TextBlock x:Name="Breadcrumb" Text="Your notebook" FontSize="12" Opacity="0.5" TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="NoteTitle" Grid.Row="1" Text="Make room for an idea." FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" TextTrimming="CharacterEllipsis" DoubleTapped="NoteTitle_DoubleTapped" ToolTip.Tip="Double-click to rename" />
+            <TextBlock x:Name="NoteTitle" Grid.Row="1" Text="" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" TextTrimming="CharacterEllipsis" DoubleTapped="NoteTitle_DoubleTapped" ToolTip.Tip="Double-click to rename" />
             <TextBox x:Name="NoteTitleInput" Grid.Row="1" IsVisible="False" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" Padding="0" Background="Transparent" BorderThickness="0,0,0,1" KeyDown="NoteTitleInput_KeyDown" LostFocus="NoteTitleInput_LostFocus" AutomationProperties.Name="Note title" />
             <TextBlock x:Name="NoteTitleError" Grid.Row="2" IsVisible="False" Foreground="{DynamicResource AppErrorBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
           </Grid>
         </Border>
         <rte:RichEditorView Grid.Row="1" x:Name="EditorView" IsVisible="False" ShowFileActions="False" ShowStatusBar="True" Background="Transparent" />
         <StackPanel x:Name="Welcome" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Spacing="16" Margin="32">
-          <TextBlock Text="Your ideas, at home." FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" />
-          <TextBlock Text="Pick a note on the left, or start something new. Everything lives in your notebook folder." TextWrapping="Wrap" TextAlignment="Center" FontSize="15" Opacity="0.6" LineHeight="25" />
+          <TextBlock Text="" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" />
+          <TextBlock Text="Pick a note on the left, or start something new. " TextWrapping="Wrap" TextAlignment="Center" FontSize="15" Opacity="0.6" LineHeight="25" />
           <Button Content="＋  Write a note" Classes="action" HorizontalAlignment="Center" Background="{DynamicResource AppAccentBrush}" Foreground="{DynamicResource AppAccentTextBrush}" Click="NewNote_Click" Margin="0,8,0,0" />
           <TextBlock Text="Ctrl+N  new note     •     Ctrl+S  save" FontSize="12" Opacity="0.45" HorizontalAlignment="Center" />
         </StackPanel>

@@ -1,0 +1,74 @@
+using Avalonia.Media.Imaging;
+
+namespace AvaloniaRichEditor.Documents;
+
+/// <summary>An image that flows inline within a paragraph's text (e.g. a small icon or logo).
+/// Occupies exactly one logical character position (object-replacement character U+FFFC).
+/// For large block-level pictures use <see cref="ImageBlock"/> instead.</summary>
+public class InlineImage : Inline
+{
+    private Bitmap? _cachedBitmap;
+    // See ImageBlock: a failed decode stops retrying but never discards the bytes (a save must not
+    // drop the picture just because this platform's codec couldn't decode it).
+    private bool _decodeFailed;
+
+    /// <summary>Original encoded image bytes (JPEG/PNG/...). When present this is the data source
+    /// of truth: serialization stores these bytes verbatim (no re-encoding) and <see cref="Image"/>
+    /// is decoded from them lazily on first access.</summary>
+    public byte[]? RawBytes { get; private set; }
+
+    /// <summary>MIME type of <see cref="RawBytes"/> (e.g. "image/jpeg").</summary>
+    public string? MimeType { get; private set; }
+
+    /// <summary>Decoded bitmap (render cache). Lazily created from <see cref="RawBytes"/> on first
+    /// access. Setting a bitmap directly discards the raw bytes — serialization then falls back to
+    /// PNG-encoding the bitmap.</summary>
+    public Bitmap? Image
+    {
+        get
+        {
+            if (_cachedBitmap == null && RawBytes != null && !_decodeFailed)
+            {
+                try
+                {
+                    using var ms = new System.IO.MemoryStream(RawBytes);
+                    _cachedBitmap = new Bitmap(ms);
+                }
+                // undecodable now: stop retrying, but keep the bytes
+                catch (System.Exception ex) { RichEditorDiagnostics.Report(ex); _decodeFailed = true; }
+            }
+            return _cachedBitmap;
+        }
+        set { _cachedBitmap = value; RawBytes = null; MimeType = null; _decodeFailed = false; }
+    }
+
+    /// <summary>Sets the image from its original encoded bytes. Pass <paramref name="decoded"/>
+    /// when a bitmap is already in hand to seed the render cache and avoid a second decode.</summary>
+    public void SetImageData(byte[] bytes, string? mimeType, Bitmap? decoded = null)
+    {
+        RawBytes = bytes;
+        MimeType = mimeType ?? "image/png";
+        _cachedBitmap = decoded;
+        _decodeFailed = false; // new bytes deserve a fresh decode attempt
+    }
+
+    /// <summary>Display width in device-independent pixels. Default: 16.</summary>
+    public double Width { get; set; } = 16;
+    /// <summary>Display height in device-independent pixels. Default: 16.</summary>
+    public double Height { get; set; } = 16;
+
+    /// <inheritdoc/>
+    public override TextElement Clone()
+    {
+        // Shares RawBytes/bitmap references — see ImageBlock.Clone.
+        var c = new InlineImage
+        {
+            Width = this.Width,
+            Height = this.Height
+        };
+        c.RawBytes = RawBytes;
+        c.MimeType = MimeType;
+        c._cachedBitmap = _cachedBitmap;
+        return c;
+    }
+}

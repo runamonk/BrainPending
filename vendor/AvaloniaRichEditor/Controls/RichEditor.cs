@@ -1,0 +1,2157 @@
+using System;
+using System.Globalization;
+using System.Linq;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Media.Imaging;
+using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using AvaloniaRichEditor.Documents;
+
+namespace AvaloniaRichEditor.Controls;
+
+using System.Threading.Tasks;
+using System.Collections.Generic;
+
+/// <summary>A from-scratch rich text editor built on Avalonia's <c>TextLayout</c> engine.
+/// Supports inline formatting, paragraphs, lists, tables (merged cells, nested and inline tables),
+/// images, HTML/JSON/RTF/<c>.flow</c> import-export, PDF and printing, pagination, find/replace,
+/// undo/redo and CJK IME. What the user may do is set by <see cref="IsReadOnly"/> and the
+/// <c>Allow*</c> feature flags.</summary>
+public partial class RichEditor : Control
+{
+    /// <summary>Adapt dark document ink for a dark canvas without changing stored formatting.</summary>
+    public static readonly StyledProperty<bool> UseThemeColorsProperty =
+        AvaloniaProperty.Register<RichEditor, bool>(nameof(UseThemeColors));
+
+    public bool UseThemeColors
+    {
+        get => GetValue(UseThemeColorsProperty);
+        set => SetValue(UseThemeColorsProperty, value);
+    }
+
+    private IBrush DisplayInk(IBrush? foreground, IBrush? background = null)
+    {
+        var ink = foreground ?? Brushes.Black;
+        if (!UseThemeColors || ActualThemeVariant != Avalonia.Styling.ThemeVariant.Dark
+            || ShowPageBoundaries || background is ISolidColorBrush { Color.A: > 0 }) return ink;
+        if (ink is ISolidColorBrush solid && solid.Color.R < 100 && solid.Color.G < 100 && solid.Color.B < 100)
+            return Brushes.WhiteSmoke;
+        return ink;
+    }
+
+
+    private DispatcherTimer _caretTimer;
+    private UndoManager _undoManager = new UndoManager();
+    private bool _isCaretVisible;
+    private TextPointer _caretPosition = new TextPointer(null, 0);
+    private TextPointer _selectionStart = new TextPointer(null, 0);
+    private TextPointer _selectionEnd = new TextPointer(null, 0);
+    private bool _isSelecting = false;
+    private Point _lastCaretPoint;
+    private double _lastCaretHeight = 20; // line height at the caret (tall on lines with inline images)
+    private Block? _selectedBlock; // a block (image/table) selected by clicking it (deletable with Del/Backspace)
+    // A "block caret" sits before/after an image/table: Space/Tab indent it, Backspace outdents/deletes,
+    // arrows step before -> (table cells) -> after -> next text. Set by clicking or arrow navigation.
+    private Block? _caretBlock;
+    private bool _caretBlockAfter; // false = caret before the block, true = caret after it
+
+    // Internal rich clipboard: preserves run formatting AND inline images for copy/paste within the app.
+    // The plain text put on the system clipboard is mirrored here; on paste we use the rich
+    // version only when the system clipboard text still matches what we copied.
+    private static List<Inline>? _internalClipboard;
+    private static string? _internalClipboardText;
+    // When the copied selection spans whole tables/images or multiple top-level blocks, we also
+    // keep cloned block structure so paste can rebuild tables instead of flattening to text.
+    private static List<Block>? _internalClipboardBlocks;
+
+    // Resizing state
+    private List<(Avalonia.Rect rect, TableBlock tb, int colIndex)> _columnBoundaries = new();
+    private bool _isResizingColumn;
+    private TableBlock? _resizingTable;
+    private int _resizingColumnIndex;
+    private double _initialMouseX;
+    private double _initialColumnWidth;
+    private double _initialNextColumnWidth;
+    private bool _resizingLastColumn;
+
+    // Row resize state (mirrors column resize; dragging a row's bottom edge sets its min height).
+    private List<(Avalonia.Rect rect, TableBlock tb, int rowIndex, double height)> _rowBoundaries = new();
+    private bool _isResizingRow;
+    private TableBlock? _resizingRowTable;
+    private int _resizingRowIndex;
+    private double _initialMouseY;
+    private double _initialRowHeight;
+
+    // Table interaction mode (HWP-style). In cell-selection mode a click selects whole cells (drag =
+    // a block); a double-click drops back into text-editing mode (a caret). Default = text editing.
+    private bool _cellSelMode;
+    private TableBlock? _cellSelTable;
+
+    // Image resize state. The handle carries the size the image was DRAWN at, not just the block: inside
+    // a table cell a picture is scaled down to fit the cell (CellImageSize), so the declared Width can be
+    // several times the width the handle sits at. Seeding the drag from the declared size made a drag of
+    // a few dozen px land inside the range that still clamps to the same drawn width — the handle looked
+    // dead. The drag is relative to what the user can see.
+    private List<(Avalonia.Rect rect, ImageBlock img, double drawnW, double drawnH)> _imageHandles = new();
+    // Rendered rects of block images inside table cells (P4-2b), so a click can select one (top-level
+    // block images are found via GetBlockAtPoint; cell images need this registry, like inline images).
+    private List<(Avalonia.Rect rect, ImageBlock img)> _cellImageRects = new();
+    private bool _isResizingImage;
+    private ImageBlock? _resizingImage;
+    private double _initialImageWidth;
+    private double _initialImageHeight;
+    private double _initialImageMouseX;
+    private double _imageAspect;
+
+    // Inline-image selection + resize (mirrors the block-image handle pattern). The on-screen rect
+    // of every visible inline image is rebuilt each Render pass for click hit-testing; the resize
+    // handle exists only for the selected image. Initial size/aspect state above is shared.
+    private readonly List<(Avalonia.Rect rect, Paragraph p, InlineImage img)> _inlineImageRects = new();
+    private readonly List<(Avalonia.Rect rect, Paragraph p, InlineImage img)> _inlineHandles = new();
+    private (Paragraph p, InlineImage img)? _selectedInline;
+    private bool _isResizingInline;
+    private InlineImage? _resizingInline;
+
+    /// <inheritdoc cref="Document"/>
+    public static readonly StyledProperty<FlowDocument?> DocumentProperty =
+        AvaloniaProperty.Register<RichEditor, FlowDocument?>(nameof(Document));
+
+    /// <summary>The document model being edited. Assigning a new instance replaces the document
+    /// and fires <see cref="DocumentChanged"/>.</summary>
+    public FlowDocument? Document
+    {
+        get => GetValue(DocumentProperty);
+        set => SetValue(DocumentProperty, value);
+    }
+
+    /// <inheritdoc cref="IsReadOnly"/>
+    public static readonly StyledProperty<bool> IsReadOnlyProperty =
+        AvaloniaProperty.Register<RichEditor, bool>(nameof(IsReadOnly));
+
+    /// <summary>When <see langword="true"/>, the editor is a viewer: text input, edits, paste, and resizing
+    /// are blocked; selection and copy still work, and the caret is hidden (blink, IME, and undo history are
+    /// disabled too). Combine with the <see cref="AllowImages"/>/<see cref="AllowTables"/>/etc. flags to
+    /// express capability — there is no bundled mode preset.</summary>
+    public bool IsReadOnly
+    {
+        get => GetValue(IsReadOnlyProperty);
+        set => SetValue(IsReadOnlyProperty, value);
+    }
+
+    /// <inheritdoc cref="SelectionBrush"/>
+    // Immutable, like the static pens in the render file: a plain SolidColorBrush is an AvaloniaObject
+    // and takes the thread affinity of whoever runs this static initializer. As a PROPERTY DEFAULT that
+    // is one object shared by every editor in the process, so a second UI thread painting a selection
+    // hit "the calling thread cannot access this object" — the same rule the document model follows.
+    public static readonly StyledProperty<IBrush> SelectionBrushProperty =
+        AvaloniaProperty.Register<RichEditor, IBrush>(
+            nameof(SelectionBrush), new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromArgb(80, 0, 120, 215)));
+
+    /// <summary>Fill brush for the text/cell selection highlight.</summary>
+    public IBrush SelectionBrush
+    {
+        get => GetValue(SelectionBrushProperty);
+        set => SetValue(SelectionBrushProperty, value);
+    }
+
+    /// <inheritdoc cref="CaretBrush"/>
+    public static readonly StyledProperty<IBrush> CaretBrushProperty =
+        AvaloniaProperty.Register<RichEditor, IBrush>(nameof(CaretBrush), Brushes.Black);
+
+    /// <summary>Brush for the blinking text caret.</summary>
+    public IBrush CaretBrush
+    {
+        get => GetValue(CaretBrushProperty);
+        set => SetValue(CaretBrushProperty, value);
+    }
+
+    // The OS default UI font (Windows message font, e.g. "맑은 고딕" on Korean Windows) so
+    // unstyled documents look native rather than using the app's Avalonia font (often Inter).
+    // Platforms without the query keep Avalonia's default.
+    private static FontFamily SystemDefaultFontFamily() =>
+        SystemFontInfo.MessageFontFaceName() is { } name ? new FontFamily(name) : FontFamily.Default;
+
+    /// <inheritdoc cref="DefaultFontFamily"/>
+    public static readonly StyledProperty<FontFamily> DefaultFontFamilyProperty =
+        AvaloniaProperty.Register<RichEditor, FontFamily>(
+            nameof(DefaultFontFamily), SystemDefaultFontFamily());
+
+    /// <summary>Font family used for runs that don't specify one. Defaults to the OS UI font
+    /// (e.g. 맑은 고딕 on Korean Windows); assign to override.</summary>
+    public FontFamily DefaultFontFamily
+    {
+        get => GetValue(DefaultFontFamilyProperty);
+        set => SetValue(DefaultFontFamilyProperty, value);
+    }
+
+    /// <inheritdoc cref="DefaultFontSize"/>
+    public static readonly StyledProperty<double> DefaultFontSizeProperty =
+        AvaloniaProperty.Register<RichEditor, double>(nameof(DefaultFontSize), BodyFontSizePt);
+
+    /// <summary>Font size in points (pt) used for runs that don't specify one. Default: 10.</summary>
+    public double DefaultFontSize
+    {
+        get => GetValue(DefaultFontSizeProperty);
+        set => SetValue(DefaultFontSizeProperty, value);
+    }
+
+    // Cached system font list. The OS reports family names localized to the UI language (e.g.
+    // "맑은 고딕" on Korean Windows), and those names resolve back through the same font manager,
+    // so they are used as-is for both display and application.
+    private static IReadOnlyList<string>? _systemFontChoices;
+
+    private static IReadOnlyList<string> SystemFontChoices()
+    {
+        if (_systemFontChoices != null) return _systemFontChoices;
+        var names = new List<string>();
+        foreach (var f in FontManager.Current.SystemFonts) names.Add(f.Name);
+        names.Sort(StringComparer.Create(System.Globalization.CultureInfo.CurrentUICulture, ignoreCase: true));
+        // Platforms without font enumeration (e.g. headless): widely-available fallback families.
+        if (names.Count == 0)
+            names.AddRange(new[] { "Arial", "Times New Roman", "Courier New", "Verdana", "Georgia" });
+        return _systemFontChoices = names;
+    }
+
+    /// <inheritdoc cref="FontFamilyChoices"/>
+    public static readonly StyledProperty<IReadOnlyList<string>> FontFamilyChoicesProperty =
+        AvaloniaProperty.Register<RichEditor, IReadOnlyList<string>>(
+            nameof(FontFamilyChoices), Array.Empty<string>());
+
+    /// <summary>Font families offered in the font pickers (right-click submenu and
+    /// <see cref="RichEditorToolbar"/> combo). Defaults to the installed system fonts, sorted for —
+    /// and with names localized by — the OS UI language; assign a non-empty list to curate.</summary>
+    public IReadOnlyList<string> FontFamilyChoices
+    {
+        get
+        {
+            var v = GetValue(FontFamilyChoicesProperty);
+            return v.Count > 0 ? v : SystemFontChoices();
+        }
+        set => SetValue(FontFamilyChoicesProperty, value);
+    }
+
+    static RichEditor()
+    {
+        AffectsRender<RichEditor>(DocumentProperty, SelectionBrushProperty, CaretBrushProperty);
+        // ReadOnly drives the caret/IME/undo optimization. See RichEditor.Modes.cs.
+        IsReadOnlyProperty.Changed.AddClassHandler<RichEditor>((x, e) => x.OnReadOnlyChanged(e.GetNewValue<bool>()));
+    }
+
+    private readonly RtbInputMethodClient _imClient;
+    private string? _preeditText; // IME composition text shown inline at the caret while composing.
+
+    // Per-paragraph TextLayout cache. Building a TextLayout shapes/line-breaks text (the most expensive
+    // step), and Render + Measure + every hit-test would otherwise rebuild every paragraph each frame —
+    // crippling for large documents and the 2 Hz caret blink. Keyed by paragraph; reused while the
+    // paragraph's content signature and wrap width are unchanged.
+    private readonly Dictionary<Paragraph, (long sig, double width, Avalonia.Media.TextFormatting.TextLayout layout)> _layoutCache = new();
+
+    // When set, BuildTextLayout trusts a same-width cache entry without recomputing ParagraphSig.
+    // Only enabled for passes that provably don't mutate content (caret blink / scroll repaint via
+    // Render, and pointer-hover hit-testing), so the per-frame full-document text hashing is skipped.
+    // Edits clear it (Render reads _textChangedPending; hover runs synchronously), so it can't serve
+    // a stale layout for changed content.
+    private bool _trustLayoutCache;
+
+    // Per-table geometry cache (mirrors _layoutCache for tables). LayoutTable allocates several arrays
+    // + a list and measures every cell on each call, and it runs once per table in Measure, Render and
+    // each hit-test. Keyed by table; reused while the table's position (startX/top) and content are
+    // unchanged, gated by _trustLayoutCache like the paragraph cache so a trusted pass (blink/scroll/
+    // hover) skips the recompute entirely. Edits run untrusted and refresh the entry.
+    // `rowH` (the measured per-row heights) is kept alongside so a trusted pass at the SAME startX but a
+    // different `top` — which happens every frame in page view, where pagination measures at continuous
+    // y and render at per-page slice y — can rebuild only the y-positions/anchors instead of re-measuring
+    // every cell (the expensive part, which depends on width/content, not on top).
+    private readonly Dictionary<TableBlock, (double startX, double top, double[] rowH, TableLayout layout)> _tableLayoutCache = new();
+
+    /// <summary>Initializes a new <see cref="RichEditor"/> with a single empty paragraph and default settings.</summary>
+    public RichEditor()
+    {
+        Focusable = true;
+        Cursor = IbeamCursor;
+
+        // Enable IME (Korean/Japanese/Chinese) composition by advertising a text-input client.
+        _imClient = new RtbInputMethodClient(this);
+        AddHandler(Avalonia.Input.InputElement.TextInputMethodClientRequestedEvent, OnTextInputMethodClientRequested);
+
+        // Drag & drop images onto the editor.
+        DragDrop.SetAllowDrop(this, true);
+        AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        AddHandler(DragDrop.DropEvent, OnDrop);
+
+        _caretTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _caretTimer.Tick += (s, e) =>
+        {
+            _isCaretVisible = !_isCaretVisible;
+            InvalidateVisual();
+        };
+    }
+
+    /// <inheritdoc/>
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == ThemeVariantScope.ActualThemeVariantProperty || change.Property == UseThemeColorsProperty)
+        {
+            _layoutCache.Clear();
+            _tableLayoutCache.Clear();
+            if (UseThemeColors)
+                SetCurrentValue(CaretBrushProperty, ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark ? Brushes.WhiteSmoke : Brushes.Black);
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
+        if (change.Property == CaretBrushProperty)
+            _caretPen = null; // rebuild the cached caret pen with the new brush
+        if (change.Property == DocumentProperty)
+        {
+            _layoutCache.Clear();
+            _tableLayoutCache.Clear();
+            ResetInteractionState(); // selections/modes point into the document being replaced
+            if (Document != null) UpdateParents(Document);
+            SyncPageSetupOnDocumentChanged(); // apply the loaded doc's page setup to the page properties
+            _textChangedPending = true; // wholesale content swap
+            SetModified(true);          // a raw Document assignment is a change; Load*/Clear reset it below
+            DocumentChanged?.Invoke(this, EventArgs.Empty);
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
+        if (change.Property == DefaultFontFamilyProperty || change.Property == DefaultFontSizeProperty)
+        {
+            _layoutCache.Clear(); // default font feeds the cached layouts
+            _tableLayoutCache.Clear();
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
+        if (change.Property == PageSizeProperty || change.Property == ShowPageBoundariesProperty
+            || change.Property == PageOrientationProperty)
+        {
+            CapturePageSetupToDocument(); // persist the page change into the document model
+            _pageBreaks = null;   // wrap width / paper changes between modes -> stale break positions
+            _layoutCache.Clear(); // cached layouts were shaped at the other mode's width
+            _tableLayoutCache.Clear();
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
+        if (change.Property == PageHeaderProperty || change.Property == PageFooterProperty
+            || change.Property == ShowPageNumbersProperty)
+        {
+            CapturePageSetupToDocument(); // persist the page change into the document model
+            InvalidateVisual(); // margin-band chrome only — pagination is unaffected
+        }
+        if (change.Property == IsFocusedProperty)
+        {
+            if (IsFocused)
+            {
+                _isCaretVisible = true;
+                _caretTimer.Start();
+            }
+            else
+            {
+                _caretTimer.Stop();
+                _isCaretVisible = false;
+            }
+            InvalidateVisual();
+        }
+    }
+
+    // Drops every piece of interaction state that names a block of the CURRENT document: the block
+    // selection, the block caret, the selected inline image, cell-selection mode and any drag in
+    // progress. Without this a document swap left them pointing into the document just replaced —
+    // which both keeps that whole tree alive for as long as the editor lives, and leaves commands
+    // acting on blocks that are no longer in the tree (Delete pushed an undo checkpoint and flipped
+    // IsModified for a block it could not find).
+    private void ResetInteractionState()
+    {
+        _selectedBlock = null;
+        _caretBlock = null;
+        _caretBlockAfter = false;
+        _selectedInline = null;
+        _cellSelMode = false;
+        _cellSelTable = null;
+        _pendingCaretStyles = null;
+
+        // A drag can only be in flight for a block of the old document.
+        _isResizingColumn = false; _resizingTable = null;
+        _isResizingRow = false; _resizingRowTable = null;
+        _isResizingImage = false; _resizingImage = null;
+        _isResizingInline = false; _resizingInline = null;
+        _dragUndoPending = false;
+        _isSelecting = false;
+
+        // Registries rebuilt on the next render; clearing them now releases the old blocks immediately.
+        _columnBoundaries.Clear();
+        _rowBoundaries.Clear();
+        _imageHandles.Clear();
+        _cellImageRects.Clear();
+        _inlineImageRects.Clear();
+        _inlineHandles.Clear();
+    }
+
+    private void DoUndo()
+    {
+        if (Document == null) return;
+        var state = _undoManager.Undo(Document, _caretPosition);
+        if (state == null) return;
+        Document = state.Value.Document;
+        UpdateParents(Document);
+        _caretPosition = _undoManager.GetPointerFromGlobalIndex(Document, state.Value.CaretGlobalIndex);
+        _caretPosition.Offset = state.Value.CaretOffset;
+        _selectionStart = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        _selectionEnd = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        MarkTextChanged();
+        InvalidateVisual();
+        NotifyStatus();
+    }
+
+    private void DoRedo()
+    {
+        if (Document == null) return;
+        var state = _undoManager.Redo(Document, _caretPosition);
+        if (state == null) return;
+        Document = state.Value.Document;
+        UpdateParents(Document);
+        _caretPosition = _undoManager.GetPointerFromGlobalIndex(Document, state.Value.CaretGlobalIndex);
+        _caretPosition.Offset = state.Value.CaretOffset;
+        _selectionStart = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        _selectionEnd = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        MarkTextChanged();
+        InvalidateVisual();
+        NotifyStatus();
+    }
+
+    private void ResetCaretBlink()
+    {
+        _isCaretVisible = true;
+        _caretTimer.Stop();
+        _caretTimer.Start();
+        _imClient.NotifyCaretChanged();
+        _bringCaretIntoView = true;
+        // Any caret move / selection change breaks the undo-coalescing run — except when the
+        // current key handler re-armed it (Backspace/Delete move the caret by design).
+        _editRun = _editRunRearm;
+        _editRunRearm = EditRunKind.None;
+        _pendingCaretStyles = null; // a pending caret format only survives until the caret moves
+        InvalidateVisual();
+        NotifyStatus();
+    }
+
+    private bool _bringCaretIntoView;
+
+    // Word-style pending format: style toggles made at an empty caret position (no selection,
+    // not inside a word) queue here and apply to the next typed text. Any caret move clears them.
+    private List<Action<Run>>? _pendingCaretStyles;
+
+    /// <summary>Raised whenever the caret moves or the document changes, so a host status bar can refresh.
+    /// Coarse signal — prefer <see cref="TextChanged"/> or <see cref="SelectionChanged"/> for new code.</summary>
+    public event EventHandler? StatusChanged;
+
+    /// <summary>Raised after the document's text, structure, or formatting is modified.</summary>
+    public event EventHandler? TextChanged;
+
+    /// <summary>Raised when the caret position or the selected range changes.</summary>
+    public event EventHandler? SelectionChanged;
+
+    /// <summary>Raised when the <see cref="Document"/> is replaced with a different instance.</summary>
+    public event EventHandler? DocumentChanged;
+
+    /// <summary>True when the document has been modified since it was loaded (or since
+    /// <see cref="MarkSaved"/>). Undo/redo count as modifications — the flag is a "needs saving" hint,
+    /// not a content diff against the saved state.</summary>
+    public bool IsModified { get; private set; }
+
+    /// <summary>Raised when <see cref="IsModified"/> changes.</summary>
+    public event EventHandler? IsModifiedChanged;
+
+    /// <summary>Clears the modified flag; call after persisting the document.</summary>
+    public void MarkSaved() => SetModified(false);
+
+    private void SetModified(bool value)
+    {
+        if (IsModified == value) return;
+        IsModified = value;
+        IsModifiedChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // Set by any edit; flushed (as TextChanged) from Render, off the render stack, so handlers see the
+    // already-mutated document and can't re-enter the render pass. Also flips the IsModified flag.
+    private bool _textChangedPending;
+    private void MarkTextChanged() { _textChangedPending = true; SetModified(true); }
+
+    // Kind of edit currently coalescing into one undo checkpoint. A run of same-kind edits shares
+    // a single full-document clone (the first-keystroke clone was measured at 162 ms on a
+    // 100-image document, so per-keypress clones produce a visible hitch when holding a key).
+    private enum EditRunKind { None, Typing, Backspace, Delete }
+    private EditRunKind _editRun;
+    // Backspace/Delete handlers re-arm the run through this before their trailing ResetCaretBlink
+    // (which otherwise ends the run, since those keys move the caret by design).
+    private EditRunKind _editRunRearm;
+
+    // Records an undo checkpoint and flags a text change. Single choke point for discrete
+    // document mutations; also ends any in-progress coalescing run so the next keystroke
+    // checkpoints afresh.
+    private void PushUndo()
+    {
+        if (Document != null) _undoManager.PushState(Document, _caretPosition);
+        _textChangedPending = true;
+        SetModified(true);
+        _editRun = EditRunKind.None;
+        _editRunRearm = EditRunKind.None;
+    }
+
+    // A resize drag (image / inline image / column / row handle) arms this on press and checkpoints
+    // only when the pointer actually moves. Checkpointing on press instead made a bare click on a
+    // handle — which changes nothing — push an undo step and flip IsModified, so a freshly loaded
+    // document reported unsaved changes after a single click.
+    private bool _dragUndoPending;
+    private void PushDragUndoOnce()
+    {
+        if (!_dragUndoPending) return;
+        _dragUndoPending = false;
+        PushUndo();
+    }
+
+    // Undo checkpoint for typed text: coalesces a run of consecutive keystrokes into a single
+    // checkpoint. The run ends on any caret move, selection change, or discrete edit
+    // (see ResetCaretBlink / PushUndo).
+    private void PushUndoTyping()
+    {
+        if (_editRun != EditRunKind.Typing)
+        {
+            if (Document != null) _undoManager.PushState(Document, _caretPosition);
+            _editRun = EditRunKind.Typing;
+        }
+        _textChangedPending = true;
+        SetModified(true);
+    }
+
+    // Undo checkpoint for a plain single-character Backspace/Delete: consecutive same-direction
+    // deletes share one checkpoint, mirroring PushUndoTyping. Structural deletes (selection,
+    // paragraph merge, block/image removal) go through PushUndo instead.
+    private void PushUndoDeleting(bool backspace)
+    {
+        var kind = backspace ? EditRunKind.Backspace : EditRunKind.Delete;
+        if (_editRun != kind && Document != null) _undoManager.PushState(Document, _caretPosition);
+        _editRunRearm = kind;
+        _textChangedPending = true;
+        SetModified(true);
+    }
+
+    // Last-seen selection, to fire SelectionChanged only on real movement (not on every repaint/blink).
+    private (Paragraph? cp, int co, Paragraph? ss, int so, Paragraph? se, int eo) _selSnapshot;
+    private bool SelectionMovedSinceLastSnapshot()
+    {
+        var now = (_caretPosition.Paragraph, _caretPosition.Offset,
+                   _selectionStart.Paragraph, _selectionStart.Offset,
+                   _selectionEnd.Paragraph, _selectionEnd.Offset);
+        if (now == _selSnapshot) return false;
+        _selSnapshot = now;
+        return true;
+    }
+
+    // Dispatches any pending TextChanged/SelectionChanged after the current render, avoiding re-entrancy.
+    private void RaisePendingChangeEvents()
+    {
+        bool text = _textChangedPending;
+        _textChangedPending = false;
+        bool sel = SelectionMovedSinceLastSnapshot();
+        if (!text && !sel) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (text)
+            {
+                TextChanged?.Invoke(this, EventArgs.Empty);
+                CheckImageLimit();
+            }
+            if (sel) SelectionChanged?.Invoke(this, EventArgs.Empty);
+        });
+    }
+
+    private void NotifyStatus()
+    {
+        InvalidateMeasure(); // content height may have changed -> let the ScrollViewer update its extent
+        StatusChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Snapshot of the formatting at the caret position, for toolbar state reflection.
+    /// Obtain via <see cref="GetCaretFormat"/>.</summary>
+    public readonly record struct CaretFormat(bool Bold, bool Italic, bool Underline, bool Strike,
+        double FontSize, string? FontFamily, TextAlignment Align, ListKind List, int Heading,
+        IBrush? Foreground = null, IBrush? Background = null, bool Quote = false, double LineSpacing = 0,
+        ListMarkerStyle ListMarker = ListMarkerStyle.Default);
+
+    private static bool HasDeco(Run? r, TextDecorationLocation loc)
+    {
+        if (r == null) return false;
+        if (r.TextDecorations == null)
+            return loc == TextDecorationLocation.Underline && !string.IsNullOrEmpty(r.NavigateUri);
+        foreach (var d in r.TextDecorations) if (d.Location == loc) return true;
+        return false;
+    }
+
+    /// <summary>Returns the formatting snapshot at the current caret position for toolbar state display.</summary>
+    public CaretFormat GetCaretFormat()
+    {
+        var p = _caretPosition.Paragraph;
+        Run? run = null;
+        if (p != null)
+        {
+            run = RunAtOffset(p, _caretPosition.Offset > 0 ? _caretPosition.Offset - 1 : 0);
+            if (run == null) foreach (var inl in p.Inlines) if (inl is Run r0) { run = r0; break; }
+        }
+        // A pending caret format (toggle at an empty position) shows in the toolbar before any
+        // text is typed — preview it on a clone so the document stays untouched.
+        if (_pendingCaretStyles is { Count: > 0 } pend)
+        {
+            var probe = run != null ? (Run)run.Clone() : new Run();
+            foreach (var a in pend) a(probe);
+            run = probe;
+        }
+        return new CaretFormat(
+            run?.FontWeight == FontWeight.Bold,
+            run?.FontStyle == FontStyle.Italic,
+            HasDeco(run, TextDecorationLocation.Underline),
+            HasDeco(run, TextDecorationLocation.Strikethrough),
+            run != null && run.FontSize > 0 ? run.FontSize : BodyFontSizePt,
+            run?.FontFamily,
+            p?.TextAlignment ?? TextAlignment.Left,
+            p?.ListType ?? ListKind.None,
+            p?.HeadingLevel ?? 0,
+            run?.Foreground,
+            run?.Background,
+            p?.IsQuote ?? false,
+            p?.LineSpacing ?? double.NaN,
+            p?.ListMarker ?? ListMarkerStyle.Default);
+    }
+
+    /// <summary>Returns document statistics: total character count, word count, and the caret's
+    /// 1-based (line, column) position. Inline images count as one character.</summary>
+    public (int chars, int words, int line, int col) GetStatus()
+    {
+        if (Document == null) return (0, 0, 1, 1);
+
+        // Single pass over the same char stream the old code joined into one big string
+        // (paragraphs separated by '\n'): every '\n' breaks a word, isn't counted in chars, and
+        // advances the line; every other char counts (an inline image's U+FFFC placeholder counts
+        // as one). Avoids the whole-document StringBuilder + the string.Split array on each call.
+        static bool IsSep(char ch) => ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r';
+
+        int chars = 0, words = 0;
+        int curLine = 1, curCol = 1;       // running (line, col), 1-based, at the next char to consume
+        int capLine = 1, capCol = 1;       // captured when the running index reaches the caret
+        bool captured = false, inWord = false, firstPara = true;
+
+        void Consume(char ch)
+        {
+            if (ch == '\n') { curLine++; curCol = 1; inWord = false; }
+            else { chars++; curCol++; if (IsSep(ch)) inWord = false; else { if (!inWord) words++; inWord = true; } }
+        }
+
+        foreach (var p in GetAllParagraphsInOrder())
+        {
+            if (!firstPara) Consume('\n'); // the newline that joined consecutive paragraphs
+            firstPara = false;
+
+            // Walk the inlines directly (Run text chars + one ObjChar per atomic object inline) instead of
+            // building a BuildPlain string per paragraph — this runs on every caret move, so the
+            // per-paragraph string allocation added up to hundreds of allocations per arrow key on a
+            // large document. `local` is the logical offset within this paragraph (image = 1).
+            int caretOff = ReferenceEquals(p, _caretPosition.Paragraph)
+                ? Math.Clamp(_caretPosition.Offset, 0, GetParagraphLength(p)) : -1;
+            int local = 0;
+            void Step(char ch)
+            {
+                if (!captured && local == caretOff) { capLine = curLine; capCol = curCol; captured = true; }
+                Consume(ch);
+                local++;
+            }
+            foreach (var inline in p.Inlines)
+            {
+                if (inline is Run r && r.Text is { } t) { foreach (char ch in t) Step(ch); }
+                else if (inline is not Run) Step(ObjChar);
+            }
+            if (!captured && local == caretOff) { capLine = curLine; capCol = curCol; captured = true; }
+        }
+
+        return (chars, words, captured ? capLine : 1, captured ? capCol : 1);
+    }
+
+    // Guarantees the caret can always sit next to any image/table: the document starts and ends
+    // with a paragraph, and no two non-paragraph blocks are adjacent without a paragraph between.
+    // Without this, an image/table at the very start/end (or two in a row) is impossible to reach
+    // or delete with the keyboard.
+    private void NormalizeBlocks(FlowDocument doc) => NormalizeBlockList(doc.Blocks, doc);
+
+    // Keep a paragraph at the very start/end of a block list and between any two adjacent non-paragraph
+    // blocks, so the caret can always reach a position before/after every image/table WITHOUT inserting
+    // extra blank lines around blocks that already sit next to text paragraphs. "Before a table" is then
+    // the end of the preceding text line; "after a table" is the start of the next line. Applied to the
+    // document AND, recursively, every table cell (P4-2b: a cell is a block container too, so a nested
+    // table/image at a cell's edge would otherwise be unreachable).
+    private static void NormalizeBlockList(System.Collections.Generic.IList<Block> blocks, object parent)
+    {
+        if (blocks.Count == 0 || blocks[0] is not Paragraph)
+            blocks.Insert(0, new Paragraph { Parent = parent });
+        if (blocks[blocks.Count - 1] is not Paragraph)
+            blocks.Add(new Paragraph { Parent = parent });
+        for (int i = 0; i < blocks.Count - 1; i++)
+        {
+            if (blocks[i] is not Paragraph && blocks[i + 1] is not Paragraph)
+                blocks.Insert(i + 1, new Paragraph { Parent = parent });
+        }
+        foreach (var b in blocks)
+        {
+            if (b is TableBlock tb) NormalizeTableCells(tb);
+            // An inline table's cells are block containers too (milestone B) but hang off a paragraph's
+            // inlines, so this walk never reached them: a deserialized inline-table cell holding only an
+            // image stayed paragraph-less and the caret could not enter it.
+            else if (b is Paragraph par)
+                foreach (var inl in par.Inlines)
+                    if (inl is InlineTable it)
+                        NormalizeTableCells(it.Table);
+        }
+    }
+
+    private static void NormalizeTableCells(TableBlock tb)
+    {
+        foreach (var row in tb.Cells)
+            foreach (var cell in row)
+                NormalizeBlockList(cell.Blocks, cell);
+    }
+
+    private void UpdateParents(FlowDocument doc)
+    {
+        NormalizeBlocks(doc);
+        foreach (var block in doc.Blocks)
+            WireBlockParents(block, doc);
+    }
+
+    // Recursively wires a block's Parent (and its descendants') so the Run->Paragraph->TableCell->
+    // TableBlock chain is correct at any nesting depth (P4-2b: a TableBlock can live in a cell's blocks).
+    private static void WireBlockParents(Block block, object parent)
+    {
+        block.Parent = parent;
+        switch (block)
+        {
+            case Paragraph p:
+                foreach (var inline in p.Inlines)
+                {
+                    inline.Parent = p;
+                    // An inline table's grid is wired like a block table but rooted at the InlineTable
+                    // wrapper (whose parent is this paragraph), so a cell paragraph can walk up to its
+                    // host: cellPara -> TableCell -> TableBlock -> InlineTable -> host Paragraph.
+                    if (inline is InlineTable it)
+                        WireBlockParents(it.Table, it);
+                }
+                break;
+            case TableBlock tb:
+                for (int r = 0; r < tb.Rows; r++)
+                    for (int c = 0; c < tb.Columns; c++)
+                    {
+                        var cell = tb.Cells[r][c];
+                        cell.Parent = tb;
+                        foreach (var cb in cell.Blocks)
+                            WireBlockParents(cb, cell);
+                    }
+                break;
+        }
+    }
+
+    private int GetParagraphLength(Paragraph? p)
+    {
+        if (p == null) return 0;
+        int len = 0;
+        foreach (var inline in p.Inlines) len += InlineLen(inline);
+        return len;
+    }
+
+    /// <summary>Inserts plain text at the caret, replacing any current selection.
+    /// Triggers smart-list detection when <paramref name="text"/> is a space
+    /// following a list-prefix pattern at the start of a line.</summary>
+    public void InsertText(string text)
+    {
+        if (Document == null || IsReadOnly || _caretPosition.Paragraph == null) return;
+        // Normalize pasted/external line endings to the model's '\n' (a run may hold soft '\n'; the
+        // editor renders multi-line runs). Without this, CRLF leaves a stray '\r' in the run. The
+        // Contains check keeps the common single-char typing path allocation-free.
+        if (text.Contains('\r')) text = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        if (_selectionStart != _selectionEnd) DeleteSelection();
+
+        // Smart list: typing the space after "-"/"*" or "N." at a paragraph start turns it into a list.
+        if (text == " " && TryAutoList()) return;
+
+        int preCaret = _caretPosition.Offset;
+        TryInsertTextCore(_caretPosition.Paragraph, text, _caretPosition.Offset);
+        _caretPosition.Offset += text.Length;
+        _selectionStart = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        _selectionEnd = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        // Word-style pending format: a toggle made at an empty caret position applies to the text
+        // typed right after it. Splitting confines it to exactly the inserted range; subsequent
+        // keystrokes land in (and inherit from) the styled run.
+        if (_pendingCaretStyles is { Count: > 0 } pend)
+        {
+            _pendingCaretStyles = null;
+            new TextRange(new TextPointer(_caretPosition.Paragraph, preCaret),
+                          new TextPointer(_caretPosition.Paragraph, preCaret + text.Length))
+                .ApplyPropertyValue(r => { foreach (var a in pend) a(r); });
+        }
+        // Auto-link: typing whitespace right after a web URL turns the URL into a hyperlink.
+        // Runs after the insertion so the space itself stays outside the linked range.
+        if (AutoLinkOnType && (text == " " || text == "\t")) TryAutoLink(_caretPosition.Paragraph, preCaret);
+        MarkTextChanged();
+        // Typing has to scroll the caret back into view. Every other edit reaches this through
+        // ResetCaretBlink, but the typing path deliberately avoids that call — it would end the undo
+        // coalescing run and give every keystroke its own checkpoint — so the flag is set directly.
+        // Without it the caret walked off the bottom as text grew, most visibly inside a table cell,
+        // which expands downward as its content wraps.
+        _bringCaretIntoView = true;
+        InvalidateVisual();
+        NotifyStatus();
+    }
+
+    // If the caret sits right after a list prefix ("-"/"*" -> bullet, "N." -> ordered) at the very start
+    // of its paragraph, convert the paragraph to that list (dropping the typed prefix) and swallow the
+    // triggering space. Only fires on a plain paragraph (not already a list). Returns true if it acted.
+    private bool TryAutoList()
+    {
+        var p = _caretPosition.Paragraph;
+        if (p == null || p.ListType != ListKind.None) return false;
+        int caret = _caretPosition.Offset;
+        string plain = BuildPlain(p);
+        if (caret <= 0 || caret > plain.Length) return false;
+        string prefix = plain.Substring(0, caret);
+        ListKind kind;
+        if (prefix == "-" || prefix == "*") kind = ListKind.Bullet;
+        else if (System.Text.RegularExpressions.Regex.IsMatch(prefix, @"^\d+\.$")) kind = ListKind.Ordered;
+        else return false;
+
+        if (Document != null) PushUndo();
+        DeleteLocalText(p, 0, prefix.Length);
+        p.ListType = kind;
+        _caretPosition = new TextPointer(p, 0);
+        _selectionStart = new TextPointer(p, 0);
+        _selectionEnd = new TextPointer(p, 0);
+        InvalidateVisual();
+        return true;
+    }
+
+    // If the word ending at `endOffset` is a web URL, set NavigateUri on exactly that range.
+    // Called when the user types a space after the URL (the space is already inserted and
+    // excluded from the range, so it doesn't inherit the link).
+    /// <inheritdoc cref="AutoLinkOnType"/>
+    public static readonly StyledProperty<bool> AutoLinkOnTypeProperty =
+        AvaloniaProperty.Register<RichEditor, bool>(nameof(AutoLinkOnType), true);
+
+    /// <summary>When true (default), typing whitespace/Enter after an <c>http(s)://</c> or <c>www.</c>
+    /// token turns it into a hyperlink. Set false to disable auto-linking.</summary>
+    // A StyledProperty like every other behaviour flag (IsReadOnly, Allow*), so it can be bound and
+    // styled rather than only assigned in code.
+    public bool AutoLinkOnType
+    {
+        get => GetValue(AutoLinkOnTypeProperty);
+        set => SetValue(AutoLinkOnTypeProperty, value);
+    }
+
+    // Called after a whitespace/Enter commit at `boundary` (the offset just past the token). Applies a
+    // NavigateUri to a bare http(s):// or www. URL token, trimming trailing punctuation and validating the
+    // result as an absolute http(s) URI with a dotted host. `www.` is prefixed with https://.
+    private void TryAutoLink(Paragraph p, int boundary)
+    {
+        string plain = BuildPlain(p);
+        int end = Math.Clamp(boundary, 0, plain.Length);
+        int start = end;
+        while (start > 0 && !char.IsWhiteSpace(plain[start - 1]) && plain[start - 1] != ObjChar) start--;
+        if (end - start < 8) return; // shortest sensible candidate ("http://x", "www.a.bc")
+        string token = plain.Substring(start, end - start).TrimEnd('.', ',', ';', ':', ')', ']', '!', '?', '"', '\'');
+        if (token.Length < 8) return;
+
+        bool www = token.StartsWith("www.", StringComparison.OrdinalIgnoreCase);
+        bool http = token.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                 || token.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+        if (!www && !http) return;
+        string url = www ? "https://" + token : token;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || !uri.Host.Contains('.')) return;
+        if (RunAtOffset(p, start) is { } r0 && !string.IsNullOrEmpty(r0.NavigateUri)) return; // already linked
+
+        new TextRange(new TextPointer(p, start), new TextPointer(p, start + token.Length))
+            .ApplyPropertyValue(r => r.NavigateUri = url);
+    }
+
+    private void DeleteSelection()
+    {
+        // A cell block clears the selected cells and leaves the grid standing (Excel/HWP). The linear
+        // range would instead delete from the drag's offset in the first cell through its offset in the
+        // last, leaving head/tail text behind and merging across the grid.
+        if (SelectedCellsBlock() is { } cells) { ClearSelectedCells(cells); return; }
+        if (_selectionStart != null && _selectionEnd != null && _selectionStart.CompareTo(_selectionEnd) != 0)
+        {
+            var range = new TextRange(_selectionStart, _selectionEnd);
+            range.Delete();
+
+            _caretPosition = new TextPointer(range.Start.Paragraph, range.Start.Offset);
+            if (Document != null) NormalizeBlocks(Document);
+            MarkTextChanged();
+        }
+
+        _selectionStart = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        _selectionEnd = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+    }
+
+    // Deletes the logical range [index, index+length) from the paragraph, spanning run boundaries
+    // (a single-run early-return here once left residue when e.g. an auto-list prefix was split
+    // across two runs). Offsets are in pre-deletion coordinates throughout the walk.
+    private void DeleteLocalText(Paragraph? p, int index, int length)
+    {
+        if (p == null || length <= 0) return;
+        int end = index + length;
+        int pos = 0;
+        for (int i = 0; i < p.Inlines.Count && pos < end; )
+        {
+            var inl = p.Inlines[i];
+            int len = InlineLen(inl);
+            int segStart = pos, segEnd = pos + len;
+            if (segEnd <= index || len == 0) { pos = segEnd; i++; continue; }
+            if (inl is Run run)
+            {
+                int from = Math.Max(index, segStart) - segStart;
+                int to = Math.Min(end, segEnd) - segStart;
+                run.Text = run.Text!.Remove(from, to - from);
+                if (run.Text.Length == 0) p.Inlines.RemoveAt(i); else i++;
+            }
+            else
+            {
+                // An atomic object inline (image, table) whose single position overlaps the range -> remove
+                // it. (len==0 and non-overlap were already handled above, so reaching here means overlap.)
+                p.Inlines.RemoveAt(i);
+            }
+            pos = segEnd;
+        }
+        TextRange.CoalesceRuns(p); // a removed run can leave equal-format neighbours adjacent
+    }
+
+    private void TryInsertTextCore(Paragraph p, string text, int localIndex)
+    {
+        int currentIndex = 0;
+        for (int i = 0; i < p.Inlines.Count; i++)
+        {
+            int len = InlineLen(p.Inlines[i]);
+            if (p.Inlines[i] is Run run && localIndex >= currentIndex && localIndex <= currentIndex + len)
+            {
+                run.Text = (run.Text ?? "").Insert(localIndex - currentIndex, text);
+                return;
+            }
+            // Insertion point sits exactly before an atomic object inline (image, table) -> insert a new
+            // run there (so typing right before a leading inline object lands in front of it, not appended).
+            if (p.Inlines[i] is not Run && localIndex == currentIndex)
+            {
+                p.Inlines.Insert(i, new Run { Text = text, Parent = p });
+                return;
+            }
+            currentIndex += len;
+        }
+        p.Inlines.Add(new Run { Text = text, Parent = p });
+    }
+
+    // Vertical space a horizontal-rule (DividerBlock) occupies when laid out.
+    private const double DividerHeight = 18;
+
+    // The object-replacement character represents one inline image in the logical text stream.
+    private const char ObjChar = '￼';
+
+    // Breathing room (device-independent px) reserved on every side of an inline table inside a text line,
+    // so surrounding text/adjacent lines don't touch its border. Shared by the layout (run size + draw
+    // inset) and the hit-test descent so the painted box and the clickable box stay aligned.
+    private const double InlineTablePad = 2;
+
+    // How far (px) an inline table's bottom sits BELOW the line's text baseline. A small drop makes the
+    // table look seated on the line rather than floating exactly on the baseline. Applied via the run's
+    // Baseline (so it shifts both paint and hit-test together); the hit-test formula is independent of it.
+    private const double InlineTableDrop = 2;
+
+    // Logical length of an inline: a Run's text length, or 1 for an atomic object inline
+    // (InlineImage, InlineTable) — each occupies one ObjChar position.
+    private static int InlineLen(Inline inline) =>
+        inline is Run r ? (r.Text?.Length ?? 0) : 1;
+
+    // The paragraph's logical text, with each atomic object inline (image, table) collapsed to one
+    // ObjChar so that character offsets line up with the TextLayout produced by BuildTextLayout.
+    private static string BuildPlain(Paragraph p)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var inline in p.Inlines)
+        {
+            if (inline is Run r && r.Text != null) sb.Append(r.Text);
+            else if (inline is not Run) sb.Append(ObjChar);
+        }
+        return sb.ToString();
+    }
+
+    // A layout segment is either text (Text != null), an inline image (Image != null, length 1), or an
+    // inline table (DrawTable != null, length 1): the two object kinds occupy one ObjChar position each.
+    private struct LayoutSeg
+    {
+        public string? Text;
+        public Avalonia.Media.TextFormatting.TextRunProperties Props;
+        public Avalonia.Media.Imaging.Bitmap? Image;
+        public Size ImageSize;
+        // Inline table: the measured box and a closure that draws the grid + cell contents at a given
+        // document-space origin (delegates to the recursive DrawNestedTable primitive).
+        public Size TableSize;
+        public System.Action<DrawingContext, Point>? DrawTable;
+    }
+
+    // Draws an inline image inside a text line; occupies one character position (U+FFFC).
+    private sealed class ImageTextRun : Avalonia.Media.TextFormatting.DrawableTextRun
+    {
+        private static readonly ReadOnlyMemory<char> _obj = "￼".AsMemory();
+        private readonly Avalonia.Media.Imaging.Bitmap? _bmp;
+        private readonly Size _size;
+        private readonly Avalonia.Media.TextFormatting.TextRunProperties _props;
+
+        public ImageTextRun(Avalonia.Media.Imaging.Bitmap? bmp, Size size, Avalonia.Media.TextFormatting.TextRunProperties props)
+        { _bmp = bmp; _size = size; _props = props; }
+
+        public override ReadOnlyMemory<char> Text => _obj;
+        public override int Length => 1;
+        public override Avalonia.Media.TextFormatting.TextRunProperties Properties => _props;
+        public override Size Size => _size;
+        public override double Baseline => _size.Height;
+
+        public override void Draw(DrawingContext context, Point origin)
+        {
+            if (_bmp != null)
+                context.DrawImage(_bmp, new Rect(origin.X, origin.Y, _size.Width, _size.Height));
+        }
+    }
+
+    // Draws an inline table inside a text line; occupies one character position (U+FFFC). Unlike an
+    // image it has internal structure, so it delegates back to the editor's recursive table-draw
+    // primitive (DrawNestedTable) via a closure, rendering at the run's document-space origin.
+    private sealed class TableTextRun : Avalonia.Media.TextFormatting.DrawableTextRun
+    {
+        private static readonly ReadOnlyMemory<char> _obj = "￼".AsMemory();
+        private readonly Size _size;
+        private readonly Avalonia.Media.TextFormatting.TextRunProperties _props;
+        private readonly System.Action<DrawingContext, Point> _draw;
+
+        public TableTextRun(Size size, Avalonia.Media.TextFormatting.TextRunProperties props, System.Action<DrawingContext, Point> draw)
+        { _size = size; _props = props; _draw = draw; }
+
+        public override ReadOnlyMemory<char> Text => _obj;
+        public override int Length => 1;
+        public override Avalonia.Media.TextFormatting.TextRunProperties Properties => _props;
+        public override Size Size => _size;
+        // Put the baseline above the run bottom by (pad + drop) so the table's bottom lands InlineTableDrop
+        // px below the line's text baseline (seated on the line, not floating on it). The hit-test docY
+        // formula is expressed via the run's full height, so it tracks this shift automatically.
+        public override double Baseline => _size.Height - (InlineTablePad + InlineTableDrop);
+
+        public override void Draw(DrawingContext context, Point origin) => _draw(context, origin);
+    }
+
+    // Feeds a paragraph's runs/images to Avalonia's text formatter so a single TextLayout drives
+    // rendering, caret geometry, hit-testing and selection rects.
+    private sealed class ParagraphTextSource : Avalonia.Media.TextFormatting.ITextSource
+    {
+        private readonly List<LayoutSeg> _segs;
+        public ParagraphTextSource(List<LayoutSeg> segs) => _segs = segs;
+
+        public Avalonia.Media.TextFormatting.TextRun? GetTextRun(int textSourceIndex)
+        {
+            int pos = 0;
+            foreach (var seg in _segs)
+            {
+                int len = seg.Text != null ? seg.Text.Length : 1;
+                if (textSourceIndex < pos + len)
+                {
+                    if (seg.Text != null)
+                    {
+                        int start = textSourceIndex - pos;
+                        return new Avalonia.Media.TextFormatting.TextCharacters(seg.Text.Substring(start).AsMemory(), seg.Props);
+                    }
+                    if (seg.DrawTable != null)
+                        return new TableTextRun(seg.TableSize, seg.Props, seg.DrawTable);
+                    return new ImageTextRun(seg.Image, seg.ImageSize, seg.Props);
+                }
+                pos += len;
+            }
+            return null;
+        }
+    }
+
+    // The body (non-heading) default font size, in points. Single source for the magic value that
+    // marks a run as "unstyled" so it inherits a heading paragraph's size (see RunSizeIsBodyDefault).
+    internal const double BodyFontSizePt = 10;
+
+    // Font sizes in the model / public API / serialization are points (pt). Avalonia's TextLayout and
+    // FormattedText take device-independent pixels (px) at a 96-DPI baseline, where 1pt = 4/3 px.
+    // Convert only here, at the render boundary, so the rest of the engine speaks pt.
+    internal static double PtToPx(double pt) => pt * (4.0 / 3.0);
+
+    // Natural single-line height as a multiple of font size (typical ≈1.2 incl. leading). Used to turn
+    // a proportional Paragraph.LineSpacing (1.0 = single, 1.5 = 1.5 lines) into an absolute px line box.
+    internal const double NaturalLineFactor = 1.2;
+
+    // The layout font size (pt) for a heading paragraph (1–6 = h1–h6); 0/other = body. Applied at layout
+    // time to runs left at the body default, so the heading look never has to be baked into the model.
+    internal static double HeadingFontSize(int level)
+        => level switch { 1 => 20, 2 => 16, 3 => 14, 4 => 12, 5 => 11, 6 => 10, _ => BodyFontSizePt };
+
+    // A run is at the "body default" size (and so inherits a heading paragraph's size) when its size
+    // is unset (<=0) or the 10 pt model default. An explicitly-sized run keeps its own size.
+    private static bool RunSizeIsBodyDefault(Run r) => r.FontSize <= 0 || Math.Abs(r.FontSize - BodyFontSizePt) < 0.01;
+
+    // Width reserved to the left of list-item text for its bullet/number marker.
+    private const double ListMarkerWidth = 22;
+
+    // Left x where a paragraph's text starts: base indent + manual indent + nesting + (list marker gap).
+    // Single source so render and all hit-tests agree on where text begins.
+    private static double ParaLeft(Paragraph p)
+        => 10 + p.Indent + p.ListLevel * 20 + (p.ListType != ListKind.None ? ListMarkerWidth : 0);
+
+    // Wrap width of a top-level paragraph: the content width less the document's own margin, the
+    // paragraph's left gutter (indent + list marker) and its right margin. Single source so the measure
+    // walk, BlockExtent and the render walk can never disagree on where a line breaks — the formula was
+    // spelled out separately in each.
+    private static double ParagraphWrapWidth(Paragraph p, double maxWidth)
+        => Math.Max(10, maxWidth - 20 - ParaLeft(p) - p.MarginRight);
+
+    // The same gutter for a paragraph inside a table cell, measured from the cell's content box: the
+    // document's own 10px left margin is dropped (the cell supplies its padding). Single source for the
+    // cell walks — render, hit-test, link hit-test, caret and measure must all apply it (rule #1), or
+    // the text and the caret/click positions drift apart.
+    private static double CellParaLeft(Paragraph p) => ParaLeft(p) - 10;
+
+    // The marker text for a list item: a bullet glyph or a formatted number, per the paragraph's
+    // ListMarker style (Default = • for bullets, "N." for numbers).
+    internal static string ListMarkerText(ListKind kind, ListMarkerStyle style, int num)
+    {
+        if (kind == ListKind.Bullet)
+            return style switch
+            {
+                ListMarkerStyle.Circle => "◦",
+                ListMarkerStyle.Square => "▪",
+                ListMarkerStyle.Dash => "–",
+                _ => "•",
+            };
+        return style switch
+        {
+            ListMarkerStyle.DecimalParen => $"{num})",
+            ListMarkerStyle.LowerAlpha => $"{ToAlpha(num, false)})",
+            ListMarkerStyle.UpperAlpha => $"{ToAlpha(num, true)})",
+            ListMarkerStyle.LowerRoman => $"{ToRoman(num)})",
+            _ => $"{num}.",
+        };
+    }
+
+    // 1->a, 26->z, 27->aa (bijective base-26), upper- or lower-case.
+    internal static string ToAlpha(int n, bool upper)
+    {
+        if (n < 1) n = 1;
+        var sb = new System.Text.StringBuilder();
+        while (n > 0) { n--; sb.Insert(0, (char)((upper ? 'A' : 'a') + n % 26)); n /= 26; }
+        return sb.ToString();
+    }
+
+    // 1->i, 4->iv, 9->ix (lowercase Roman numerals).
+    internal static string ToRoman(int n)
+    {
+        if (n < 1) return n.ToString();
+        int[] vals = { 1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1 };
+        string[] syms = { "m", "cm", "d", "cd", "c", "xc", "l", "xl", "x", "ix", "v", "iv", "i" };
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < vals.Length && n > 0; i++)
+            while (n >= vals[i]) { sb.Append(syms[i]); n -= vals[i]; }
+        return sb.ToString();
+    }
+
+    // Draws a list item's marker (bullet glyph or number) right-aligned just left of the text (small
+    // fixed gap), so the marker hugs the content regardless of its width. No-op for non-list paragraphs.
+    // The marker takes the item's own text styling (its first run: size, family, weight, colour) so a
+    // heading / coloured / enlarged list item gets a matching bullet or number instead of a fixed
+    // small black default. Instance method so it can fall back to the editor's default font/size.
+    private void DrawListMarker(DrawingContext context, Paragraph p, int num, double textLeft, double y)
+    {
+        if (p.ListType == ListKind.None) return;
+        string m = ListMarkerText(p.ListType, p.ListMarker, num);
+        Run? first = null;
+        foreach (var inl in p.Inlines) if (inl is Run r) { first = r; break; }
+        double size = first is { FontSize: > 0 } ? first.FontSize : DefaultFontSize;
+        var family = first != null && !string.IsNullOrEmpty(first.FontFamily) ? new FontFamily(first.FontFamily) : DefaultFontFamily;
+        var weight = first?.FontWeight ?? FontWeight.Normal;
+        // Match the heading look applied to the text in BuildTextLayout, so a heading list item's
+        // bullet/number isn't left small and thin beside its enlarged text.
+        if (p.HeadingLevel is >= 1 and <= 6)
+        {
+            if (first == null || RunSizeIsBodyDefault(first)) size = HeadingFontSize(p.HeadingLevel);
+            weight = FontWeight.Bold;
+        }
+        var brush = DisplayInk(first?.Foreground, first?.Background ?? p.Background);
+        var ft = new FormattedText(m, System.Globalization.CultureInfo.CurrentCulture,
+            FlowDirection.LeftToRight, new Typeface(family, FontStyle.Normal, weight), PtToPx(size), brush);
+        const double gap = 6;
+        context.DrawText(ft, new Point(textLeft - gap - ft.Width, y));
+    }
+
+    // A cheap content+formatting fingerprint of a paragraph; when it (and the wrap width) are unchanged
+    // the cached TextLayout can be reused. Iterating inlines to hash is far cheaper than re-shaping, and
+    // it can never go stale silently the way a manual dirty-flag would. Over-invalidation (e.g. a brush
+    // re-instantiated to the same colour) is harmless — it just rebuilds.
+    // Caution: brushes are hashed by GetHashCode (identity for mutable brushes), so MUTATING a brush's
+    // colour in place (same instance) won't change the signature and the layout would render stale.
+    // Formatting commands must assign a NEW brush instead of mutating an existing run's brush.
+    private static long ParagraphSig(Paragraph p)
+    {
+        unchecked
+        {
+            long h = 1469598103934665603; // FNV-1a 64-bit offset basis
+            void Mix(long v) { h = (h ^ v) * 1099511628211; }
+            void MixStr(string? s) { if (s == null) { Mix(0); return; } foreach (char ch in s) Mix(ch); Mix(s.Length + 1); }
+
+            Mix((long)p.TextAlignment);
+            Mix(BitConverter.DoubleToInt64Bits(p.LineHeight));
+            Mix(BitConverter.DoubleToInt64Bits(p.LineSpacing));
+            Mix(BitConverter.DoubleToInt64Bits(p.Indent));
+            Mix((long)p.ListType);
+            Mix((long)p.ListMarker);
+            Mix(p.ListLevel);
+            Mix(p.HeadingLevel); // now drives the layout (heading size/weight applied in BuildTextLayout)
+            foreach (var inl in p.Inlines)
+            {
+                if (inl is Run r)
+                {
+                    MixStr(r.Text);
+                    MixStr(r.FontFamily);
+                    MixStr(r.NavigateUri);
+                    Mix(BitConverter.DoubleToInt64Bits(r.FontSize));
+                    Mix((long)r.FontWeight);
+                    Mix((long)r.FontStyle);
+                    Mix(r.Foreground?.GetHashCode() ?? 0);
+                    Mix(r.Background?.GetHashCode() ?? 0);
+                    if (r.TextDecorations != null)
+                        foreach (var d in r.TextDecorations) Mix((long)d.Location + 101);
+                }
+                else if (inl is InlineImage img)
+                {
+                    Mix(7);
+                    Mix(BitConverter.DoubleToInt64Bits(img.Width));
+                    Mix(BitConverter.DoubleToInt64Bits(img.Height));
+                    // Identity only — never the Image getter here: it lazily decodes RawBytes, and
+                    // the signature must stay cheap (and decode-free) on every cache lookup (N6-2).
+                    Mix(img.RawBytes?.GetHashCode() ?? img.Image?.GetHashCode() ?? 0);
+                }
+                else if (inl is InlineTable it)
+                {
+                    // The inline table reserves a run-sized box in this paragraph's layout, so its size
+                    // must be part of the signature: a cell edit, a row/column change or a width resize
+                    // has to invalidate the host paragraph's cached layout. Fold in the table's dimensions
+                    // and a recursive signature of every cell paragraph (covers text edits at any depth).
+                    Mix(13);
+                    Mix(it.Table.Rows);
+                    Mix(it.Table.Columns);
+                    foreach (var w in it.Table.ColumnWidths) Mix(BitConverter.DoubleToInt64Bits(w));
+                    foreach (var rh in it.Table.RowHeights) Mix(BitConverter.DoubleToInt64Bits(rh));
+                    // Every block a cell holds, not just its paragraphs: a block image, divider or
+                    // nested table in there sizes the cell too, so leaving them out served the host
+                    // paragraph's cached layout at the old box after such a block changed.
+                    foreach (var (_, _, cell) in it.Table.LogicalCells())
+                        foreach (var b in cell.Blocks) Mix(BlockSig(b));
+                }
+            }
+            return h;
+        }
+    }
+
+    // Signature of one block inside an inline table's cell, for folding into the host paragraph's
+    // ParagraphSig. Only the fields that move the block's laid-out box matter — an image's display
+    // size and identity, a nested grid's dimensions and its own cells' contents.
+    private static long BlockSig(Block b)
+    {
+        unchecked
+        {
+            switch (b)
+            {
+                case Paragraph p: return ParagraphSig(p);
+                case ImageBlock img:
+                    return 31 ^ BitConverter.DoubleToInt64Bits(img.Width) * 3
+                              ^ BitConverter.DoubleToInt64Bits(img.Height) * 5
+                              ^ (img.RawBytes?.GetHashCode() ?? img.Image?.GetHashCode() ?? 0);
+                case DividerBlock: return 37;
+                case TableBlock tb:
+                    long h = 41 ^ (tb.Rows * 397L) ^ tb.Columns;
+                    foreach (var w in tb.ColumnWidths) h = h * 31 + BitConverter.DoubleToInt64Bits(w);
+                    foreach (var rh in tb.RowHeights) h = h * 31 + BitConverter.DoubleToInt64Bits(rh);
+                    foreach (var (_, _, cell) in tb.LogicalCells())
+                        foreach (var cb in cell.Blocks) h = h * 31 + BlockSig(cb);
+                    return h;
+                default: return 43;
+            }
+        }
+    }
+
+    private Avalonia.Media.TextFormatting.TextLayout BuildTextLayout(Paragraph p, double maxWidth,
+        int preeditOffset = -1, string? preeditText = null)
+    {
+        // IME composition is transient and paragraph-local; never serve/store it from the cache.
+        bool hasPreedit = !string.IsNullOrEmpty(preeditText) && preeditOffset >= 0;
+        long sig = 0;
+        if (!hasPreedit)
+        {
+            // Trusted pass (no content change since the last build): skip the signature hash and reuse
+            // the same-width cached layout directly. Falls through to the verified path on a width/miss.
+            if (_trustLayoutCache && _layoutCache.TryGetValue(p, out var trusted) && trusted.width == maxWidth)
+                return trusted.layout;
+            sig = ParagraphSig(p);
+            if (_layoutCache.TryGetValue(p, out var cached) && cached.width == maxWidth && cached.sig == sig)
+                return cached.layout;
+        }
+
+        var defaultFamily = DefaultFontFamily;
+        double defaultSize = DefaultFontSize; // pt; kept in pt for the run-size fallback below
+        var defaultProps = new Avalonia.Media.TextFormatting.GenericTextRunProperties(
+            new Typeface(defaultFamily), PtToPx(defaultSize), null, DisplayInk(null, p.Background));
+
+        // Heading look (bigger + bold) is applied here, not baked into the runs (see SetHeading).
+        bool heading = p.HeadingLevel is >= 1 and <= 6;
+        double headingSize = heading ? HeadingFontSize(p.HeadingLevel) : 0;
+
+        var segs = new List<LayoutSeg>();
+        double maxRunPt = 0; // largest run size (pt) in the paragraph; drives proportional line spacing
+        foreach (var inline in p.Inlines)
+        {
+            if (inline is Run r && !string.IsNullOrEmpty(r.Text))
+            {
+                var family = string.IsNullOrEmpty(r.FontFamily) ? defaultFamily : new FontFamily(r.FontFamily);
+                var weight = heading ? FontWeight.Bold : r.FontWeight;
+                var typeface = new Typeface(family, r.FontStyle, weight);
+                TextDecorationCollection? decos = r.TextDecorations;
+                if (decos == null && !string.IsNullOrEmpty(r.NavigateUri)) decos = TextDecorations.Underline;
+                double size = r.FontSize <= 0 ? defaultSize : r.FontSize; // pt
+                if (heading && RunSizeIsBodyDefault(r)) size = headingSize;
+                if (size > maxRunPt) maxRunPt = size;
+                var props = new Avalonia.Media.TextFormatting.GenericTextRunProperties(
+                    typeface,
+                    PtToPx(size),
+                    decos,
+                    DisplayInk(r.Foreground, r.Background ?? p.Background),
+                    r.Background);
+                segs.Add(new LayoutSeg { Text = r.Text, Props = props });
+            }
+            else if (inline is InlineImage img)
+            {
+                segs.Add(new LayoutSeg
+                {
+                    Image = img.Image,
+                    ImageSize = new Size(img.Width > 0 ? img.Width : 16, img.Height > 0 ? img.Height : 16),
+                    Props = defaultProps
+                });
+            }
+            else if (inline is InlineTable itbl)
+            {
+                // Measure the wrapped table from its own column widths; the inline run occupies that box
+                // and delegates drawing to the recursive primitive at its document-space origin. P2 draws
+                // with no chrome — caret/selection/handles inside an inline table arrive with P3/P4.
+                var box = LayoutTable(itbl.Table, 0, 0);
+                var tableRef = itbl.Table;
+                segs.Add(new LayoutSeg
+                {
+                    // Reserve InlineTablePad on every side so text doesn't touch the border; the table is
+                    // drawn inset by that pad (record origin + pad).
+                    TableSize = new Size(box.TableWidth + 2 * InlineTablePad, box.TotalHeight + 2 * InlineTablePad),
+                    Props = defaultProps,
+                    // Don't paint here: a DrawableTextRun.Draw can't thread the caret/selection back to the
+                    // render walk. Just record the table's document-space origin; the paragraph render
+                    // flushes the list right after layout.Draw, drawing each via DrawNestedTable with full
+                    // chrome (caret/selection by ref) so a caret inside an inline-table cell renders.
+                    DrawTable = (_, origin) => _inlineTableDraws.Add((tableRef, new Point(origin.X + InlineTablePad, origin.Y + InlineTablePad)))
+                });
+            }
+        }
+
+        if (!string.IsNullOrEmpty(preeditText) && preeditOffset >= 0)
+        {
+            // The composition is drawn with the formatting its committed text will get — the run it is
+            // about to join — plus the composition underline. It used to be hardcoded to the body face at
+            // the body size, so composing inside a heading (or in any run with its own size, font or
+            // colour) showed the syllable small and unstyled and then snapped to its real size the moment
+            // the IME committed. An empty paragraph has no run to read, hence the heading-aware fallback.
+            var fallback = heading
+                ? new Avalonia.Media.TextFormatting.GenericTextRunProperties(
+                    new Typeface(defaultFamily, FontStyle.Normal, FontWeight.Bold), PtToPx(headingSize), null, DisplayInk(null, p.Background))
+                : defaultProps;
+            var src = PreeditSourceProps(segs, preeditOffset, fallback);
+            var preeditProps = new Avalonia.Media.TextFormatting.GenericTextRunProperties(
+                src.Typeface, src.FontRenderingEmSize, TextDecorations.Underline,
+                src.ForegroundBrush ?? Brushes.Black, src.BackgroundBrush);
+            SplicePreedit(segs, preeditOffset, preeditText!, preeditProps);
+        }
+
+        // Line spacing: proportional LineSpacing wins (scales with the paragraph's font); single/≤1.0
+        // stays NaN so the font's natural metrics apply (never clips). Else an absolute LineHeight, else auto.
+        double lh;
+        if (!double.IsNaN(p.LineSpacing))
+        {
+            double basePt = maxRunPt > 0 ? maxRunPt : (heading ? headingSize : defaultSize);
+            lh = p.LineSpacing <= 1.0 + 1e-6 ? double.NaN : p.LineSpacing * PtToPx(basePt) * NaturalLineFactor;
+        }
+        else lh = !double.IsNaN(p.LineHeight) ? p.LineHeight : double.NaN;
+        var paraProps = new Avalonia.Media.TextFormatting.GenericTextParagraphProperties(
+            FlowDirection.LeftToRight,
+            p.TextAlignment,
+            true,
+            false,
+            defaultProps,
+            TextWrapping.Wrap,
+            lh,
+            0,
+            0);
+
+        var layout = new Avalonia.Media.TextFormatting.TextLayout(
+            new ParagraphTextSource(segs), paraProps, null, Math.Max(1, maxWidth));
+
+        if (!hasPreedit)
+        {
+            // Entries for deleted paragraphs are never re-accessed and would linger; past a generous cap,
+            // drop the ones no longer in the document (live entries survive and aren't reshaped) instead
+            // of clearing wholesale.
+            if (_layoutCache.Count > 10000) PruneLayoutCaches();
+            _layoutCache[p] = (sig, maxWidth, layout);
+        }
+        return layout;
+    }
+
+    // The layout a paragraph is actually RENDERED with. While the IME composes, the preedit text is
+    // spliced into the caret's paragraph, so it is taller (or wraps further) than its stored content —
+    // a measure walk that rebuilds it without the composition sizes the box for text that isn't what
+    // gets drawn. Every other paragraph takes the plain cached layout. The preedit build is deliberately
+    // uncached (it is transient), so this costs one extra shaping pass for the paragraph being composed
+    // into, and nothing at all when no composition is active.
+    private Avalonia.Media.TextFormatting.TextLayout PreeditAwareLayout(Paragraph p, double width)
+        => !string.IsNullOrEmpty(_preeditText) && ReferenceEquals(_caretPosition.Paragraph, p)
+            ? BuildTextLayout(p, width, _caretPosition.Offset, _preeditText)
+            : BuildTextLayout(p, width);
+
+    // Drops cache entries for paragraphs/tables no longer in the document (e.g. deleted while editing),
+    // keeping the live ones so nothing reshapes on the next frame.
+    private void PruneLayoutCaches()
+    {
+        if (Document == null) { _layoutCache.Clear(); _tableLayoutCache.Clear(); return; }
+        var liveParas = new HashSet<Paragraph>(GetAllParagraphsInOrder());
+        foreach (var key in _layoutCache.Keys.ToList())
+            if (!liveParas.Contains(key)) _layoutCache.Remove(key);
+        // Nested and inline tables are live too; collecting only the top-level ones evicted their
+        // (still-used) geometry every prune, forcing a full re-measure on the next frame.
+        var liveTables = new HashSet<TableBlock>();
+        CollectTables(Document.Blocks, liveTables);
+        foreach (var key in _tableLayoutCache.Keys.ToList())
+            if (!liveTables.Contains(key)) _tableLayoutCache.Remove(key);
+    }
+
+    // Every table in the document at any depth: top level, nested in a cell, or inline in a paragraph.
+    private static void CollectTables(System.Collections.Generic.IEnumerable<Block> blocks, HashSet<TableBlock> into)
+    {
+        foreach (var b in blocks)
+        {
+            if (b is TableBlock tb)
+            {
+                into.Add(tb);
+                foreach (var (_, _, cell) in tb.LogicalCells()) CollectTables(cell.Blocks, into);
+            }
+            else if (b is Paragraph p)
+            {
+                foreach (var inl in p.Inlines)
+                    if (inl is InlineTable it)
+                    {
+                        into.Add(it.Table);
+                        foreach (var (_, _, cell) in it.Table.LogicalCells()) CollectTables(cell.Blocks, into);
+                    }
+            }
+        }
+    }
+
+    // The run whose formatting the composition should borrow: the text segment the caret sits inside, and
+    // at a segment boundary the one to the LEFT — which is the run TryInsertTextCore extends when the
+    // composition commits, so what is drawn while composing is what remains afterwards. `fallback` covers
+    // a paragraph with no text at all.
+    private static Avalonia.Media.TextFormatting.TextRunProperties PreeditSourceProps(
+        List<LayoutSeg> segs, int offset, Avalonia.Media.TextFormatting.TextRunProperties fallback)
+    {
+        int idx = 0;
+        foreach (var seg in segs)
+        {
+            int len = seg.Text != null ? seg.Text.Length : 1;
+            // Inside this segment, ending at it, or before any text segment (caret at the start, or right
+            // after an image or inline table, where the text to the right is what typing joins).
+            if (seg.Text != null && offset <= idx + len) return seg.Props;
+            idx += len;
+        }
+        return fallback;
+    }
+
+    // Inserts the IME preedit text at a character offset, splitting a text segment if needed.
+    private static void SplicePreedit(List<LayoutSeg> segs, int offset, string preedit,
+        Avalonia.Media.TextFormatting.TextRunProperties preeditProps)
+    {
+        int idx = 0;
+        for (int i = 0; i < segs.Count; i++)
+        {
+            int len = segs[i].Text != null ? segs[i].Text!.Length : 1;
+            if (offset <= idx + len)
+            {
+                int local = offset - idx;
+                var pre = new LayoutSeg { Text = preedit, Props = preeditProps };
+                if (segs[i].Text != null && local > 0 && local < len)
+                {
+                    var left = new LayoutSeg { Text = segs[i].Text!.Substring(0, local), Props = segs[i].Props };
+                    var right = new LayoutSeg { Text = segs[i].Text!.Substring(local), Props = segs[i].Props };
+                    segs[i] = left;
+                    segs.Insert(i + 1, pre);
+                    segs.Insert(i + 2, right);
+                }
+                else if (local <= 0)
+                {
+                    segs.Insert(i, pre);
+                }
+                else
+                {
+                    segs.Insert(i + 1, pre);
+                }
+                return;
+            }
+            idx += len;
+        }
+        segs.Add(new LayoutSeg { Text = preedit, Props = preeditProps });
+    }
+
+    // The top-level block containing p, at any nesting depth. Delegates to the single parent-chain
+    // walker (this used to be a second, one-level copy that missed nested/inline tables — so a paste
+    // target or a clipboard block capture anchored inside one silently fell back to the document end).
+    private Block? FindTopLevelBlock(Paragraph p)
+        => Document != null ? TextRange.TopLevelBlockOf(Document, p) : null;
+
+    private void InsertParsedDocument(FlowDocument parsed)
+    {
+        if (Document == null) return;
+
+        // Inline-only single paragraph: paste inline at the caret to keep the current line's flow.
+        // Carries runs AND inline images so a pasted single-line fragment keeps its pictures.
+        if (parsed.Blocks.Count == 1 && parsed.Blocks[0] is Paragraph sp && _caretPosition.Paragraph != null)
+        {
+            var inlines = new List<Inline>();
+            foreach (var inl in sp.Inlines)
+                if (inl is Run or InlineImage) inlines.Add((Inline)inl.Clone());
+            if (inlines.Count > 0) { InsertInlines(inlines); return; }
+        }
+
+        // Otherwise splice the parsed blocks in at the caret (splitting the caret paragraph).
+        InsertBlocksAtCaret(parsed.Blocks);
+    }
+
+    // Inserts a list of blocks at the caret, splitting the caret paragraph so the paste lands AT the
+    // caret (Word/HWP behaviour): the first pasted paragraph continues the caret line, the last merges
+    // with the text after the caret, and any blocks between become siblings. Works whether the caret is
+    // in a top-level paragraph or a table cell. Falls back to a plain after-block splice when the caret
+    // isn't in a normal paragraph, or when the paste carries a table that can't nest in a cell yet (P4-2b).
+    private void InsertBlocksAtCaret(System.Collections.Generic.IReadOnlyList<Block> blocks)
+    {
+        if (Document == null || blocks.Count == 0) return;
+        if (_selectionStart != _selectionEnd) DeleteSelection();
+
+        var p = _caretPosition.Paragraph;
+        System.Collections.Generic.IList<Block>? container = p?.Parent switch
+        {
+            FlowDocument d => d.Blocks,
+            TableCell tc => tc.Blocks,
+            _ => null
+        };
+        bool inCell = p?.Parent is TableCell;
+        int pi = container != null && p != null ? container.IndexOf(p) : -1;
+        if (container == null || p == null || pi < 0 || (inCell && blocks.Any(b => b is TableBlock)))
+        {
+            InsertBlocksAfterCaretBlock(blocks);
+            return;
+        }
+
+        // Clone the sources so callers' lists (e.g. the internal clipboard) stay reusable.
+        var src = new List<Block>(blocks.Count);
+        foreach (var b in blocks) if (b.Clone() is Block cl) src.Add(cl);
+        if (src.Count == 0) return;
+
+        // Split the caret paragraph: p keeps the head; tail takes the inlines after the caret (same props).
+        int splitAt = SplitInlinesAt(p, _caretPosition.Offset);
+        // The tail continues the same paragraph, so it keeps the source's full format (heading level
+        // included — unlike Enter, this is a split of one logical paragraph, not a new one).
+        var tail = new Paragraph();
+        tail.CopyFormatFrom(p);
+        while (p.Inlines.Count > splitAt)
+        {
+            var inl = p.Inlines[splitAt];
+            p.Inlines.RemoveAt(splitAt);
+            inl.Parent = tail;
+            tail.Inlines.Add(inl);
+        }
+
+        // Merge the first pasted paragraph into the head line.
+        if (src[0] is Paragraph fp)
+        {
+            foreach (var inl in fp.Inlines.ToList()) { fp.Inlines.Remove(inl); inl.Parent = p; p.Inlines.Add(inl); }
+            src.RemoveAt(0);
+        }
+        // Merge the last pasted paragraph into the tail (prepended before the original tail text). The
+        // caret lands right after that pasted text; otherwise at the start of the tail.
+        int caretOff = 0;
+        if (src.Count > 0 && src[^1] is Paragraph lp)
+        {
+            var moved = lp.Inlines.ToList();
+            int pos = 0;
+            foreach (var inl in moved) { lp.Inlines.Remove(inl); inl.Parent = tail; tail.Inlines.Insert(pos++, inl); }
+            caretOff = moved.Sum(InlineLen);
+            src.RemoveAt(src.Count - 1);
+        }
+        if (p.Inlines.Count == 0) p.Inlines.Add(new Run { Text = "" });
+        if (tail.Inlines.Count == 0) tail.Inlines.Add(new Run { Text = "" });
+
+        int at = pi + 1;
+        foreach (var b in src) container.Insert(at++, b);
+        tail.Parent = p.Parent;
+        container.Insert(at, tail);
+        UpdateParents(Document);
+        if (inCell) InvalidateMeasure(); // the cell grew -> table row height reflows
+
+        _caretPosition = new TextPointer(tail, caretOff);
+        _selectionStart = new TextPointer(tail, caretOff);
+        _selectionEnd = new TextPointer(tail, caretOff);
+    }
+
+    // Plain after-block splice (the fallback): inserts cloned blocks after the caret's block — into the
+    // enclosing cell when the caret is in one, else the document top level. Used when the caret isn't in
+    // a normal paragraph or the paste carries a table that can't nest in a cell.
+    private void InsertBlocksAfterCaretBlock(System.Collections.Generic.IReadOnlyList<Block> blocks)
+    {
+        if (Document == null) return;
+        var (container, at) = BlockInsertTarget(blocks);
+        Paragraph? lastPara = null;
+        foreach (var b in blocks)
+        {
+            if (b.Clone() is not Block cl) continue;
+            container.Insert(at++, cl);
+            if (cl is Paragraph bp) lastPara = bp;
+            else if (cl is TableBlock tbb && tbb.Rows > 0 && tbb.Columns > 0) lastPara = tbb.LogicalCells().Select(x => x.cell.Para).LastOrDefault() ?? tbb.Cells[tbb.Rows - 1][tbb.Columns - 1].Para;
+        }
+        UpdateParents(Document);
+        if (!ReferenceEquals(container, Document.Blocks)) InvalidateMeasure(); // cell grew -> table reflows
+        if (lastPara != null)
+        {
+            _caretPosition = new TextPointer(lastPara, GetParagraphLength(lastPara));
+            _selectionStart = new TextPointer(lastPara, _caretPosition.Offset);
+            _selectionEnd = new TextPointer(lastPara, _caretPosition.Offset);
+        }
+    }
+
+    // The container + index for the after-block splice fallback: the enclosing cell's block list (after
+    // the caret's paragraph) when the caret is in a cell, otherwise the document's top-level list (after
+    // the caret's top-level block). A paste containing a TableBlock can't nest in a cell yet (P4-2b), so
+    // it falls back to top level.
+    private (System.Collections.Generic.IList<Block> container, int at) BlockInsertTarget(System.Collections.Generic.IEnumerable<Block> blocks)
+    {
+        if (Document != null && _caretPosition.Paragraph?.Parent is TableCell tc && !blocks.Any(b => b is TableBlock))
+        {
+            int pi = tc.Blocks.IndexOf(_caretPosition.Paragraph);
+            return (tc.Blocks, pi >= 0 ? pi + 1 : tc.Blocks.Count);
+        }
+        var caretBlock = _caretPosition.Paragraph != null ? FindTopLevelBlock(_caretPosition.Paragraph) : null;
+        int ti = caretBlock != null && Document != null ? Document.Blocks.IndexOf(caretBlock) : -1;
+        return (Document!.Blocks, ti >= 0 ? ti + 1 : Document.Blocks.Count);
+    }
+
+    // Inserts a top-level block immediately after the caret's current block (or at the end
+    // when the caret isn't in a normal paragraph), instead of always appending to the document.
+    private void InsertBlockAtCaret(Block b)
+    {
+        if (Document == null) return;
+        // A block image / divider / nested table (P4-2b) inserts inside the current cell, after the
+        // caret's paragraph, when the caret is in a cell.
+        if (_caretPosition.Paragraph?.Parent is TableCell tc)
+        {
+            int pi = tc.Blocks.IndexOf(_caretPosition.Paragraph);
+            int at = pi >= 0 ? pi + 1 : tc.Blocks.Count;
+            tc.Blocks.Insert(at, b);
+            // Guarantee a paragraph after the block so the caret has somewhere to land and type.
+            if (at + 1 >= tc.Blocks.Count || tc.Blocks[at + 1] is not Paragraph)
+                tc.Blocks.Insert(at + 1, new Paragraph { Inlines = { new Run { Text = "" } } });
+            UpdateParents(Document);
+            // Caret into a nested table's first cell (ready to fill), else the paragraph after the block.
+            if (b is TableBlock nt && nt.Cells.Count > 0 && nt.Cells[0].Count > 0)
+                _caretPosition = new TextPointer(nt.Cells[0][0].Para, 0);
+            else if (tc.Blocks[at + 1] is Paragraph np)
+                _caretPosition = new TextPointer(np, 0);
+            CollapseSelectionToCaret();
+            Focus();
+            InvalidateMeasure(); // the cell grew -> table row height reflows
+            ResetCaretBlink();
+            return;
+        }
+        int insertIndex = Document.Blocks.Count;
+        var caretBlock = _caretPosition.Paragraph != null ? FindTopLevelBlock(_caretPosition.Paragraph) : null;
+        if (caretBlock != null)
+        {
+            int i = Document.Blocks.IndexOf(caretBlock);
+            if (i >= 0) insertIndex = i + 1;
+        }
+        Document.Blocks.Insert(insertIndex, b);
+        UpdateParents(Document); // NormalizeBlocks guarantees a paragraph exists after b
+
+        // Place the caret so the user can keep going without a click: into a new table's first cell
+        // (ready to fill it), otherwise the paragraph right after the block (you can't type into an
+        // image). ResetCaretBlink re-measures (the new block grows the scroll extent) and scrolls it
+        // into view, instead of leaving only its top edge showing until the next click.
+        if (b is TableBlock tbl && tbl.Cells.Count > 0 && tbl.Cells[0].Count > 0)
+            _caretPosition = new TextPointer(tbl.Cells[0][0].Para, 0);
+        else
+            for (int k = insertIndex + 1; k < Document.Blocks.Count; k++)
+                if (Document.Blocks[k] is Paragraph after) { _caretPosition = new TextPointer(after, 0); break; }
+        CollapseSelectionToCaret();
+        Focus(); // a toolbar/menu click triggered the insert and took focus — restore it so the caret shows
+        ResetCaretBlink();
+    }
+
+    /// <summary>Inserts a block image from a <see cref="Avalonia.Media.Imaging.Bitmap"/> at the caret.
+    /// When the encoded bytes are available, prefer <see cref="InsertImageBytes(byte[])"/> to avoid re-encoding.</summary>
+    public void InsertImage(Avalonia.Media.Imaging.Bitmap image)
+    {
+        if (Document == null || IsReadOnly || !AllowImages) return;
+        PushUndo();
+        var (w, h) = CapToContentWidth(image.Size.Width, image.Size.Height);
+        var ib = new ImageBlock { Image = image, Width = w, Height = h };
+        InsertBlockAtCaret(ib);
+        InvalidateVisual();
+    }
+
+    /// <summary>Inserts an empty <paramref name="rows"/>×<paramref name="cols"/> table at the caret.</summary>
+    public void InsertTable(int rows, int cols)
+    {
+        if (Document == null || IsReadOnly || !AllowTables) return;
+        PushUndo();
+        // The (rows, cols) constructor builds Cells, ColumnWidths and the span grids together, all
+        // consistent. (An object initializer that rebuilt Cells alone would desync the span grids.)
+        var tb = new TableBlock(rows, cols);
+        // Equal columns spanning the available width. Inside a cell (P4-2b nested table) that's the
+        // enclosing cell's content width (parent column-span widths minus the cell padding), so the nested
+        // table fits the cell instead of the whole document; otherwise it fills the document width.
+        double avail, minCol;
+        if (_caretPosition.Paragraph is { } cp && FindCell(cp) is { } loc)
+        {
+            var (cs, _) = loc.tb.SpanOf(loc.r, loc.c);
+            double cellW = 0;
+            for (int k = loc.c; k < loc.c + cs && k < loc.tb.ColumnWidths.Count; k++) cellW += loc.tb.ColumnWidths[k];
+            // Fit the enclosing cell's content width with a low per-column floor so a deeply nested table
+            // doesn't overflow its cell (the 40px top-level floor would exceed a narrow cell).
+            avail = System.Math.Max(20, cellW - 10);
+            minCol = 15;
+        }
+        else { avail = Bounds.Width > 60 ? ContentLayoutWidth - 20 : 600; minCol = 40; }
+        double w = System.Math.Max(minCol, avail / cols);
+        for (int c = 0; c < tb.ColumnWidths.Count; c++) tb.ColumnWidths[c] = w;
+        InsertBlockAtCaret(tb);
+        InvalidateVisual();
+    }
+
+    // Splits the caret's (top-level) paragraph at the caret into a new following paragraph, which
+    // inherits list/indent/alignment/background (not heading level). Used by Enter.
+    private void SplitParagraphAtCaret()
+    {
+        var p = _caretPosition.Paragraph;
+        if (Document == null || p == null) return;
+        // The paragraph lives either as a top-level block or inside a table cell's block list (P3).
+        // Split within whichever container holds it, so the new paragraph becomes a sibling there.
+        System.Collections.Generic.IList<Block>? container = p.Parent switch
+        {
+            FlowDocument d => d.Blocks,
+            TableCell tc => tc.Blocks,
+            _ => null
+        };
+        if (container == null) return;
+        int idx = container.IndexOf(p);
+        if (idx < 0) return;
+        int insertAt = SplitInlinesAt(p, _caretPosition.Offset);
+        // Inherit the whole paragraph format (list, indent, alignment, background, line spacing,
+        // quote bar, margins, marker style) — but drop back to body text: a heading's Enter starts
+        // a normal paragraph (core rule #3).
+        var np = new Paragraph();
+        np.CopyFormatFrom(p);
+        np.HeadingLevel = 0;
+        while (p.Inlines.Count > insertAt)
+        {
+            var inl = p.Inlines[insertAt];
+            p.Inlines.RemoveAt(insertAt);
+            inl.Parent = np;
+            np.Inlines.Add(inl);
+        }
+        if (np.Inlines.Count == 0) np.Inlines.Add(new Run { Text = "" });
+        if (p.Inlines.Count == 0) p.Inlines.Add(new Run { Text = "" });
+        np.Parent = p.Parent;
+        container.Insert(idx + 1, np);
+        _caretPosition = new TextPointer(np, 0);
+        _selectionStart = new TextPointer(np, 0);
+        _selectionEnd = new TextPointer(np, 0);
+    }
+
+    private List<Paragraph> GetAllParagraphsInOrder()
+        => Document == null ? new List<Paragraph>() : ParagraphsInBlocks(Document.Blocks).ToList();
+
+    // Document-order enumeration of every paragraph, descending recursively through table cells (and
+    // nested tables — P4-2b) and through inline tables hanging off a paragraph's inlines (milestone B),
+    // so navigation/find/select-all reach paragraphs at any depth.
+    private static System.Collections.Generic.IEnumerable<Paragraph> ParagraphsInBlocks(System.Collections.Generic.IEnumerable<Block> blocks)
+    {
+        foreach (var block in blocks)
+        {
+            if (block is Paragraph p)
+            {
+                yield return p;
+                // An inline table's cell paragraphs are reachable too, ordered right after their host
+                // paragraph (they have no block-list home of their own).
+                foreach (var inl in p.Inlines)
+                    if (inl is InlineTable it)
+                        foreach (var (_, _, cell) in it.Table.LogicalCells())
+                            foreach (var q in ParagraphsInBlocks(cell.Blocks))
+                                yield return q;
+            }
+            else if (block is TableBlock tb)
+                foreach (var (_, _, cell) in tb.LogicalCells())
+                    foreach (var q in ParagraphsInBlocks(cell.Blocks))
+                        yield return q;
+        }
+    }
+
+    // Like ParagraphsInBlocks but does NOT descend into inline tables. Linear caret traversal
+    // (GetNext/PreviousParagraph) must treat an inline table's host paragraph as one unit, because the
+    // host's own text continues after the table: enumerating the cells here would make "→ at the host's
+    // end" jump into the first cell instead of the next block. Inline-table cells are reached by the
+    // explicit entry/exit and inter-cell logic in MoveCaretRight/Left. Block tables are still descended
+    // (their cells are spatially sequential between sibling paragraphs).
+    private static System.Collections.Generic.IEnumerable<Paragraph> ParagraphsInBlocksNav(System.Collections.Generic.IEnumerable<Block> blocks)
+    {
+        foreach (var block in blocks)
+        {
+            if (block is Paragraph p) yield return p;
+            else if (block is TableBlock tb)
+                foreach (var (_, _, cell) in tb.LogicalCells())
+                    foreach (var q in ParagraphsInBlocksNav(cell.Blocks))
+                        yield return q;
+        }
+    }
+
+    // Inside a table, Ctrl+A selects in stages (HWP/Excel): the cell's own contents, then the whole
+    // table — climbing one nesting level per press — then the document. Outside a table it selects
+    // the document straight away, as before.
+    private void SelectAll()
+    {
+        if (TrySelectAllStage()) return;
+        var allParas = GetAllParagraphsInOrder();
+        if (allParas.Count == 0) return;
+        _cellSelMode = false; _cellSelTable = null;
+        _selectionStart = new TextPointer(allParas[0], 0);
+        var lastPara = allParas[allParas.Count - 1];
+        _selectionEnd = new TextPointer(lastPara, GetParagraphLength(lastPara));
+        _caretPosition = new TextPointer(_selectionEnd.Paragraph, _selectionEnd.Offset);
+        InvalidateVisual();
+    }
+
+    // Copies the currently selected image, if any: right-click-selected block image, block caret
+    // sitting on an image, or a selected inline image. Returns false when nothing image-like is
+    // selected (the caller falls back to the text-selection copy).
+    private bool TryCopySelectedImage()
+    {
+        if ((_selectedBlock as ImageBlock ?? _caretBlock as ImageBlock) is { } ib)
+        {
+            _ = CopyImageToClipboardAsync(ib.RawBytes, ib.Image, inline: false, ib.Width, ib.Height);
+            return true;
+        }
+        if (_selectedInline is { } si)
+        {
+            _ = CopyImageToClipboardAsync(si.img.RawBytes, si.img.Image, inline: true, si.img.Width, si.img.Height);
+            return true;
+        }
+        return false;
+    }
+
+    // Pastes an image as an inline (character-like) image at the caret, splitting the run under it
+    // like text insertion. Used when the clipboard meta says the image was inline when copied.
+    private void InsertInlineImageAtCaret(byte[] bytes, double w, double h)
+    {
+        if (Document == null || IsReadOnly || !AllowImages) return;
+        if (_selectionStart != _selectionEnd) DeleteSelection();
+        var p = _caretPosition.Paragraph;
+        if (p == null) return;
+
+        var im = new InlineImage { Width = w > 0 ? w : 16, Height = h > 0 ? h : 16 };
+        im.SetImageData(bytes, ImageMime.Detect(bytes));
+        if (w <= 0 || h <= 0)
+        {
+            // No display size in the meta — fall back to the natural size when decodable.
+            try
+            {
+                using var ms = new System.IO.MemoryStream(bytes);
+                var bmp = new Avalonia.Media.Imaging.Bitmap(ms);
+                if (w <= 0) im.Width = bmp.Size.Width;
+                if (h <= 0) im.Height = bmp.Size.Height;
+            }
+            catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
+        }
+
+        int at = SplitInlinesAt(p, _caretPosition.Offset);
+        p.Inlines.Insert(at, im);
+        UpdateParents(Document);
+        _caretPosition.Offset += 1;
+        _selectionStart = new TextPointer(p, _caretPosition.Offset);
+        _selectionEnd = new TextPointer(p, _caretPosition.Offset);
+        MarkTextChanged();
+        InvalidateVisual();
+        NotifyStatus();
+    }
+
+    private async void CopySelectionToClipboard()
+    {
+        if (_selectionStart.Paragraph == null || _selectionEnd.Paragraph == null || _selectionStart.CompareTo(_selectionEnd) == 0) return;
+        var range = new TextRange(_selectionStart, _selectionEnd);
+        // GetText joins paragraphs with LF; LF-only shows as a single line in many Windows consumers
+        // (Notepad, native text boxes), so put the platform newline on the system clipboard. Store the
+        // SAME normalized form internally so the paste round-trip match (system text == what we copied)
+        // still holds when re-pasting in-app.
+        string text = range.GetText().ReplaceLineEndings();
+        // Capture the rich fragment synchronously (cloned) before any await / later edits.
+        _internalClipboard = range.GetRichInlines();
+        _internalClipboardText = text;
+        _internalClipboardBlocks = CaptureBlockStructure(range);
+
+        // Rich HTML for other apps (Word, browsers). When the selection spans a table or block image,
+        // use the captured top-level blocks so the HTML keeps the <table> structure; otherwise a trimmed
+        // sub-document that preserves paragraph properties (lists/headings/alignment/indent) and inline
+        // images — so formatting and pasted-back pictures survive, and an image-only selection still has
+        // content even though its plain text is empty.
+        FlowDocument? htmlDoc;
+        if (_internalClipboardBlocks is { } caps && caps.Exists(b => b is TableBlock || b is ImageBlock))
+        {
+            htmlDoc = new FlowDocument();
+            foreach (var b in caps) htmlDoc.Blocks.Add(b);
+        }
+        else htmlDoc = BuildSelectionDocument();
+        string? html = BuildSelectionHtml(htmlDoc);
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        // Set the clipboard whenever there's anything to put on it — text OR html. Skipping when the
+        // text was empty (e.g. an inline-image-only selection) used to leave a PREVIOUS copy on the
+        // system clipboard while the internal slots said otherwise, so paste pulled in stale content.
+        if (clipboard != null && (!string.IsNullOrEmpty(text) || !string.IsNullOrEmpty(html)))
+        {
+            // Another process can hold the clipboard open; an unhandled throw here would
+            // crash the process (async void). The internal rich slots above are already set.
+            try { await SetClipboardTextAndHtmlAsync(clipboard, text, html); }
+            catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
+        }
+    }
+
+    // If the selection spans whole tables/images or crosses multiple top-level blocks, clone the
+    // full top-level blocks so paste can reproduce table structure. Returns null for plain inline
+    // selections (those use the run-based clipboard instead).
+    private List<Block>? CaptureBlockStructure(TextRange range)
+    {
+        if (Document == null) return null;
+        var startTop = range.Start.Paragraph != null ? FindTopLevelBlock(range.Start.Paragraph) : null;
+        var endTop = range.End.Paragraph != null ? FindTopLevelBlock(range.End.Paragraph) : null;
+        if (startTop == null || endTop == null) return null;
+
+        // A selection entirely within a single table cell is intra-cell text, not a table copy. Both
+        // endpoints resolve to the same enclosing TableBlock (hasNonParagraph below would otherwise clone
+        // the WHOLE table), so fall to the run/inline clipboard and capture only the cell content.
+        if (ReferenceEquals(startTop, endTop) && startTop is TableBlock
+            && FindCell(range.Start.Paragraph!) is { } sc && FindCell(range.End.Paragraph!) is { } ec
+            && sc.tb == ec.tb && sc.r == ec.r && sc.c == ec.c)
+            return null;
+
+        int si = Document.Blocks.IndexOf(startTop);
+        int ei = Document.Blocks.IndexOf(endTop);
+        if (si < 0 || ei < 0 || si > ei) return null;
+
+        bool spansMultiple = si != ei;
+        bool hasNonParagraph = false;
+        for (int k = si; k <= ei; k++)
+            if (!(Document.Blocks[k] is Paragraph)) { hasNonParagraph = true; break; }
+
+        if (!spansMultiple && !hasNonParagraph) return null; // plain inline selection
+
+        var blocks = new List<Block>();
+        for (int k = si; k <= ei; k++)
+            if (Document.Blocks[k].Clone() is Block cl) blocks.Add(cl);
+        return blocks.Count > 0 ? blocks : null;
+    }
+
+    // Inserts cloned blocks (e.g. tables) at the caret, splitting the caret paragraph so the paste lands
+    // at the caret rather than after the current block (shares InsertBlocksAtCaret with HTML/RTF paste).
+    private void InsertBlocks(List<Block> blocks) => InsertBlocksAtCaret(blocks);
+
+    // Inserts a list of formatted Runs at the current caret, splitting the run under the caret.
+    // Inserts a list of inlines (formatted Runs and/or InlineImages) at the caret, splitting the run
+    // under it. Carries inline images through in-app paste (the run-only path dropped them).
+    private void InsertInlines(List<Inline> inlines)
+    {
+        if (Document == null || _caretPosition.Paragraph == null || inlines.Count == 0) return;
+        if (_selectionStart != _selectionEnd) DeleteSelection();
+
+        var p = _caretPosition.Paragraph;
+        int insertAt = SplitInlinesAt(p, _caretPosition.Offset);
+        int added = 0;
+        foreach (var inl in inlines)
+        {
+            if (inl is InlineImage && !AllowImages) continue; // honor the image feature flag on paste
+            var clone = (Inline)inl.Clone();
+            clone.Parent = p;
+            p.Inlines.Insert(insertAt++, clone);
+            added += InlineLen(clone);
+        }
+        _caretPosition.Offset += added;
+        _selectionStart = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        _selectionEnd = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        InvalidateVisual();
+    }
+
+    // Splits the run straddling the given character offset and returns the inline index
+    // at which new content should be inserted.
+    private int SplitInlinesAt(Paragraph p, int offset)
+    {
+        int currentIndex = 0;
+        for (int i = 0; i < p.Inlines.Count; i++)
+        {
+            int len = InlineLen(p.Inlines[i]);
+            if (offset <= currentIndex) return i;
+            if (p.Inlines[i] is Run run && offset < currentIndex + len)
+            {
+                int local = offset - currentIndex;
+                string t1 = run.Text!.Substring(0, local);
+                string t2 = run.Text!.Substring(local);
+                run.Text = t1;
+                var nr = (Run)run.Clone();
+                nr.Text = t2;
+                nr.Parent = p;
+                p.Inlines.Insert(i + 1, nr);
+                return i + 1;
+            }
+            currentIndex += len;
+        }
+        return p.Inlines.Count;
+    }
+
+    private void DrawSelectionHighlight(DrawingContext context, Avalonia.Media.TextFormatting.TextLayout layout,
+        int startOffset, int endOffset, double originX, double originY)
+    {
+        if (endOffset <= startOffset) return;
+        var brush = SelectionBrush;
+        foreach (var rect in layout.HitTestTextRange(startOffset, endOffset - startOffset))
+            context.FillRectangle(brush, new Rect(originX + rect.X, originY + rect.Y, rect.Width, rect.Height));
+    }
+
+    // Amber tint painted under every occurrence of the find-highlight query (screen chrome only, never
+    // printed). Cheap no-op unless a find UI has set FindHighlightQuery.
+    private static readonly IBrush FindMatchBrush =
+        new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromArgb(70, 255, 190, 0)); // see SelectionBrushProperty
+
+    private void DrawFindHighlights(DrawingContext context, Paragraph p, Avalonia.Media.TextFormatting.TextLayout layout,
+        double originX, double originY)
+    {
+        if (FindHighlightQuery is not { } q) return;
+        var cmp = FindHighlightMatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        string text = BuildPlain(p);
+
+        // The CURRENT match is already marked by the selection, so it must not be tinted as well:
+        // amber over the translucent selection blue blends into a muddy low-contrast fill, and the
+        // user loses track of which match the caret is on. Highlight-all marks the OTHER matches
+        // (browser / VS Code behaviour). Same "selection is a match" test as GetFindMatchPosition.
+        int selStart = -1;
+        if (_selectionStart.Paragraph != null && ReferenceEquals(_selectionStart.Paragraph, p)
+            && ReferenceEquals(_selectionEnd.Paragraph, p))
+        {
+            int a = Math.Min(_selectionStart.Offset, _selectionEnd.Offset);
+            int b = Math.Max(_selectionStart.Offset, _selectionEnd.Offset);
+            if (b - a == q.Length) selStart = a;
+        }
+
+        int from = 0;
+        while (from <= text.Length)
+        {
+            int idx = text.IndexOf(q, from, cmp);
+            if (idx < 0) break;
+            if (idx != selStart)
+                foreach (var rect in layout.HitTestTextRange(idx, q.Length))
+                    context.FillRectangle(FindMatchBrush, new Rect(originX + rect.X, originY + rect.Y, rect.Width, rect.Height));
+            from = idx + 1;
+        }
+    }
+
+    private void DeleteBlock(Block b)
+    {
+        if (Document == null) return;
+        PushUndo();
+        RemoveBlockAnywhere(b);
+        _selectedBlock = null;
+        UpdateParents(Document); // NormalizeBlocks (top level) + re-wire; a cell keeps its paragraph invariant
+        InvalidateMeasure();     // a cell shrank -> the table's row height reflows
+        InvalidateVisual();
+    }
+
+    // Removes a block from whichever container holds it: the document's top-level list or an enclosing
+    // table cell (searching recursively through nested tables — P4-2b). Returns true if removed.
+    private bool RemoveBlockAnywhere(Block b)
+    {
+        if (Document == null) return false;
+        if (Document.Blocks.Remove(b)) return true;
+        return RemoveBlockFromCells(Document.Blocks, b);
+    }
+
+    private static bool RemoveBlockFromCells(System.Collections.Generic.IEnumerable<Block> blocks, Block target)
+    {
+        foreach (var blk in blocks)
+        {
+            if (blk is TableBlock tb)
+            {
+                if (RemoveBlockFromTable(tb, target)) return true;
+            }
+            // An inline table's cells are block containers too (milestone B), but they hang off a
+            // paragraph's inlines rather than a block list — so this walk never reached them and a
+            // block image / divider / nested table inside one could not be deleted.
+            else if (blk is Paragraph p)
+            {
+                foreach (var inl in p.Inlines)
+                    if (inl is InlineTable it && RemoveBlockFromTable(it.Table, target)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool RemoveBlockFromTable(TableBlock tb, Block target)
+    {
+        foreach (var row in tb.Cells)
+            foreach (var cell in row)
+            {
+                if (cell.Blocks.Remove(target)) return true;
+                if (RemoveBlockFromCells(cell.Blocks, target)) return true;
+            }
+        return false;
+    }
+
+    /// <summary>Undoes the last edit. No-op when <see cref="CanUndo"/> is <see langword="false"/>.</summary>
+    public void Undo() => DoUndo();
+    /// <summary>Redoes the last undone edit. No-op when <see cref="CanRedo"/> is <see langword="false"/>.</summary>
+    public void Redo() => DoRedo();
+
+
+}

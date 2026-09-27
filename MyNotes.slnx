@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MyNotes.Core/MyNotes.Core.csproj" />
+    <Project Path="src/MyNotes/MyNotes.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyNotes.Tests/MyNotes.Tests.csproj" />
+  </Folder>
+  <Folder Name="/vendor/">
+    <Project Path="vendor/AvaloniaRichEditor/AvaloniaRichEditor.csproj" />
+  </Folder>
+</Solution>

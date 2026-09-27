@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "${workspaceFolder}/src/MyNotes/MyNotes.csproj"],
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "test",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "${workspaceFolder}/MyNotes.slnx"],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "publish portable Windows app",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["publish", "${workspaceFolder}/src/MyNotes/MyNotes.csproj", "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", "${workspaceFolder}/artifacts/MyNotes"],
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

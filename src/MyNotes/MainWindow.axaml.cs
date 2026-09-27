@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     private readonly string? _settingsPath;
     private PixelPoint? _normalPosition;
     private Size _normalSize;
-    private readonly Flyout _recentNotebooksMenu = new();
+    private readonly Flyout _recentNotebooksMenu = new() { Placement = PlacementMode.Top };
     private readonly string? _startupPath;
     private bool _closed;
     private string? _titleEditingPath;
@@ -182,7 +182,7 @@ public partial class MainWindow : Window
             _workspace = null;
             _folder = "";
             Browser.ItemsSource = null;
-            NotebookPath.Text = "";
+            NotebookPath.Text = "Open notebook";
             ClearNote();
             SaveStatus.Text = "Choose a notebook";
             _settings = NotebookSettings.Read(_settingsPath) with { NotebookPath = null, SkipAutomaticNotebook = true };
@@ -697,7 +697,7 @@ public partial class MainWindow : Window
     private void Theme_Click(object? sender, RoutedEventArgs e)
     {
         var active = AppThemes.Resolve(_settings);
-        var menu = new MenuFlyout();
+        var menu = new MenuFlyout { Placement = PlacementMode.Top };
         menu.Items.Add(new MenuItem { Header = "APPEARANCE", IsEnabled = false });
         foreach (var theme in AppThemes.All)
         {

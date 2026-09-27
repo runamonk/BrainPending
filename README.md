@@ -41,8 +41,9 @@ dotnet run --project src/MyNotes -- --notes ./Notes
   and editable there; move them out to recover them. Deleting from Trash sends
   the item to the Windows Recycle Bin. Trash itself cannot be renamed, moved or deleted.
 - Light/dark themes.
-- Split Open notebook button: click the label to browse, or the arrow for the ten
-  most recently opened notebooks, remembered between sessions.
+- Bottom status bar includes the current notebook as a split button: click the
+  path to browse, or the arrow for the ten most recently opened notebooks,
+  remembered between sessions. The color theme button sits alongside save status.
 - Each recent notebook has a trashcan button to remove it from the menu without
   deleting its files or changing the currently open notebook.
 - Dark mode uses the Dracula palette, including the editor, toolbar, dialogs,

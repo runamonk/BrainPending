@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace MyNotes.Core;
 
-public sealed record WorkspaceEntry(string Path, string Name, bool IsFolder, DateTime ModifiedUtc);
+public sealed record WorkspaceEntry(string Path, string Name, bool IsFolder, DateTime ModifiedUtc, bool IsPinned = false);
 public sealed record NoteSnapshot(string Path, string Rtf, string Revision);
 public sealed record SaveResult(NoteSnapshot Note, bool IsConflict);
 
@@ -14,6 +14,10 @@ public sealed class NoteWorkspace
     public const string EmptyRtf = @"{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}\f0\fs24\pard }";
     public string Root { get; }
     public string MetadataPath => System.IO.Path.Combine(Root, ".mynotes");
+    public string TrashPath => System.IO.Path.Combine(MetadataPath, "trash", "items");
+    public bool IsTrash(string path) => string.Equals(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path)), TrashPath, PathComparison);
+    public bool IsInTrash(string path) => IsTrash(path) || System.IO.Path.GetFullPath(path).StartsWith(TrashPath + System.IO.Path.DirectorySeparatorChar, PathComparison);
+    public string ParentFolder(string path) => IsTrash(path) ? Root : System.IO.Path.GetDirectoryName(path)!;
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
         ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -21,6 +25,9 @@ public sealed class NoteWorkspace
     {
         Root = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(root));
         Directory.CreateDirectory(Root);
+        CheckPath(TrashPath);
+        Directory.CreateDirectory(TrashPath);
+        MigrateLegacyTrash();
     }
 
     public string CheckPath(string path, bool allowRoot = true)
@@ -34,10 +41,14 @@ public sealed class NoteWorkspace
         if (!full.StartsWith(Root + System.IO.Path.DirectorySeparatorChar, PathComparison))
             throw new IOException("This item is outside the notebook.");
         var relative = System.IO.Path.GetRelativePath(Root, full);
+        var inTrash = IsInTrash(full);
+        if (!allowRoot && IsTrash(full)) throw new IOException("The Trash folder cannot be renamed, moved or deleted.");
         var current = Root;
+        var index = 0;
         foreach (var part in relative.Split(System.IO.Path.DirectorySeparatorChar))
         {
-            if (part.StartsWith('.')) throw new IOException("Internal notebook folders cannot be edited here.");
+            if (part.StartsWith('.') && !(inTrash && index == 0 && part == ".mynotes")) throw new IOException("Internal notebook folders cannot be edited here.");
+            index++;
             current = System.IO.Path.Combine(current, part);
             if ((File.Exists(current) || Directory.Exists(current)) &&
                 (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
@@ -49,6 +60,7 @@ public sealed class NoteWorkspace
     public IReadOnlyList<WorkspaceEntry> List(string folder, string search = "")
     {
         folder = CheckPath(folder);
+        var pins = ReadPins();
         var options = new EnumerationOptions
         {
             RecurseSubdirectories = !string.IsNullOrWhiteSpace(search),
@@ -56,11 +68,61 @@ public sealed class NoteWorkspace
             IgnoreInaccessible = true
         };
         return Directory.EnumerateFileSystemEntries(folder, "*", options)
-            .Where(p => !System.IO.Path.GetRelativePath(Root, p).Split(System.IO.Path.DirectorySeparatorChar).Any(s => s.StartsWith('.')))
+            .Where(p => !System.IO.Path.GetRelativePath(folder, p).Split(System.IO.Path.DirectorySeparatorChar).Any(s => s.StartsWith('.')))
             .Where(p => Directory.Exists(p) || System.IO.Path.GetExtension(p).Equals(".rtf", StringComparison.OrdinalIgnoreCase))
-            .Select(p => new WorkspaceEntry(p, Directory.Exists(p) ? System.IO.Path.GetFileName(p) : System.IO.Path.GetFileNameWithoutExtension(p), Directory.Exists(p), File.GetLastWriteTimeUtc(p)))
+            .Select(p => new WorkspaceEntry(p, Directory.Exists(p) ? System.IO.Path.GetFileName(p) : System.IO.Path.GetFileNameWithoutExtension(p), Directory.Exists(p), File.GetLastWriteTimeUtc(p), !Directory.Exists(p) && pins.Contains(System.IO.Path.GetRelativePath(Root, p))))
             .Where(e => string.IsNullOrWhiteSpace(search) || e.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(e => e.IsFolder).ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            .OrderByDescending(e => e.IsPinned).ThenByDescending(e => e.IsFolder).ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+    }
+
+    private string PinsPath => System.IO.Path.Combine(MetadataPath, "pins.json");
+
+    private HashSet<string> ReadPins()
+    {
+        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        if (!File.Exists(PinsPath)) return new(comparer);
+        try { return new(JsonSerializer.Deserialize<string[]>(File.ReadAllText(PinsPath)) ?? [], comparer); }
+        catch (JsonException e) { throw new IOException("Could not read pinned notes.", e); }
+    }
+
+    private void UpdatePins(Func<HashSet<string>, bool> update)
+    {
+        Directory.CreateDirectory(System.IO.Path.Combine(MetadataPath, "locks"));
+        using var lease = AcquireLock(PinsPath);
+        var pins = ReadPins();
+        if (!update(pins)) return;
+        var temp = System.IO.Path.Combine(MetadataPath, $".pins-{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(temp, JsonSerializer.Serialize(pins.Order(StringComparer.Ordinal)));
+            File.Move(temp, PinsPath, true);
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
+    }
+
+    public void SetPinned(string path, bool pinned)
+    {
+        path = CheckPath(path, false);
+        if (!File.Exists(path) || !System.IO.Path.GetExtension(path).Equals(".rtf", StringComparison.OrdinalIgnoreCase))
+            throw new IOException("Only notes can be pinned.");
+        var relative = System.IO.Path.GetRelativePath(Root, path);
+        UpdatePins(pins => pinned ? pins.Add(relative) : pins.Remove(relative));
+    }
+
+    private void RelocatePins(string source, string? target)
+    {
+        var relative = System.IO.Path.GetRelativePath(Root, source);
+        UpdatePins(pins =>
+        {
+            var affected = pins.Where(p => string.Equals(p, relative, PathComparison) ||
+                p.StartsWith(relative + System.IO.Path.DirectorySeparatorChar, PathComparison)).ToList();
+            foreach (var pin in affected)
+            {
+                pins.Remove(pin);
+                if (target != null) pins.Add(System.IO.Path.GetRelativePath(Root, target) + pin[relative.Length..]);
+            }
+            return affected.Count > 0;
+        });
     }
 
     public static string ValidateName(string name)
@@ -175,18 +237,75 @@ public sealed class NoteWorkspace
         if (string.Equals(path, target, PathComparison)) return path;
         if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists.");
         if (isFolder) Directory.Move(path, target); else File.Move(path, target);
+        RelocatePins(path, target);
+        return target;
+    }
+
+    public string Move(string path, string destinationFolder)
+    {
+        path = CheckPath(path, false);
+        destinationFolder = CheckPath(destinationFolder);
+        if (!Directory.Exists(destinationFolder)) throw new IOException("The destination folder no longer exists.");
+        var isFolder = Directory.Exists(path);
+        if (isFolder && (string.Equals(path, destinationFolder, PathComparison) ||
+            destinationFolder.StartsWith(path + System.IO.Path.DirectorySeparatorChar, PathComparison)))
+            throw new IOException("A folder cannot be moved into itself or one of its subfolders.");
+        var target = CheckPath(System.IO.Path.Combine(destinationFolder, System.IO.Path.GetFileName(path)), false);
+        if (string.Equals(path, target, PathComparison)) return path;
+        if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists in the destination folder.");
+        if (isFolder) Directory.Move(path, target); else File.Move(path, target);
+        RelocatePins(path, target);
         return target;
     }
 
     public string MoveToTrash(string path)
     {
         path = CheckPath(path, false);
-        var trash = System.IO.Path.Combine(MetadataPath, "trash", $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(trash);
-        File.WriteAllText(System.IO.Path.Combine(trash, "restore.json"), JsonSerializer.Serialize(new { OriginalPath = System.IO.Path.GetRelativePath(Root, path) }));
-        var target = System.IO.Path.Combine(trash, System.IO.Path.GetFileName(path));
+        if (IsInTrash(path)) throw new IOException("This item is already in Trash.");
+        Directory.CreateDirectory(TrashPath);
+        CheckPath(TrashPath);
+        var target = AvailableTrashPath(path);
+        var record = System.IO.Path.Combine(MetadataPath, "trash", $"{Guid.NewGuid():N}.json");
+        File.WriteAllText(record, JsonSerializer.Serialize(new { OriginalPath = System.IO.Path.GetRelativePath(Root, path), TrashedPath = System.IO.Path.GetRelativePath(TrashPath, target) }));
         if (Directory.Exists(path)) Directory.Move(path, target); else File.Move(path, target);
+        RelocatePins(path, target);
         return target;
+    }
+
+    private string AvailableTrashPath(string path)
+    {
+        var isFolder = Directory.Exists(path);
+        var name = isFolder ? System.IO.Path.GetFileName(path) : System.IO.Path.GetFileNameWithoutExtension(path);
+        var extension = isFolder ? "" : System.IO.Path.GetExtension(path);
+        var target = System.IO.Path.Combine(TrashPath, name + extension);
+        for (var suffix = 2; File.Exists(target) || Directory.Exists(target); suffix++)
+            target = System.IO.Path.Combine(TrashPath, $"{name} ({suffix}){extension}");
+        return target;
+    }
+
+    private void MigrateLegacyTrash()
+    {
+        var container = System.IO.Path.GetDirectoryName(TrashPath)!;
+        foreach (var batch in Directory.EnumerateDirectories(container))
+        {
+            if (IsTrash(batch) || (File.GetAttributes(batch) & FileAttributes.ReparsePoint) != 0 ||
+                !File.Exists(System.IO.Path.Combine(batch, "restore.json"))) continue;
+            foreach (var item in Directory.EnumerateFileSystemEntries(batch))
+            {
+                if ((File.GetAttributes(item) & FileAttributes.ReparsePoint) != 0 ||
+                    (!Directory.Exists(item) && !System.IO.Path.GetExtension(item).Equals(".rtf", StringComparison.OrdinalIgnoreCase))) continue;
+                var target = AvailableTrashPath(item);
+                if (Directory.Exists(item)) Directory.Move(item, target); else File.Move(item, target);
+            }
+        }
+    }
+
+    public void RecycleFromTrash(string path, Action<string> recycle)
+    {
+        path = CheckPath(path, false);
+        if (!IsInTrash(path)) throw new IOException("Only items in Trash can be sent to the Recycle Bin.");
+        recycle(path);
+        RelocatePins(path, null);
     }
 
     public static byte[] EncodeRtf(string text)

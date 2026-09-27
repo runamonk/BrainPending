@@ -9,6 +9,45 @@ public sealed class WorkspaceTests : IDisposable
     private NoteWorkspace Workspace => new(Path.Combine(_temp, "Notes"));
 
     [Fact]
+    public void PinnedNotesSortFirstPersistAndUnpinWithoutChangingRtf()
+    {
+        var w = Workspace;
+        var folder = w.CreateFolder(w.Root, "A folder");
+        w.CreateNote(w.Root, "Alpha");
+        var note = w.CreateNote(w.Root, "Zulu");
+        w.SetPinned(note.Path, true);
+        var reopened = new NoteWorkspace(w.Root);
+        Assert.Equal(note.Path, reopened.List(w.Root)[0].Path);
+        Assert.True(reopened.List(w.Root)[0].IsPinned);
+        Assert.Equal(note.Revision, reopened.Read(note.Path).Revision);
+        reopened.SetPinned(note.Path, false);
+        Assert.Equal(folder, w.List(w.Root)[0].Path);
+        Assert.DoesNotContain(w.List(w.Root), e => e.IsPinned);
+        Assert.Throws<IOException>(() => w.SetPinned(folder, true));
+    }
+
+    [Fact]
+    public void PinsFollowNoteAndFolderMovesAndDoNotTransferToReplacementNotes()
+    {
+        var w = Workspace;
+        var folder = w.CreateFolder(w.Root, "Projects");
+        var note = w.CreateNote(folder, "Ideas");
+        w.SetPinned(note.Path, true);
+        var renamed = w.Rename(note.Path, "Renamed");
+        Assert.True(Assert.Single(w.List(folder)).IsPinned);
+        var renamedFolder = w.Rename(folder, "Work");
+        Assert.True(Assert.Single(w.List(renamedFolder)).IsPinned);
+        var moved = w.Move(Path.Combine(renamedFolder, Path.GetFileName(renamed)), w.Root);
+        Assert.True(w.List(w.Root)[0].IsPinned);
+        var trashed = w.MoveToTrash(moved);
+        Assert.True(Assert.Single(w.List(w.TrashPath)).IsPinned);
+        w.Move(trashed, renamedFolder);
+        Assert.True(Assert.Single(w.List(renamedFolder)).IsPinned);
+        var replacement = w.CreateNote(w.Root, "Renamed");
+        Assert.False(w.List(w.Root).Single(e => e.Path == replacement.Path).IsPinned);
+    }
+
+    [Fact]
     public void NestedFoldersAndNotesAreOrdinaryFiles()
     {
         var w = Workspace;
@@ -75,6 +114,39 @@ public sealed class WorkspaceTests : IDisposable
     }
 
     [Fact]
+    public void MovePreservesNoteBytesAndNestedFolderContents()
+    {
+        var w = Workspace;
+        var folder = w.CreateFolder(w.Root, "Projects");
+        var child = w.CreateFolder(folder, "Website");
+        var note = w.CreateNote(child, "Ideas", NoteWorkspace.PlainTextRtf("Keep formatting"));
+        var target = w.Move(child, w.Root);
+        Assert.False(Directory.Exists(child));
+        var movedNote = Path.Combine(target, "Ideas.rtf");
+        Assert.Equal(note.Revision, w.Read(movedNote).Revision);
+        var finalNote = w.Move(movedNote, folder);
+        Assert.False(File.Exists(movedNote));
+        Assert.Equal(note.Revision, w.Read(finalNote).Revision);
+    }
+
+    [Fact]
+    public void MoveRejectsCollisionsDescendantsAndOutsideNotebook()
+    {
+        var w = Workspace;
+        var folder = w.CreateFolder(w.Root, "Projects");
+        var child = w.CreateFolder(folder, "Website");
+        var note = w.CreateNote(folder, "Ideas", NoteWorkspace.PlainTextRtf("Source"));
+        var existing = w.CreateNote(w.Root, "Ideas", NoteWorkspace.PlainTextRtf("Destination"));
+        Assert.Throws<IOException>(() => w.Move(note.Path, w.Root));
+        Assert.Throws<IOException>(() => w.Move(folder, child));
+        Assert.Throws<IOException>(() => w.Move(folder, folder));
+        Assert.Throws<IOException>(() => w.Move(note.Path, _temp));
+        Assert.Throws<IOException>(() => w.Move(w.Root, child));
+        Assert.Equal(note.Revision, w.Read(note.Path).Revision);
+        Assert.Equal(existing.Revision, w.Read(existing.Path).Revision);
+    }
+
+    [Fact]
     public void TrashRetainsNestedFilesAndOriginalLocation()
     {
         var w = Workspace;
@@ -83,7 +155,62 @@ public sealed class WorkspaceTests : IDisposable
         var trash = w.MoveToTrash(folder);
         Assert.False(Directory.Exists(folder));
         Assert.True(File.Exists(Path.Combine(trash, "Keep me.rtf")));
-        Assert.Contains("Folder", File.ReadAllText(Path.Combine(Path.GetDirectoryName(trash)!, "restore.json")));
+        Assert.Contains(Directory.GetFiles(Path.Combine(w.MetadataPath, "trash"), "*.json"), p => File.ReadAllText(p).Contains("Folder"));
+        Assert.Equal(trash, Assert.Single(w.List(w.TrashPath)).Path);
+        Assert.Equal(w.Root, w.ParentFolder(w.TrashPath));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TrashContentsCanBeEditedRenamedAndMovedBack(bool folder)
+    {
+        var w = Workspace;
+        var source = folder ? w.CreateFolder(w.Root, "Work") : w.CreateNote(w.Root, "Work").Path;
+        if (folder) w.CreateNote(source, "Inside");
+        var trashed = w.MoveToTrash(source);
+        var renamed = w.Rename(trashed, "Recovered");
+        var notePath = folder ? Path.Combine(renamed, "Inside.rtf") : renamed;
+        w.Save(w.Read(notePath), NoteWorkspace.PlainTextRtf("Edited in Trash"));
+        var restored = w.Move(renamed, w.Root);
+        Assert.Contains("Edited in Trash", w.Read(folder ? Path.Combine(restored, "Inside.rtf") : restored).Rtf);
+        Assert.Empty(w.List(w.TrashPath));
+    }
+
+    [Fact]
+    public void TrashIsProtectedAndOnlyItsContentsCanBeRecycled()
+    {
+        var w = Workspace;
+        var note = w.CreateNote(w.Root, "Note");
+        var calls = new List<string>();
+        Assert.Throws<IOException>(() => w.Move(w.TrashPath, w.Root));
+        Assert.Throws<IOException>(() => w.Rename(w.TrashPath, "Gone"));
+        Assert.Throws<IOException>(() => w.MoveToTrash(w.TrashPath));
+        Assert.Throws<IOException>(() => w.RecycleFromTrash(w.TrashPath, calls.Add));
+        Assert.Throws<IOException>(() => w.RecycleFromTrash(note.Path, calls.Add));
+        Assert.Empty(calls);
+        var trashed = w.MoveToTrash(note.Path);
+        w.RecycleFromTrash(trashed, calls.Add);
+        Assert.Equal(trashed, Assert.Single(calls));
+        Assert.True(Directory.Exists(w.TrashPath));
+    }
+
+    [Fact]
+    public void TrashKeepsDuplicateNamesAndImportsLegacyDeletions()
+    {
+        var w = Workspace;
+        var first = w.MoveToTrash(w.CreateNote(w.Root, "Note", NoteWorkspace.PlainTextRtf("First")).Path);
+        var second = w.MoveToTrash(w.CreateNote(w.Root, "Note", NoteWorkspace.PlainTextRtf("Second")).Path);
+        Assert.NotEqual(first, second);
+        Assert.Contains("First", w.Read(first).Rtf);
+        Assert.Contains("Second", w.Read(second).Rtf);
+        var legacy = Path.Combine(w.MetadataPath, "trash", "old-batch");
+        Directory.CreateDirectory(legacy);
+        File.WriteAllText(Path.Combine(legacy, "restore.json"), "{}");
+        File.WriteAllText(Path.Combine(legacy, "Legacy.rtf"), NoteWorkspace.EmptyRtf);
+        var reopened = new NoteWorkspace(w.Root);
+        Assert.Contains(reopened.List(reopened.TrashPath), i => i.Name == "Legacy");
+        Assert.Equal(3, new NoteWorkspace(w.Root).List(w.TrashPath).Count);
     }
 
     [Theory]

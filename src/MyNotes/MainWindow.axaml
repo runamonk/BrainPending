@@ -16,8 +16,7 @@
         </StackPanel>
         <TextBlock Grid.Column="1" Text="A little space for your thoughts." Opacity="0.55" Margin="24,0" VerticalAlignment="Center" />
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-          <Button Classes="action quiet" Content="Import ZuulSnips" Click="ImportSnips_Click" />
-          <Button Classes="action quiet" Content="Open notebook" Click="OpenNotebook_Click" />
+          <SplitButton x:Name="OpenNotebookButton" Content="Open notebook" Click="OpenNotebook_Click" Background="Transparent" CornerRadius="7" FontSize="13" AutomationProperties.Name="Open notebook" />
           <Button Classes="action quiet" Content="◐" ToolTip.Tip="Switch light / dark theme" AutomationProperties.Name="Switch theme" Click="Theme_Click" />
         </StackPanel>
       </Grid>
@@ -40,12 +39,17 @@
           </StackPanel>
           <Grid Grid.Row="3" ClipToBounds="True">
             <ListBox x:Name="Browser" Background="Transparent" SelectionChanged="Browser_SelectionChanged" AutomationProperties.Name="Folders and notes">
+              <ListBox.Styles>
+                <Style Selector="ListBoxItem">
+                  <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+              </ListBox.Styles>
               <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="local:BrowserItem">
-                  <Grid ColumnDefinitions="28,*,Auto">
+                  <Grid ColumnDefinitions="28,*,Auto" MinHeight="28" Background="Transparent">
                     <Path Data="{Binding IconData}" Width="20" Height="20" Stroke="#789481" StrokeThickness="1.5" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="1" Text="{Binding Name}" ToolTip.Tip="{Binding Path}" FontSize="14" FontWeight="Medium" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                    <Button Grid.Column="2" Classes="quiet" Content="⋯" Padding="5" ToolTip.Tip="Rename or move to trash" IsVisible="{Binding CanManage}" Click="ItemActions_Click" />
+                    <Path Grid.Column="2" IsVisible="{Binding IsPinned}" Width="16" Height="18" Margin="8,0,0,0" VerticalAlignment="Center" Stroke="#789481" StrokeThickness="1.4" ToolTip.Tip="Pinned note" Data="M 5,2 L 11,2 M 6,2 L 6,7 L 3,11 L 13,11 L 10,7 L 10,2 M 8,11 L 8,17" />
                   </Grid>
                 </DataTemplate>
               </ListBox.ItemTemplate>

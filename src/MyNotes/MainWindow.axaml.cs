@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using AvaloniaRichEditor;
 using AvaloniaRichEditor.Controls;
 using AvaloniaRichEditor.Formatters;
@@ -29,6 +30,8 @@ public partial class MainWindow : Window
     private NotebookSettings _settings;
     private readonly string? _settingsPath;
     private PixelPoint? _normalPosition;
+    private Size _normalSize;
+    private readonly MenuFlyout _recentNotebooksMenu = new();
     private readonly string? _startupPath;
     private bool _closed;
 
@@ -40,7 +43,10 @@ public partial class MainWindow : Window
         _settingsPath = settingsPath;
         _settings = NotebookSettings.Read(settingsPath);
         InitializeComponent();
-        RestoreWindowPosition();
+        OpenNotebookButton.Flyout = _recentNotebooksMenu;
+        _recentNotebooksMenu.Opening += (_, _) => RefreshRecentNotebooks();
+        RefreshRecentNotebooks();
+        RestoreWindowBounds();
         RichEditorLocalization.Language = "en";
         EditorView.Toolbar.ToolbarLevel = ToolbarLevel.Normal;
         EditorView.Editor.DefaultFontFamily = new FontFamily("Segoe UI");
@@ -61,54 +67,82 @@ public partial class MainWindow : Window
         _poll.Tick += (_, _) => CheckExternalChanges();
         Opened += (_, _) =>
         {
-            _normalPosition = Position;
+            if (WindowState == WindowState.Normal)
+            {
+                _normalPosition = Position;
+                _normalSize = ClientSize;
+            }
             InitializeNotebook();
         };
         PositionChanged += (_, _) =>
         {
             if (IsVisible && WindowState == WindowState.Normal) _normalPosition = Position;
         };
+        SizeChanged += (_, e) =>
+        {
+            if (IsVisible && WindowState == WindowState.Normal) _normalSize = e.NewSize;
+        };
         Closing += (_, e) =>
         {
             if (!SaveCurrent()) { e.Cancel = true; return; }
-            SaveWindowPosition();
+            SaveWindowBounds();
         };
         Closed += (_, _) => { _closed = true; _autosave.Stop(); _poll.Stop(); _watcher?.Dispose(); };
         AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
+        Browser.AddHandler(PointerPressedEvent, Browser_PointerPressed, RoutingStrategies.Tunnel);
+        Browser.AddHandler(KeyDownEvent, Browser_KeyDown, RoutingStrategies.Tunnel);
         ApplyTheme();
     }
 
-    private void RestoreWindowPosition()
+    private void RestoreWindowBounds()
     {
-        if (_settings.WindowX is not int x || _settings.WindowY is not int y) return;
-        var position = new PixelPoint(x, y);
+        if (_settings.WindowWidth is double savedWidth && double.IsFinite(savedWidth) && savedWidth > 0)
+            Width = Math.Max(MinWidth, savedWidth);
+        if (_settings.WindowHeight is double savedHeight && double.IsFinite(savedHeight) && savedHeight > 0)
+            Height = Math.Max(MinHeight, savedHeight);
+        var hasPosition = _settings.WindowX.HasValue && _settings.WindowY.HasValue;
+        var position = hasPosition ? new PixelPoint(_settings.WindowX!.Value, _settings.WindowY!.Value) : Position;
         var screen = Screens.ScreenFromPoint(position) ?? Screens.Primary;
         if (screen != null)
         {
             var area = screen.WorkingArea;
+            Width = Math.Clamp(Width, MinWidth, Math.Max(MinWidth, area.Width / screen.Scaling));
+            Height = Math.Clamp(Height, MinHeight, Math.Max(MinHeight, area.Height / screen.Scaling));
             var width = (int)Math.Ceiling(Width * screen.Scaling);
             var height = (int)Math.Ceiling(Height * screen.Scaling);
             position = new PixelPoint(
-                Math.Clamp(x, area.X, Math.Max(area.X, area.Right - width)),
-                Math.Clamp(y, area.Y, Math.Max(area.Y, area.Bottom - height)));
+                Math.Clamp(position.X, area.X, Math.Max(area.X, area.Right - width)),
+                Math.Clamp(position.Y, area.Y, Math.Max(area.Y, area.Bottom - height)));
         }
-        WindowStartupLocation = WindowStartupLocation.Manual;
-        Position = position;
+        if (hasPosition)
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Position = position;
+        }
+        _normalPosition = position;
+        _normalSize = new Size(Width, Height);
+        if (_settings.WindowMaximized) WindowState = WindowState.Maximized;
     }
 
-    private void SaveWindowPosition()
+    private void SaveWindowBounds()
     {
         var position = WindowState == WindowState.Normal ? Position : _normalPosition;
         if (position is not PixelPoint point) return;
         try
         {
             // Preserve preferences saved by another open instance.
-            _settings = NotebookSettings.Read(_settingsPath) with { WindowX = point.X, WindowY = point.Y };
+            var size = WindowState == WindowState.Normal ? ClientSize : _normalSize;
+            _settings = NotebookSettings.Read(_settingsPath) with
+            {
+                WindowX = point.X, WindowY = point.Y,
+                WindowWidth = size.Width, WindowHeight = size.Height,
+                WindowMaximized = WindowState == WindowState.Maximized
+            };
             _settings.Save(_settingsPath);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            System.Diagnostics.Trace.TraceWarning("Could not remember window position: " + e.Message);
+            System.Diagnostics.Trace.TraceWarning("Could not remember window size and position: " + e.Message);
         }
     }
 
@@ -117,10 +151,41 @@ public partial class MainWindow : Window
         var args = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Args ?? [];
         var flag = Array.IndexOf(args, "--notes");
         var adjacent = Path.Combine(AppContext.BaseDirectory, "Notes");
-        var path = _startupPath ?? (flag >= 0 && flag + 1 < args.Length ? args[flag + 1] :
-            Directory.Exists(adjacent) ? adjacent : _settings.NotebookPath ?? adjacent);
-        try { SetWorkspace(path); }
-        catch (Exception e) { ShowNotice("Could not open the notebook: " + e.Message + " Use Open notebook to choose a writable folder."); }
+        var explicitPath = _startupPath ?? (flag >= 0 && flag + 1 < args.Length ? args[flag + 1] : null);
+        if (explicitPath == null && _settings.SkipAutomaticNotebook)
+        {
+            SaveStatus.Text = "Choose a notebook";
+            ShowNotice("Automatic reopening was paused after a notebook failed to open. Use Open notebook or choose a recent notebook to continue.");
+            return;
+        }
+        var remembered = explicitPath == null && _settings.NotebookPath != null;
+        var path = explicitPath ?? _settings.NotebookPath ?? adjacent;
+        try
+        {
+            // Persist before loading: a crash during startup must not cause a retry loop.
+            _settings = NotebookSettings.Read(_settingsPath) with { SkipAutomaticNotebook = true };
+            _settings.Save(_settingsPath);
+            if (remembered && !Directory.Exists(path))
+                throw new IOException("The last notebook is no longer available: " + path);
+            SetWorkspace(path);
+        }
+        catch (Exception e)
+        {
+            _watcher?.Dispose();
+            _watcher = null;
+            _poll.Stop();
+            _workspace = null;
+            _folder = "";
+            Browser.ItemsSource = null;
+            NotebookPath.Text = "";
+            ClearNote();
+            SaveStatus.Text = "Choose a notebook";
+            _settings = NotebookSettings.Read(_settingsPath) with { NotebookPath = null, SkipAutomaticNotebook = true };
+            try { _settings.Save(_settingsPath); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { System.Diagnostics.Trace.TraceWarning("Could not remember startup failure: " + error.Message); }
+            ShowNotice("Could not open the notebook: " + e.Message + " Automatic reopening is paused. Use Open notebook to choose a notebook.");
+        }
     }
 
     private void SetWorkspace(string path)
@@ -129,7 +194,7 @@ public partial class MainWindow : Window
         _watcher?.Dispose();
         _workspace = workspace;
         _folder = workspace.Root;
-        ClearNote();
+        ClearNote(forget: false);
         SearchBox.Text = "";
         NotebookPath.Text = workspace.Root;
         ToolTip.SetTip(NotebookPath, workspace.Root);
@@ -146,7 +211,88 @@ public partial class MainWindow : Window
         _watcher.Renamed += WatcherChanged;
         _watcher.EnableRaisingEvents = true;
         _poll.Start();
+        Notice.IsVisible = false;
         SaveStatus.Text = "Watching for changes";
+        try
+        {
+            _settings = NotebookSettings.Read(_settingsPath).RememberNotebook(workspace.Root);
+            _settings.Save(_settingsPath);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            ShowNotice("Could not remember this notebook: " + e.Message);
+        }
+        RestoreLastNote();
+        RefreshRecentNotebooks();
+    }
+
+    private void RememberOpenNote(string? path)
+    {
+        if (_workspace == null) return;
+        try
+        {
+            _settings = NotebookSettings.Read(_settingsPath).RememberNote(_workspace.Root,
+                path == null ? null : Path.GetRelativePath(_workspace.Root, path));
+            _settings.Save(_settingsPath);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        { System.Diagnostics.Trace.TraceWarning("Could not remember the open note: " + e.Message); }
+    }
+
+    private void RestoreLastNote()
+    {
+        if (_workspace == null || _settings.LastNote(_workspace.Root) is not string relative) return;
+        // Clear first so an interrupted load is not retried on the next launch.
+        RememberOpenNote(null);
+        try
+        {
+            var path = _workspace.CheckPath(Path.Combine(_workspace.Root, relative), false);
+            var note = _workspace.Read(path);
+            LoadNote(note);
+            _folder = Path.GetDirectoryName(path)!;
+            RefreshBrowser(true);
+        }
+        catch (Exception e)
+        {
+            ClearNote();
+            _folder = _workspace.Root;
+            RefreshBrowser(true);
+            ShowNotice("The last open note could not be reopened. Choose another note to continue. " + e.Message);
+        }
+    }
+
+    private void RefreshRecentNotebooks()
+    {
+        var settings = NotebookSettings.Read(_settingsPath);
+        var paths = settings.RecentNotebooks ?? (settings.NotebookPath is string last ? new[] { last } : []);
+        var items = new List<MenuItem>();
+        foreach (var path in paths)
+        {
+            var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(path));
+            var entry = new MenuItem
+            {
+                Tag = path,
+                Header = new StackPanel
+                {
+                    Spacing = 2,
+                    Children =
+                    {
+                        new TextBlock { Text = string.IsNullOrEmpty(name) ? path : name },
+                        new TextBlock { Text = path, FontSize = 11, Opacity = 0.6, MaxWidth = 440, TextTrimming = TextTrimming.CharacterEllipsis }
+                    }
+                }
+            };
+            ToolTip.SetTip(entry, path);
+            entry.Click += async (_, _) => await Run(() =>
+            {
+                if (!Directory.Exists(path)) throw new IOException("This notebook is no longer available: " + path);
+                if (SaveCurrent()) SetWorkspace(path);
+                return Task.CompletedTask;
+            });
+            items.Add(entry);
+        }
+        if (items.Count == 0) items.Add(new MenuItem { Header = "No recent notebooks", IsEnabled = false });
+        _recentNotebooksMenu.ItemsSource = items;
     }
 
     private int _checkQueued;
@@ -161,19 +307,21 @@ public partial class MainWindow : Window
     {
         if (_workspace == null) return;
         while (!Directory.Exists(_folder) && _folder != _workspace.Root)
-            _folder = Path.GetDirectoryName(_folder) ?? _workspace.Root;
+            _folder = _workspace.ParentFolder(_folder);
         var entries = _workspace.List(_folder, SearchBox.Text ?? "");
-        var signature = _folder + "|" + SearchBox.Text + "|" + string.Join('|', entries.Select(e => e.Path + e.ModifiedUtc.Ticks));
+        var signature = _folder + "|" + SearchBox.Text + "|" + string.Join('|', entries.Select(e => e.Path + e.ModifiedUtc.Ticks + e.IsPinned.ToString()));
         if (!force && signature == _listingSignature) return;
         _listingSignature = signature;
         var rows = new List<BrowserItem>();
         if (_folder != _workspace.Root)
         {
-            var parent = Path.GetDirectoryName(_folder)!;
-            rows.Add(new(parent, "Up to " + (parent == _workspace.Root ? "notebook" : Path.GetFileName(parent)), true, true, "Parent folder"));
+            var parent = _workspace.ParentFolder(_folder);
+            rows.Add(new(parent, "Up to " + (parent == _workspace.Root ? "notebook" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, "Parent folder"));
         }
         rows.AddRange(entries.Select(e => new BrowserItem(e.Path, e.Name, e.IsFolder, false,
-            !string.IsNullOrWhiteSpace(SearchBox.Text) ? Path.GetRelativePath(_folder, e.Path) : e.IsFolder ? "Folder" : "Edited " + e.ModifiedUtc.ToLocalTime().ToString("d MMM, HH:mm"))));
+            !string.IsNullOrWhiteSpace(SearchBox.Text) ? Path.GetRelativePath(_folder, e.Path) : e.IsFolder ? "Folder" : "Edited " + e.ModifiedUtc.ToLocalTime().ToString("d MMM, HH:mm"), IsPinned: e.IsPinned)));
+        if (_folder == _workspace.Root && (string.IsNullOrWhiteSpace(SearchBox.Text) || "Trash".Contains(SearchBox.Text.Trim(), StringComparison.OrdinalIgnoreCase)))
+            rows.Add(new(_workspace.TrashPath, "Trash", true, false, "", true));
         _refreshing = true;
         try
         {
@@ -182,9 +330,9 @@ public partial class MainWindow : Window
         }
         finally { _refreshing = false; }
         FolderHeading.IsVisible = _folder != _workspace.Root;
-        FolderHeading.Text = Path.GetFileName(_folder);
-        FolderEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? "A fresh start.\nCreate your first note here." : "No matching titles.";
-        FolderEmpty.IsVisible = entries.Count == 0;
+        FolderHeading.Text = _workspace.IsTrash(_folder) ? "Trash" : Path.GetFileName(_folder);
+        FolderEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? (_workspace.IsTrash(_folder) ? "Trash is empty." : "A fresh start.\nCreate your first note here.") : "No matching titles.";
+        FolderEmpty.IsVisible = rows.All(r => r.IsUp);
         ItemCount.Text = $"{entries.Count(e => !e.IsFolder)} notes · {entries.Count(e => e.IsFolder)} folders";
     }
 
@@ -227,6 +375,7 @@ public partial class MainWindow : Window
         try
         {
             var result = _workspace.Save(_note, EditorView.Editor.ToRtf());
+            if (result.Note.Path != _note.Path) RememberOpenNote(result.Note.Path);
             _note = result.Note;
             _dirty = false;
             EditorView.Editor.MarkSaved();
@@ -257,7 +406,7 @@ public partial class MainWindow : Window
             _dirty = false;
             _autosave.Stop();
             NoteTitle.Text = Path.GetFileNameWithoutExtension(note.Path);
-            Breadcrumb.Text = "Notebook  /  " + Path.GetRelativePath(_workspace!.Root, note.Path).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
+            Breadcrumb.Text = (_workspace!.IsInTrash(note.Path) ? "Trash  /  " + Path.GetRelativePath(_workspace.TrashPath, note.Path) : "Notebook  /  " + Path.GetRelativePath(_workspace.Root, note.Path)).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
             EditorView.IsVisible = true;
             Welcome.IsVisible = false;
             RenameNoteButton.IsVisible = true;
@@ -265,10 +414,12 @@ public partial class MainWindow : Window
             Title = NoteTitle.Text + " — MyNotes";
         }
         finally { _loading = false; }
+        RememberOpenNote(note.Path);
     }
 
-    private void ClearNote()
+    private void ClearNote(bool forget = true)
     {
+        if (forget && _note != null) RememberOpenNote(null);
         _note = null;
         _dirty = false;
         _autosave.Stop();
@@ -345,22 +496,98 @@ public partial class MainWindow : Window
         RefreshBrowser(true);
     });
 
-    private void ItemActions_Click(object? sender, RoutedEventArgs e)
+    private void Browser_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        if (!e.GetCurrentPoint(Browser).Properties.IsRightButtonPressed) return;
+        // Handle before ListBox selects the row: selecting a folder navigates into it.
         e.Handled = true;
-        if (sender is not Button button || button.DataContext is not BrowserItem item) return;
+        var row = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<ListBoxItem>().FirstOrDefault();
+        if (row?.DataContext is BrowserItem { CanManage: true } item)
+            CreateItemMenu(item).Open(row);
+    }
+
+    private void Browser_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Apps && !(e.Key == Key.F10 && e.KeyModifiers == KeyModifiers.Shift)) return;
+        e.Handled = true;
+        if (Browser.SelectedItem is BrowserItem { CanManage: true } item)
+            CreateItemMenu(item).Open(Browser.ContainerFromItem(item) as Control ?? Browser);
+    }
+
+    internal ContextMenu CreateItemMenu(BrowserItem item)
+    {
         var rename = new MenuItem { Header = "Rename…" };
         rename.Click += async (_, _) => await Rename(item.Path, item.Name);
-        var trash = new MenuItem { Header = "Move to trash…" };
+        if (!item.CanManage) return new ContextMenu();
+        var parent = Path.GetDirectoryName(item.Path);
+        var destination = parent == _workspace?.Root ? null : Path.GetDirectoryName(parent!);
+        if (_workspace?.IsTrash(parent!) == true) destination = _workspace.Root;
+        var moveUp = new MenuItem { Header = "Move to parent", IsEnabled = destination != null };
+        moveUp.Click += async (_, _) => await Run(() =>
+        {
+            if (destination != null) MoveItem(item, destination);
+            return Task.CompletedTask;
+        });
+        var moveTo = new MenuItem { Header = "Move to folder…" };
+        moveTo.Click += async (_, _) => await Run(async () =>
+        {
+            if (_workspace == null) return;
+            var dialog = new MoveFolderDialog(_workspace, item, target => MoveItem(item, target));
+            _inDialog = true;
+            try { await dialog.ShowDialog(this); }
+            finally { _inDialog = false; }
+        });
+        var inTrash = _workspace?.IsInTrash(item.Path) == true;
+        var trash = new MenuItem { Header = inTrash ? "Move to Recycle Bin…" : "Delete…" };
         trash.Click += async (_, _) => await Run(async () =>
         {
             if (_workspace == null || !SaveCurrent()) return;
-            if (!await Confirm("Move to trash?", $"“{item.Name}” will be moved to the notebook’s trash. You can recover it from .mynotes/trash.", "Move to trash")) return;
-            _workspace.MoveToTrash(item.Path);
+            var description = inTrash ? $"“{item.Name}” will leave this notebook’s Trash and move to the Windows Recycle Bin." : $"“{item.Name}” will be moved to Trash. You can open Trash and move it back later.";
+            if (!await Confirm(inTrash ? "Move to Recycle Bin?" : "Move to Trash?", description, inTrash ? "Move to Recycle Bin" : "Move to Trash")) return;
+            if (inTrash) _workspace.RecycleFromTrash(item.Path, RecycleItem);
+            else _workspace.MoveToTrash(item.Path);
             if (_note?.Path == item.Path || _note?.Path.StartsWith(item.Path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) == true) ClearNote();
             RefreshBrowser(true);
         });
-        new ContextMenu { ItemsSource = new[] { rename, trash } }.Open(button);
+        var actions = new List<Control>();
+        if (!item.IsFolder)
+        {
+            var pin = new MenuItem { Header = item.IsPinned ? "Unpin note" : "Pin note" };
+            pin.Click += async (_, _) => await Run(() =>
+            {
+                _workspace?.SetPinned(item.Path, !item.IsPinned);
+                RefreshBrowser(true);
+                return Task.CompletedTask;
+            });
+            actions.Add(pin);
+            actions.Add(new Separator());
+        }
+        actions.AddRange(new Control[] { rename, moveUp, moveTo, new Separator(), trash });
+        return new ContextMenu { ItemsSource = actions };
+    }
+
+    private static void RecycleItem(string path)
+    {
+        if (!OperatingSystem.IsWindows()) throw new IOException("Sending items to the system Recycle Bin is only supported on Windows.");
+        if (Directory.Exists(path))
+            Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(path, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin, Microsoft.VisualBasic.FileIO.UICancelOption.ThrowException);
+        else
+            Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(path, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs,
+                Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin, Microsoft.VisualBasic.FileIO.UICancelOption.ThrowException);
+    }
+
+    private bool MoveItem(BrowserItem item, string destination)
+    {
+        if (_workspace == null || !SaveCurrent()) return false;
+        var notePath = _note?.Path;
+        var target = _workspace.Move(item.Path, destination);
+        if (notePath == item.Path) LoadNote(_workspace.Read(target));
+        else if (notePath?.StartsWith(item.Path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) == true)
+            LoadNote(_workspace.Read(Path.Combine(target, Path.GetRelativePath(item.Path, notePath))));
+        RefreshBrowser(true);
+        SaveStatus.Text = "Moved to " + (destination == _workspace.Root ? "notebook" : Path.GetFileName(destination));
+        return true;
     }
 
     private async void OpenNotebook_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
@@ -370,19 +597,6 @@ public partial class MainWindow : Window
         var path = folders.FirstOrDefault()?.TryGetLocalPath();
         if (path == null) return;
         SetWorkspace(path);
-        _settings = _settings with { NotebookPath = path };
-        _settings.Save(_settingsPath);
-    });
-
-    private async void ImportSnips_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
-    {
-        if (_workspace == null || !SaveCurrent()) return;
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose the ZuulSnips data folder containing .snips.json", AllowMultiple = false });
-        var path = folders.FirstOrDefault()?.TryGetLocalPath();
-        if (path == null) return;
-        var imported = SnipsImporter.Import(_workspace, path);
-        await Navigate(imported.Folder);
-        ShowNotice($"Imported {imported.Count} notes into a new folder. Your ZuulSnips files were not changed.");
     });
 
     private void Theme_Click(object? sender, RoutedEventArgs e)
@@ -405,7 +619,7 @@ public partial class MainWindow : Window
         else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.N) { e.Handled = true; await NewNote(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; SearchBox.Focus(); }
         else if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Up && _workspace != null && _folder != _workspace.Root)
-        { e.Handled = true; await Run(() => Navigate(Path.GetDirectoryName(_folder)!, true)); }
+        { e.Handled = true; await Run(() => Navigate(_workspace.ParentFolder(_folder), true)); }
     }
 
     private async Task Run(Func<Task> action)

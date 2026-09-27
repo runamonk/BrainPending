@@ -1,6 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Headless;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.Styling;
@@ -31,17 +34,203 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void WindowPositionIsSavedAndRestoredOnReopen()
+    public void LastOpenNoteRestoresItsFolderAndSelection()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var folder = workspace.CreateFolder(_root, "Projects");
+        var note = workspace.CreateNote(folder, "Resume here");
+        var first = OpenWindow();
+        first.FindControl<TextBox>("SearchBox")!.Text = "Resume here";
+        Dispatcher.UIThread.RunJobs();
+        Select(first, note.Path);
+        first.Close();
+        var reopened = OpenWindow();
+        Assert.Equal("Resume here", reopened.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Equal("Projects", reopened.FindControl<TextBlock>("FolderHeading")!.Text);
+        Assert.Equal(note.Path, ((BrowserItem)reopened.FindControl<ListBox>("Browser")!.SelectedItem!).Path);
+        Assert.True(reopened.FindControl<RichEditorView>("EditorView")!.IsVisible);
+        Assert.Equal(note.Revision, workspace.Read(note.Path).Revision);
+        reopened.Close();
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MissingOrInvalidLastNoteDoesNotPreventNotebookOpening(bool corrupt)
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Unavailable");
+        var first = OpenWindow();
+        Select(first, note.Path);
+        first.Close();
+        if (corrupt) File.WriteAllText(note.Path, "Not RTF");
+        else File.Delete(note.Path);
+        var reopened = OpenWindow();
+        Assert.Equal(_root, reopened.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.False(reopened.FindControl<RichEditorView>("EditorView")!.IsVisible);
+        var settings = NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json"));
+        Assert.Null(settings.LastNote(_root));
+        Assert.False(settings.SkipAutomaticNotebook);
+        reopened.Close();
+    }
+
+    [Fact]
+    public void LastOpenNotesAreRememberedSeparatelyForEachNotebook()
+    {
+        var other = Path.Combine(_root, "Other");
+        var settings = new NotebookSettings().RememberNote(_root, "One.rtf").RememberNote(other, "Two.rtf");
+        Assert.Equal("One.rtf", settings.LastNote(_root));
+        Assert.Equal("Two.rtf", settings.LastNote(other));
+        settings = settings.RememberNote(_root, null);
+        Assert.Null(settings.LastNote(_root));
+        Assert.Equal("Two.rtf", settings.LastNote(other));
+    }
+
+    [AvaloniaFact]
+    public void StartupReopensLastNotebookWithoutAnExplicitPath()
+    {
+        var workspace = new NoteWorkspace(_root);
+        workspace.CreateNote(_root, "Remembered");
+        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
+        new NotebookSettings().RememberNotebook(_root).Save(settingsPath);
+        var window = new MainWindow(null, settingsPath);
+        _windows.Add(window);
+        window.Show();
+        Assert.Equal(_root, window.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.False(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void FailedStartupPausesRetriesUntilUserOpensAnotherNotebook()
+    {
+        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
+        var missing = Path.Combine(_root, "Disconnected notebook");
+        new NotebookSettings().RememberNotebook(_root).RememberNotebook(missing).Save(settingsPath);
+        var first = new MainWindow(null, settingsPath);
+        _windows.Add(first);
+        first.Show();
+        Assert.False(Directory.Exists(missing));
+        Assert.True(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
+        Assert.Null(NotebookSettings.Read(settingsPath).NotebookPath);
+        first.Close();
+
+        var second = new MainWindow(null, settingsPath);
+        _windows.Add(second);
+        second.Show();
+        Assert.Equal("Choose a notebook", second.FindControl<TextBlock>("SaveStatus")!.Text);
+        var menu = (MenuFlyout)second.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
+        menu.Items.OfType<MenuItem>().Single(i => Equals(i.Tag, _root))
+            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(_root, second.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.False(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
+        Assert.False(second.FindControl<Border>("Notice")!.IsVisible);
+        second.Close();
+    }
+
+    [AvaloniaFact]
+    public void InterruptedStartupDoesNotRetryEvenWhenRememberedFolderExists()
+    {
+        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
+        (new NotebookSettings().RememberNotebook(_root) with { SkipAutomaticNotebook = true }).Save(settingsPath);
+        var window = new MainWindow(null, settingsPath);
+        _windows.Add(window);
+        window.Show();
+        Assert.Equal("Choose a notebook", window.FindControl<TextBlock>("SaveStatus")!.Text);
+        Assert.True(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void RecentNotebookSwitchSavesEditsAndRemembersMostRecentFirst()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Unsaved note");
+        var second = Path.Combine(_root, "Second notebook");
+        Directory.CreateDirectory(second);
+        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
+        new NotebookSettings().RememberNotebook(second).Save(settingsPath);
+        var window = OpenWindow();
+        Select(window, note.Path);
+        window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Saved before switching");
+        var button = window.FindControl<SplitButton>("OpenNotebookButton")!;
+        var menu = Assert.IsType<MenuFlyout>(button.Flyout);
+        var entry = menu.Items.OfType<MenuItem>().Single(i => Equals(i.Tag, second));
+        entry.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(second, window.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.Contains("Saved before switching", workspace.Read(note.Path).Rtf);
+        window.Close();
+        Assert.Equal(new[] { second, _root }, NotebookSettings.Read(settingsPath).RecentNotebooks);
+    }
+
+    [AvaloniaFact]
+    public void MissingRecentNotebookDoesNotCreateAnEmptyReplacement()
+    {
+        var missing = Path.Combine(_root, "Missing notebook");
+        new NotebookSettings().RememberNotebook(missing)
+            .Save(Path.Combine(_root, ".mynotes", "settings.json"));
+        var window = OpenWindow();
+        var menu = (MenuFlyout)window.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
+        menu.Items.OfType<MenuItem>().Single(i => Equals(i.Tag, missing))
+            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.False(Directory.Exists(missing));
+        Assert.Equal(_root, window.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.Contains("no longer available", window.FindControl<TextBlock>("NoticeText")!.Text);
+        window.Close();
+    }
+
+    [Fact]
+    public void RecentNotebooksDeduplicateAndKeepTenNewest()
+    {
+        var settings = new NotebookSettings();
+        for (var i = 0; i < 12; i++) settings = settings.RememberNotebook(Path.Combine(_root, i.ToString()));
+        var revisited = Path.Combine(_root, "5");
+        settings = settings.RememberNotebook(revisited + Path.DirectorySeparatorChar);
+        Assert.Equal(10, settings.RecentNotebooks!.Length);
+        Assert.Equal(revisited, settings.RecentNotebooks[0]);
+        Assert.Single(settings.RecentNotebooks, p => p == revisited);
+        Assert.DoesNotContain(Path.Combine(_root, "0"), settings.RecentNotebooks);
+    }
+
+    [AvaloniaFact]
+    public void WindowSizeAndPositionAreSavedAndRestoredOnReopen()
     {
         var window = OpenWindow();
         window.Position = new PixelPoint(120, 90);
+        window.Width = 1000;
+        window.Height = 650;
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
         window.Close();
         var settings = NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json"));
         Assert.Equal(120, settings.WindowX);
         Assert.Equal(90, settings.WindowY);
+        Assert.Equal(1000, settings.WindowWidth);
+        Assert.Equal(650, settings.WindowHeight);
 
         var reopened = OpenWindow();
         Assert.Equal(new PixelPoint(120, 90), reopened.Position);
+        Assert.Equal(1000, reopened.Width);
+        Assert.Equal(650, reopened.Height);
+        reopened.Close();
+    }
+
+    [AvaloniaFact]
+    public void MaximizedWindowKeepsItsNormalSizeForRestoring()
+    {
+        var window = OpenWindow();
+        window.Width = 1000;
+        window.Height = 650;
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        window.WindowState = WindowState.Maximized;
+        window.Close();
+        var settings = NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json"));
+        Assert.True(settings.WindowMaximized);
+        Assert.Equal(1000, settings.WindowWidth);
+        Assert.Equal(650, settings.WindowHeight);
+        var reopened = OpenWindow();
+        Assert.Equal(WindowState.Maximized, reopened.WindowState);
         reopened.Close();
     }
 
@@ -54,6 +243,54 @@ public sealed class WindowTests : IDisposable
         var screen = window.Screens.Primary;
         Assert.NotNull(screen);
         Assert.True(screen.WorkingArea.Contains(window.Position));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void MovingFolderFromSearchKeepsOpenNoteAndUnsavedEdits()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var parent = workspace.CreateFolder(_root, "Projects");
+        var child = workspace.CreateFolder(parent, "Website");
+        var note = workspace.CreateNote(child, "Ideas");
+        var window = OpenWindow();
+        var search = window.FindControl<TextBox>("SearchBox")!;
+        search.Text = "Ideas";
+        Dispatcher.UIThread.RunJobs();
+        Select(window, note.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        editor.InsertText("Before move. ");
+        search.Text = "Website";
+        Dispatcher.UIThread.RunJobs();
+        var browser = window.FindControl<ListBox>("Browser")!;
+        var item = Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => !i.IsTrash);
+        var menu = window.CreateItemMenu(item);
+        var move = menu.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "Move to parent"));
+        Assert.True(move.IsEnabled);
+        move.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        editor.InsertText("After move. ");
+        window.Close();
+        var moved = workspace.Read(Path.Combine(_root, "Website", "Ideas.rtf"));
+        Assert.Contains("Before move.", moved.Rtf);
+        Assert.Contains("After move.", moved.Rtf);
+        Assert.False(Directory.Exists(child));
+    }
+
+    [AvaloniaFact]
+    public void RightClickingFolderDoesNotNavigateAndRootItemsCannotMoveUp()
+    {
+        var workspace = new NoteWorkspace(_root);
+        workspace.CreateFolder(_root, "Projects");
+        var window = OpenWindow();
+        var browser = window.FindControl<ListBox>("Browser")!;
+        var item = Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => !i.IsTrash);
+        var menu = window.CreateItemMenu(item);
+        Assert.False(menu.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "Move to parent")).IsEnabled);
+        var row = (Control)browser.ContainerFromItem(item)!;
+        var point = row.TranslatePoint(new Point(15, 12), window)!.Value;
+        window.MouseDown(point, MouseButton.Right);
+        window.MouseUp(point, MouseButton.Right);
+        Assert.Same(item, Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => !i.IsTrash));
         window.Close();
     }
 
@@ -129,6 +366,54 @@ public sealed class WindowTests : IDisposable
         Select(window, parent);
         await Task.Delay(180, TestContext.Current.CancellationToken);
         Assert.Equal("Projects", window.FindControl<TextBlock>("FolderHeading")!.Text);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void NoteMenuPinsAndUnpinsWithoutChangingTheOpenNote()
+    {
+        var workspace = new NoteWorkspace(_root);
+        workspace.CreateFolder(_root, "Folder");
+        var note = workspace.CreateNote(_root, "Zulu");
+        var window = OpenWindow();
+        Select(window, note.Path);
+        var browser = window.FindControl<ListBox>("Browser")!;
+        var item = browser.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == note.Path);
+        window.CreateItemMenu(item).Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Pin note"))
+            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        var pinned = browser.ItemsSource!.Cast<BrowserItem>().First();
+        Assert.Equal(note.Path, pinned.Path);
+        Assert.True(pinned.IsPinned);
+        Assert.Equal(note.Path, ((BrowserItem)browser.SelectedItem!).Path);
+        window.CreateItemMenu(pinned).Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Unpin note"))
+            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.True(browser.ItemsSource!.Cast<BrowserItem>().First().IsFolder);
+        Assert.Equal(note.Revision, workspace.Read(note.Path).Revision);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void TrashIsBrowsableProtectedAndSupportsMovingNotesBack()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Recover me");
+        var trashed = workspace.MoveToTrash(note.Path);
+        var window = OpenWindow();
+        var browser = window.FindControl<ListBox>("Browser")!;
+        var trash = Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => i.IsTrash);
+        Assert.False(trash.CanManage);
+        Assert.Empty(window.CreateItemMenu(trash).Items);
+        Select(window, workspace.TrashPath);
+        Assert.Equal("Trash", window.FindControl<TextBlock>("FolderHeading")!.Text);
+        Assert.Equal(workspace.Root, Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => i.IsUp).Path);
+        Select(window, trashed);
+        var item = Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => i.Path == trashed);
+        var menu = window.CreateItemMenu(item);
+        Assert.Contains(menu.Items.OfType<MenuItem>(), i => Equals(i.Header, "Move to Recycle Bin…"));
+        menu.Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Move to parent"))
+            .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.True(File.Exists(note.Path));
+        Assert.False(File.Exists(trashed));
         window.Close();
     }
 

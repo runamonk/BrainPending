@@ -29,10 +29,24 @@ dotnet run --project src/MyNotes -- --notes ./Notes
 - Autosave after a short typing pause; save on note switch and close.
 - Search note/folder titles recursively in the current folder. Ctrl+F / Ctrl+H
   search or replace text within the open document.
-- Rename, recoverable trash, light/dark themes, and ZuulSnips import.
+- Right-click entries to rename, move to parent, move to another notebook folder,
+  or delete to recoverable trash. Shift+F10 opens the menu for a selected entry.
+- Pin notes from their right-click menu to keep them above other entries. Pins
+  are saved in the notebook and follow notes when renamed or moved in the app.
+- Move to folder uses an in-app folder browser with Home, Up, and Move here;
+  destinations stay inside the notebook.
+- Trash is a protected notebook folder. Deleted notes and folders stay browsable
+  and editable there; move them out to recover them. Deleting from Trash sends
+  the item to the Windows Recycle Bin. Trash itself cannot be renamed, moved or deleted.
+- Light/dark themes.
+- Split Open notebook button: click the label to browse, or the arrow for the ten
+  most recently opened notebooks, remembered between sessions.
 - Dark mode uses a consistent charcoal surface, including the editor and toolbar.
   Dark document ink is lightened for display without changing saved RTF colours.
-- Main-window position is remembered on close and restored within an available monitor.
+- Main-window size, position and maximized state are remembered on close and
+  restored within an available monitor.
+- Each notebook remembers its last open note and restores its folder and selection.
+  Missing or unreadable notes are skipped without preventing the notebook from opening.
 - File watching plus a three-second fallback scan for external changes.
 
 ## Portable Windows build
@@ -44,10 +58,12 @@ dotnet publish src/MyNotes -c Release -r win-x64 --self-contained true -o artifa
 Copy the **whole output folder** to your synced location. Run `MyNotes.exe`.
 No .NET SDK or IDE is needed on the destination computer.
 
-Notebook selection order: `--notes <folder>`, an existing `Notes` folder beside
-the executable, the last folder selected on this computer, then a new adjacent
-`Notes` folder. Keep an adjacent `Notes` folder for a self-contained portable
-notebook. **Open notebook** can select any other writable folder.
+Notebook selection order: `--notes <folder>`, the last successfully opened notebook
+on this computer, then an adjacent `Notes` folder (created on first use).
+If automatic reopening fails or is interrupted, startup leaves the app ready for
+you to choose a notebook instead of retrying on every launch. Opening a notebook
+successfully enables automatic reopening again. A missing remembered folder is
+never silently recreated. **Open notebook** can select any other writable folder.
 
 Preferences are per computer, under `%LOCALAPPDATA%/MyNotes`. They are not shared
 with the notes. Use `--notes` to open multiple independent notebooks/instances.
@@ -63,8 +79,10 @@ Your existing sync service transfers the files; MyNotes reacts when they arrive.
 - Same-filesystem instances serialize their writes with a short exclusive lock.
   This lock is **not** a distributed lock between cloud replicas.
 - Immutable RTF revisions are stored in `Notes/.mynotes/history`, with JSON files
-  identifying their original paths. Deleted items live in `.mynotes/trash`.
-  Recovery currently means copying an RTF/folder back from these directories.
+  identifying their original paths. Deleted items live in `.mynotes/trash/items`
+  and appear in the notebook's Trash folder. Earlier trash entries migrate into this view.
+  Recover deleted items with Move to folder or Move to parent; history recovery
+  still requires copying an RTF from the history directory.
 
 This is eventual file synchronization, not collaborative live editing. Offline
 edits reaching the sync provider simultaneously can still produce provider-level
@@ -72,13 +90,6 @@ conflicts. History preserves local save revisions, but automated reconciliation
 of those conflicts is not implemented. Do not exclude `.mynotes/history` from
 sync if you want those revisions on another computer. History has no retention
 limit yet; image-heavy notes can consume substantial space.
-
-## Import ZuulSnips
-
-Click **Import ZuulSnips** and select the data folder containing `.snips.json`
-and optionally `.folders.json`. The importer creates a new dated folder and
-copies notes into RTF files. It never writes to the original data. Duplicate
-titles receive numbered suffixes; text-only notes are converted to RTF.
 
 ## Validation and current scope
 
@@ -91,8 +102,8 @@ save-on-close, import, and RTF round-trips for links, images, Unicode, fonts,
 highlighting, lists and alignment. A headless Skia-rendered screenshot is written
 to `artifacts/screenshots/editor.png` by the visual-review test.
 
-This is the first working version. Full-notebook content search, moving notes
-between folders in the UI, history/trash restore screens, and automatic handling
+This is the first working version. Full-notebook content search,
+history restore screens, and automatic handling
 of sync-provider conflict files are still to come. Moving files with Explorer
 is supported through refresh; avoid moving a note while actively editing it.
 

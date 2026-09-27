@@ -56,10 +56,11 @@ public partial class MainWindow : Window
         EditorView.Toolbar.Compact = true;
         EditorView.Editor.DefaultFontFamily = new FontFamily("Segoe UI");
         EditorView.Editor.DefaultFontSize = 12;
+        // The editor adds a 10px text inset; align with the 14px title inset.
+        EditorView.Editor.Margin = new Thickness(4, 24);
         EditorView.Editor.UseThemeColors = true;
         EditorView.Editor.Bind(RichEditor.ThemeForegroundProperty, new DynamicResourceExtension("AppTextBrush"));
         EditorView.Editor.Bind(RichEditor.SelectionBrushProperty, new DynamicResourceExtension("AppSelectionBrush"));
-        EditorView.Editor.Margin = new Thickness(32, 24);
         EditorView.Editor.AllowRemoteImagesOnPaste = false;
         EditorView.Editor.FontFamilyChoices = ["Segoe UI", "Arial", "Calibri", "Georgia", "Times New Roman", "Consolas"];
         EditorView.Editor.TextChanged += (_, _) =>

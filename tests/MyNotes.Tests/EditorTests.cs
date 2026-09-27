@@ -22,6 +22,41 @@ public static class TestApplication
 public sealed class EditorTests
 {
     [AvaloniaFact]
+    public void LinkHoverShowsDestinationAndClearsOverPlainTextAndOnExit()
+    {
+        var editor = new RichEditor();
+        editor.LoadHtml("<p><a href='https://example.com/first'>First link</a></p><p><a href='https://example.com/second'>Second link</a></p><p>Plain text</p>");
+        var window = new Window { Width = 600, Height = 400, Content = editor };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(600, 400));
+            bitmap.Render(window);
+            // Find each drawn line without depending on font-specific line heights.
+            foreach (var url in new[] { "https://example.com/first", "https://example.com/second" })
+            {
+                var found = false;
+                for (var y = 10; y < 120; y += 2)
+                {
+                    window.MouseMove(new Point(20, y));
+                    if (Equals(ToolTip.GetTip(editor), url)) { found = true; break; }
+                }
+                Assert.True(found, $"Expected tooltip for {url}");
+                Assert.True(ToolTip.GetIsOpen(editor));
+            }
+            window.MouseMove(new Point(500, 200));
+            Assert.Null(ToolTip.GetTip(editor));
+            Assert.False(ToolTip.GetIsOpen(editor));
+            window.MouseMove(new Point(20, 12));
+            window.MouseMove(new Point(-10, -10));
+            Assert.False(ToolTip.GetIsOpen(editor));
+            Assert.False(editor.IsModified);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public void FormattingLinksUnicodeAndResizedImagesSurviveRtfSaveReopen()
     {
         var editor = new RichEditor();

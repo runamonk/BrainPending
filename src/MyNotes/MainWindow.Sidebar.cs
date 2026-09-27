@@ -111,8 +111,11 @@ public partial class MainWindow
         if (!wasVisible && !_settings.SidebarPinned && MotionSettings.AnimationsEnabled)
         {
             _sidebarSlide.Transitions = null;
-            _sidebarSlide.X = -_sidebarWidth;
+            // Realize the list in its visible viewport before sliding it in from outside the window.
+            _sidebarSlide.X = 0;
             Sidebar.IsVisible = true;
+            Sidebar.UpdateLayout();
+            _sidebarSlide.X = -_sidebarWidth;
             EnableSidebarSlide();
         }
         else Sidebar.IsVisible = true;

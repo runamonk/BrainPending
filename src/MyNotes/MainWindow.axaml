@@ -62,7 +62,7 @@
       </Border>
       <GridSplitter x:Name="SidebarSplitter" Grid.Column="1" Background="{DynamicResource AppLineBrush}" ResizeDirection="Columns" />
       <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto">
-        <Border BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1" Padding="28,20,28,18">
+        <Border x:Name="NoteHeader" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1" Padding="14,20,14,18">
           <Grid RowDefinitions="Auto,Auto,Auto">
             <TextBlock x:Name="Breadcrumb" Text="Your notebook" FontSize="12" Opacity="0.5" TextTrimming="CharacterEllipsis" />
             <TextBlock x:Name="NoteTitle" Grid.Row="1" Text="" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" TextTrimming="CharacterEllipsis" DoubleTapped="NoteTitle_DoubleTapped" ToolTip.Tip="Double-click to rename" />

@@ -486,6 +486,28 @@ public partial class RichEditor
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
+        UpdatePointer(e, out var hoverUrl);
+        if (!Equals(ToolTip.GetTip(this), hoverUrl))
+        {
+            ToolTip.SetIsOpen(this, false);
+            ToolTip.SetTip(this, hoverUrl);
+        }
+        // Links are drawn inside one control, so moving onto a link does not raise PointerEntered.
+        ToolTip.SetPlacement(this, PlacementMode.Pointer);
+        ToolTip.SetIsOpen(this, !string.IsNullOrEmpty(hoverUrl));
+    }
+
+    /// <inheritdoc/>
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        ToolTip.SetIsOpen(this, false);
+        ToolTip.SetTip(this, null);
+    }
+
+    private void UpdatePointer(PointerEventArgs e, out string? hoverUrl)
+    {
+        hoverUrl = null;
 
         // "Draw table" mode: extend the rubber-band (or keep the cross cursor while armed but not dragging).
         if (_pendingTableDraw != null)
@@ -652,6 +674,7 @@ public partial class RichEditor
             }
 
             var hoverLink = GetLinkRunAtPoint(point);
+            hoverUrl = hoverLink?.NavigateUri;
             Cursor = (hoverLink != null && !string.IsNullOrEmpty(hoverLink.NavigateUri))
                 ? HandCursor
                 : IbeamCursor;

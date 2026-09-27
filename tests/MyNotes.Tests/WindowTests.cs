@@ -35,6 +35,35 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void FirstSidebarRevealDisplaysAllVisibleRowsAfterRestoringNote()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var folder = workspace.CreateFolder(_root, "Projects");
+        for (var i = 0; i < 7; i++) workspace.CreateNote(folder, $"Note {i}");
+        workspace.CreateFolder(folder, "First folder");
+        workspace.CreateFolder(folder, "Second folder");
+        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
+        (new NotebookSettings().RememberNotebook(_root)
+            .RememberNote(_root, Path.Combine("Projects", "Note 0.rtf")) with { SidebarPinned = false }).Save(settingsPath);
+        var window = OpenWindow();
+        var browser = window.FindControl<ListBox>("Browser")!;
+        Assert.Equal(10, browser.Items.Count);
+        Assert.False(window.FindControl<Border>("Sidebar")!.IsVisible);
+
+        window.FindControl<Button>("SidebarReveal")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        window.UpdateLayout();
+        using var bitmap = new RenderTargetBitmap(new PixelSize(1240, 820));
+        bitmap.Render(window);
+        window.UpdateLayout();
+        for (var i = 0; i < browser.Items.Count; i++)
+        {
+            var container = browser.ContainerFromIndex(i);
+            Assert.NotNull(container);
+            Assert.True(container.Bounds.Height > 0, $"Row {i} must be laid out on first reveal.");
+        }
+    }
+
+    [AvaloniaFact]
     public async Task SidebarCanAutoHideRevealAndRememberPinPreference()
     {
         var window = OpenWindow();

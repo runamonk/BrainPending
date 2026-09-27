@@ -1,4 +1,5 @@
-﻿using System;
+using Avalonia.Markup.Xaml.MarkupExtensions;
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
@@ -84,7 +85,7 @@ public partial class RichEditorToolbar
         {
             Width = width, FontSize = 12, MinHeight = 28, VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(2, 0),
-            BorderBrush = new SolidColorBrush(Color.Parse("#DCDCDC")),
+            [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
         };
         ToolTip.SetTip(cb, tip);
         cb.DropDownClosed += (_, _) => Target?.Focus(); // see the Combo factory — give the caret back

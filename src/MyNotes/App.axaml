@@ -49,6 +49,30 @@
             <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
         </Style>
+        <Style Selector="MenuFlyoutPresenter, FlyoutPresenter, MenuItem">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppLineBrush}" />
+        </Style>
+        <Style Selector="MenuItem:selected /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource AppSelectionBrush}" />
+        </Style>
+        <Style Selector="MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource AppSelectionBrush}" />
+        </Style>
+        <Style Selector="MenuItem /template/ ContentPresenter">
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+        </Style>
+        <Style Selector="TextBox, ComboBox, Button, ToggleButton, SplitButton, ListBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource AppLineBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+        </Style>
+        <Style Selector="TextBox, ComboBox">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+        </Style>
+        <Style Selector="Separator">
+            <Setter Property="Background" Value="{DynamicResource AppLineBrush}" />
+        </Style>
         <Style Selector="Button.primary">
             <Setter Property="Background" Value="{DynamicResource AppAccentBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource AppAccentTextBrush}" />

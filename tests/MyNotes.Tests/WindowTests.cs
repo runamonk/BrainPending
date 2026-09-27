@@ -276,6 +276,16 @@ public sealed class WindowTests : IDisposable
                 .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             menu.Hide();
             Dispatcher.UIThread.RunJobs();
+            Assert.Equal(Avalonia.Media.Color.Parse(theme.Line), Assert.IsType<Avalonia.Media.SolidColorBrush>(window.FindControl<TextBox>("SearchBox")!.BorderBrush).Color);
+            Assert.Equal(Avalonia.Media.Color.Parse(theme.Line), Assert.IsType<Avalonia.Media.SolidColorBrush>(window.GetVisualDescendants().OfType<GridSplitter>().Single().Background).Color);
+            menu.ShowAt(button);
+            Dispatcher.UIThread.RunJobs();
+            var row = menu.Items.OfType<MenuItem>().First(i => i.Tag != null);
+            var presenter = row.GetVisualAncestors().OfType<MenuFlyoutPresenter>().Single();
+            Assert.Equal(Avalonia.Media.Color.Parse(theme.Surface), Assert.IsType<Avalonia.Media.SolidColorBrush>(presenter.Background).Color);
+            Assert.Equal(Avalonia.Media.Color.Parse(theme.Line), Assert.IsType<Avalonia.Media.SolidColorBrush>(presenter.BorderBrush).Color);
+            Assert.Equal(Avalonia.Media.Color.Parse(theme.Text), Assert.IsType<Avalonia.Media.SolidColorBrush>(row.Foreground).Color);
+            menu.Hide();
             Assert.Equal(theme.Name, NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json")).ColorTheme);
             Assert.Equal(Avalonia.Media.Color.Parse(theme.Surface), Assert.IsType<Avalonia.Media.SolidColorBrush>(window.Background).Color);
             Assert.Equal(Avalonia.Media.Color.Parse(theme.Text), Assert.IsType<Avalonia.Media.SolidColorBrush>(window.FindControl<RichEditorView>("EditorView")!.Editor.ThemeForeground).Color);

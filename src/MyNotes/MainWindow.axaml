@@ -7,7 +7,7 @@
         Title="MyNotes" Width="1240" Height="820" MinWidth="850" MinHeight="550"
         Background="{DynamicResource AppSurfaceBrush}">
   <Grid RowDefinitions="64,*,36">
-    <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="0,0,0,1" Padding="22,0">
+    <Border BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1" Padding="22,0">
       <Grid ColumnDefinitions="Auto,*,Auto">
         <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
           <Border Background="{DynamicResource AppAccentBrush}" CornerRadius="9" Width="32" Height="32">
@@ -65,9 +65,9 @@
           <TextBlock x:Name="ItemCount" Grid.Row="4" FontSize="11" Opacity="0.5" Margin="10,14,0,0" />
         </Grid>
       </Border>
-      <GridSplitter Grid.Column="1" Background="{DynamicResource SystemControlForegroundBaseLowBrush}" ResizeDirection="Columns" />
+      <GridSplitter Grid.Column="1" Background="{DynamicResource AppLineBrush}" ResizeDirection="Columns" />
       <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto">
-        <Border BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="0,0,0,1" Padding="28,20,28,18">
+        <Border BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1" Padding="28,20,28,18">
           <Grid RowDefinitions="Auto,Auto,Auto">
             <TextBlock x:Name="Breadcrumb" Text="Your notebook" FontSize="12" Opacity="0.5" TextTrimming="CharacterEllipsis" />
             <TextBlock x:Name="NoteTitle" Grid.Row="1" Text="Make room for an idea." FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" TextTrimming="CharacterEllipsis" DoubleTapped="NoteTitle_DoubleTapped" ToolTip.Tip="Double-click to rename" />
@@ -90,7 +90,7 @@
         </Border>
       </Grid>
     </Grid>
-    <Border Grid.Row="2" BorderBrush="{DynamicResource SystemControlForegroundBaseLowBrush}" BorderThickness="0,1,0,0" Padding="20,0">
+    <Border Grid.Row="2" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,1,0,0" Padding="20,0">
       <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
         <TextBlock x:Name="NotebookPath" FontSize="11" Opacity="0.5" TextTrimming="CharacterEllipsis" />
         <TextBlock x:Name="SaveStatus" Grid.Column="1" Text="Ready" FontSize="11" Opacity="0.7" />

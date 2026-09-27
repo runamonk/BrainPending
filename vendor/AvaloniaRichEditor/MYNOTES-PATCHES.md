@@ -27,3 +27,5 @@ Local changes:
 Regression coverage lives in tests/MyNotes.Tests/EditorTests.cs. Review these
 patches before updating upstream; do not replace this project with the unpatched
 NuGet package without passing the persistence tests.
+
+- Toolbar dividers, control outlines, and popup borders use dynamic theme brushes instead of fixed gray colors.

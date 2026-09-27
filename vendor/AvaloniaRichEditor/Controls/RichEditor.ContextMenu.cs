@@ -1,3 +1,4 @@
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -106,7 +107,7 @@ public partial class RichEditor
                 var cell = new Border
                 {
                     Width = 16, Height = 16, Margin = new Thickness(1),
-                    Background = Brushes.White, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1),
+                    Background = Brushes.White, [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"), BorderThickness = new Thickness(1),
                 };
                 cell.PointerEntered += (_, _) => Highlight(rr, cc);
                 cell.PointerPressed += (_, _) => { BeginTableDraw(rr + 1, cc + 1); _openContextMenu?.Close(); };

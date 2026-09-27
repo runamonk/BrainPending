@@ -277,8 +277,8 @@ public partial class RichEditorToolbar : UserControl
                 MinWidth = minWidth,
                 VerticalAlignment = VerticalAlignment.Center,
                 FontSize = 12,
-                // The Fluent theme's default combo border is much darker than the rest of the strip.
-                BorderBrush = Compact ? Brushes.Transparent : new SolidColorBrush(Color.Parse("#DCDCDC")),
+                // Keep outlines synchronized with the active theme.
+                [!ComboBox.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
                 BorderThickness = Compact ? new Thickness(0) : new Thickness(1),
                 Background = Brushes.Transparent,
                 Padding = Compact ? new Thickness(6, 2) : new Thickness(8, 4),
@@ -293,7 +293,7 @@ public partial class RichEditorToolbar : UserControl
         Control Div() => new Border
         {
             Width = 1, Height = 22, Margin = new Thickness(6, 4),
-            Background = new SolidColorBrush(Color.Parse("#DCDCDC")),
+            [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         };
 
@@ -628,7 +628,7 @@ public partial class RichEditorToolbar : UserControl
             {
                 Background = new SolidColorBrush(color),
                 Width = 22, Height = 22, Margin = new Thickness(1), Padding = new Thickness(0),
-                BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1),
+                [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"), BorderThickness = new Thickness(1),
                 Focusable = false, // see the Btn factory — the caret must survive a swatch click
             };
             sw.Click += (_, _) => Apply(color);
@@ -704,7 +704,7 @@ public partial class RichEditorToolbar : UserControl
                 var cell = new Border
                 {
                     Width = 16, Height = 16, Margin = new Thickness(1),
-                    [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"), BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1),
+                    [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"), [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"), BorderThickness = new Thickness(1),
                 };
                 cell.PointerEntered += (_, _) => Highlight(rr, cc);
                 cell.PointerPressed += (_, _) =>
@@ -815,7 +815,7 @@ public partial class RichEditorToolbar : UserControl
         {
             Child = row,
             [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),
-            BorderBrush = new SolidColorBrush(Color.Parse("#DCDCDC")),
+            [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(6, 0),
@@ -898,7 +898,7 @@ public partial class RichEditorToolbar : UserControl
         {
             Child = row,
             [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),
-            BorderBrush = new SolidColorBrush(Color.Parse("#DCDCDC")),
+            [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(4, 0),

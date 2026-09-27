@@ -5,21 +5,22 @@ using Avalonia.Themes.Fluent;
 
 namespace MyNotes;
 
-internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon);
+internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon, string Line);
 
 internal static class AppThemes
 {
     public static readonly AppColorTheme[] All =
     [
-        new("Default", false, "#FAFAFA", "#202020", "#526B59", "#C8DCCE", "#526B59"),
-        new("Autobiography", true, "#302C28", "#F0E6D6", "#C9A768", "#514638", "#D8BC86"),
-        new("Dark", true, "#252525", "#EEEEEE", "#BB86D9", "#44384F", "#C5A3DB"),
-        new("Carbon", true, "#18181C", "#E4E4EB", "#A8A8BA", "#35353F", "#BFC0D0"),
-        new("Dracula", true, "#282A36", "#F8F8F2", "#BD93F9", "#44475A", "#8BE9FD"),
-        new("Futura", true, "#292C34", "#F5F0E5", "#F2B134", "#514634", "#F2C66D"),
-        new("Midnight", true, "#182238", "#E2E9F7", "#729EFF", "#2D4269", "#91B7FF"),
-        new("Solarized Dark", true, "#002B36", "#93A1A1", "#63B5AD", "#17434D", "#78C3BB"),
-        new("Titanium", true, "#302F3F", "#F0EBF7", "#C293EF", "#514365", "#D3AEF2")
+        new("Default", false, "#FAFAFA", "#202020", "#526B59", "#C8DCCE", "#526B59", "#A5B8AB"),
+        new("Autobiography", true, "#302C28", "#F0E6D6", "#C9A768", "#514638", "#D8BC86", "#75644E"),
+        new("Dark", true, "#252525", "#EEEEEE", "#BB86D9", "#44384F", "#C5A3DB", "#64516E"),
+        new("Carbon", true, "#18181C", "#E4E4EB", "#A8A8BA", "#35353F", "#BFC0D0", "#50505E"),
+        new("Dracula", true, "#282A36", "#F8F8F2", "#BD93F9", "#44475A", "#8BE9FD", "#6272A4"),
+        new("Futura", true, "#292C34", "#F5F0E5", "#F2B134", "#514634", "#F2C66D", "#75613C"),
+        new("Midnight", true, "#182238", "#E2E9F7", "#729EFF", "#2D4269", "#91B7FF", "#405D8A"),
+        new("Solarized Dark", true, "#002B36", "#93A1A1", "#63B5AD", "#17434D", "#78C3BB", "#32616A"),
+        new("Titanium", true, "#302F3F", "#F0EBF7", "#C293EF", "#514365", "#D3AEF2", "#75608C"),
+        new("Xanth", true, "#000000", "#39FF14", "#39FF14", "#123B0C", "#39FF14", "#236B16")
     ];
 
     public static AppColorTheme Resolve(NotebookSettings settings) =>
@@ -47,6 +48,17 @@ internal static class AppThemes
             };
         }
         void Brush(string key, string color) => app.Resources[key] = new SolidColorBrush(Color.Parse(color));
+        Brush("AppLineBrush", theme.Line);
+        // Override the shared brushes too: controls and the editor consume these
+        // directly, and replacing a Fluent palette alone leaves cached brushes.
+        foreach (var key in new[] { "SystemControlForegroundBaseLowBrush", "SystemControlForegroundBaseMediumLowBrush",
+            "SystemControlBackgroundBaseLowBrush", "SystemControlBackgroundChromeHighBrush",
+            "SystemControlBackgroundChromeMediumBrush", "SystemControlBackgroundChromeDisabledHighBrush" })
+            Brush(key, theme.Line);
+        foreach (var key in new[] { "SystemControlForegroundBaseHighBrush", "SystemControlForegroundBaseMediumBrush",
+            "SystemControlForegroundBaseMediumHighBrush" }) Brush(key, theme.Text);
+        foreach (var key in new[] { "SystemControlBackgroundAltHighBrush", "SystemControlBackgroundChromeMediumLowBrush",
+            "SystemControlBackgroundChromeLowBrush" }) Brush(key, theme.Surface);
         Brush("AppSurfaceBrush", theme.Surface);
         Brush("AppTextBrush", theme.Text);
         Brush("AppAccentBrush", theme.Accent);

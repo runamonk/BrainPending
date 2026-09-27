@@ -62,8 +62,8 @@
             <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="16,8" MinHeight="34">
               <TextBox x:Name="FindInput" PlaceholderText="Find in note…" AutomationProperties.Name="Find in note" TextChanged="FindInput_Changed" />
               <TextBlock x:Name="FindCount" Grid.Column="1" MinWidth="75" Margin="12,0" VerticalAlignment="Center" Text="0 matches" />
-              <Button x:Name="FindPrevious" Grid.Column="2" Classes="quiet" Content="↑" ToolTip.Tip="Previous match (Shift+F3)" AutomationProperties.Name="Previous match" Click="FindPrevious_Click" />
-              <Button x:Name="FindNextButton" Grid.Column="3" Classes="quiet" Content="↓" ToolTip.Tip="Next match (F3)" AutomationProperties.Name="Next match" Click="FindNext_Click" />
+              <Button x:Name="FindPrevious" Grid.Column="2" Classes="quiet findNavigation" Content="↑" ToolTip.Tip="Previous match (Shift+F3)" AutomationProperties.Name="Previous match" Click="FindPrevious_Click" />
+              <Button x:Name="FindNextButton" Grid.Column="3" Classes="quiet findNavigation" Content="↓" ToolTip.Tip="Next match (F3)" AutomationProperties.Name="Next match" Click="FindNext_Click" />
               <Button Grid.Column="4" Classes="quiet" Content="×" ToolTip.Tip="Close find (Escape)" AutomationProperties.Name="Close find" Click="CloseFind_Click" />
             </Grid>
           </Border>

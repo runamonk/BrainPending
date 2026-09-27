@@ -18,7 +18,10 @@
         <TextBlock Grid.Column="1" Text="" Opacity="0.55" Margin="24,0" VerticalAlignment="Center" />
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
           <SplitButton x:Name="OpenNotebookButton" Content="Open notebook" Click="OpenNotebook_Click" Background="Transparent" CornerRadius="7" FontSize="13" AutomationProperties.Name="Open notebook" />
-          <Button x:Name="AppearanceButton" Classes="action quiet" Content="◐" ToolTip.Tip="Color theme" AutomationProperties.Name="Color theme" Click="Theme_Click" />
+          <Button x:Name="AppearanceButton" Classes="action quiet" ToolTip.Tip="Color theme" AutomationProperties.Name="Color theme" Click="Theme_Click">
+            <Path Width="20" Height="20" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5"
+                  Data="M 10,1 C 5,1 1,5 1,10 C 1,15 5,19 10,19 C 12,19 13,18 12,16 C 11,14 12,13 14,13 L 16,13 C 18,13 19,12 19,10 C 19,5 15,1 10,1 Z M 6,6 A 1,1 0 1 0 6,8 A 1,1 0 1 0 6,6 M 10,4 A 1,1 0 1 0 10,6 A 1,1 0 1 0 10,4 M 14,6 A 1,1 0 1 0 14,8 A 1,1 0 1 0 14,6 M 5,11 A 1,1 0 1 0 5,13 A 1,1 0 1 0 5,11" />
+          </Button>
         </StackPanel>
       </Grid>
     </Border>

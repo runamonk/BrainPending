@@ -263,6 +263,30 @@ public sealed class WindowTests : IDisposable
         window.Close();
     }
 
+    [AvaloniaFact]
+    public void AppearanceMenuAppliesAndRemembersEveryPalette()
+    {
+        var window = OpenWindow();
+        var button = window.FindControl<Button>("AppearanceButton")!;
+        foreach (var theme in AppThemes.All)
+        {
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var menu = Assert.IsType<MenuFlyout>(button.Flyout);
+            menu.Items.OfType<MenuItem>().Single(i => Equals(i.Tag, theme.Name))
+                .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            menu.Hide();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(theme.Name, NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json")).ColorTheme);
+            Assert.Equal(Avalonia.Media.Color.Parse(theme.Surface), Assert.IsType<Avalonia.Media.SolidColorBrush>(window.Background).Color);
+            Assert.Equal(Avalonia.Media.Color.Parse(theme.Text), Assert.IsType<Avalonia.Media.SolidColorBrush>(window.FindControl<RichEditorView>("EditorView")!.Editor.ThemeForeground).Color);
+        }
+        window.Close();
+        var reopened = OpenWindow();
+        Assert.Equal(Avalonia.Media.Color.Parse(AppThemes.All.Last().Surface), Assert.IsType<Avalonia.Media.SolidColorBrush>(reopened.Background).Color);
+        reopened.Close();
+        Assert.Equal("Dracula", AppThemes.Resolve(new NotebookSettings(DarkTheme: true)).Name);
+    }
+
     private static IEnumerable<Button> RecentButtons(Flyout menu) =>
         ((StackPanel)menu.Content!).Children.OfType<Grid>().SelectMany(g => g.Children.OfType<Button>()).Where(b => b.Tag is string);
 

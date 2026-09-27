@@ -696,14 +696,33 @@ public partial class MainWindow : Window
 
     private void Theme_Click(object? sender, RoutedEventArgs e)
     {
-        _settings = _settings with { DarkTheme = !_settings.DarkTheme };
-        ApplyTheme();
-        try { _settings.Save(_settingsPath); } catch (Exception error) { ShowNotice("Could not remember theme: " + error.Message); }
+        var active = AppThemes.Resolve(_settings);
+        var menu = new MenuFlyout();
+        menu.Items.Add(new MenuItem { Header = "APPEARANCE", IsEnabled = false });
+        foreach (var theme in AppThemes.All)
+        {
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("24,*,24"), Width = 230 };
+            row.Children.Add(new TextBlock { Text = theme.Name == active.Name ? "●" : "○", Foreground = new SolidColorBrush(Color.Parse(theme.Accent)) });
+            var label = new TextBlock { Text = theme.Name };
+            Grid.SetColumn(label, 1);
+            row.Children.Add(label);
+            var swatch = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Color.Parse(theme.Accent)) };
+            Grid.SetColumn(swatch, 2);
+            row.Children.Add(swatch);
+            var item = new MenuItem { Header = row, Tag = theme.Name };
+            item.Click += async (_, _) => await Run(() =>
+            {
+                _settings = NotebookSettings.Read(_settingsPath) with { ColorTheme = theme.Name, DarkTheme = theme.Dark };
+                _settings.Save(_settingsPath);
+                ApplyTheme();
+                return Task.CompletedTask;
+            });
+            menu.Items.Add(item);
+        }
+        AppearanceButton.Flyout = menu;
+        menu.ShowAt(AppearanceButton);
     }
-    private void ApplyTheme()
-    {
-        if (Application.Current != null) Application.Current.RequestedThemeVariant = _settings.DarkTheme ? ThemeVariant.Dark : ThemeVariant.Light;
-    }
+    private void ApplyTheme() => AppThemes.Apply(AppThemes.Resolve(_settings));
     private void Dismiss_Click(object? sender, RoutedEventArgs e) => Notice.IsVisible = false;
     private void ShowNotice(string text) { NoticeText.Text = text; Notice.IsVisible = true; }
 

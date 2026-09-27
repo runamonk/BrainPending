@@ -18,7 +18,7 @@
         <TextBlock Grid.Column="1" Text="" Opacity="0.55" Margin="24,0" VerticalAlignment="Center" />
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
           <SplitButton x:Name="OpenNotebookButton" Content="Open notebook" Click="OpenNotebook_Click" Background="Transparent" CornerRadius="7" FontSize="13" AutomationProperties.Name="Open notebook" />
-          <Button Classes="action quiet" Content="◐" ToolTip.Tip="Switch light / dark theme" AutomationProperties.Name="Switch theme" Click="Theme_Click" />
+          <Button x:Name="AppearanceButton" Classes="action quiet" Content="◐" ToolTip.Tip="Color theme" AutomationProperties.Name="Color theme" Click="Theme_Click" />
         </StackPanel>
       </Grid>
     </Border>

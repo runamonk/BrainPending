@@ -57,7 +57,18 @@
             <TextBlock x:Name="NoteTitleError" Grid.Row="2" IsVisible="False" Foreground="{DynamicResource AppErrorBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
           </Grid>
         </Border>
-        <rte:RichEditorView Grid.Row="1" x:Name="EditorView" IsVisible="False" ShowFileActions="False" ShowStatusBar="True" Background="Transparent" />
+        <DockPanel Grid.Row="1">
+          <Border x:Name="FindPanel" DockPanel.Dock="Top" Height="0" ClipToBounds="True" IsVisible="False" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="16,8" MinHeight="34">
+              <TextBox x:Name="FindInput" PlaceholderText="Find in note…" AutomationProperties.Name="Find in note" TextChanged="FindInput_Changed" />
+              <TextBlock x:Name="FindCount" Grid.Column="1" MinWidth="75" Margin="12,0" VerticalAlignment="Center" Text="0 matches" />
+              <Button x:Name="FindPrevious" Grid.Column="2" Classes="quiet" Content="↑" ToolTip.Tip="Previous match (Shift+F3)" AutomationProperties.Name="Previous match" Click="FindPrevious_Click" />
+              <Button x:Name="FindNextButton" Grid.Column="3" Classes="quiet" Content="↓" ToolTip.Tip="Next match (F3)" AutomationProperties.Name="Next match" Click="FindNext_Click" />
+              <Button Grid.Column="4" Classes="quiet" Content="×" ToolTip.Tip="Close find (Escape)" AutomationProperties.Name="Close find" Click="CloseFind_Click" />
+            </Grid>
+          </Border>
+          <rte:RichEditorView x:Name="EditorView" IsVisible="False" ShowFileActions="False" ShowStatusBar="True" Background="Transparent" />
+        </DockPanel>
         <StackPanel x:Name="Welcome" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Spacing="16" Margin="32">
           <TextBlock Text="" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" />
           <TextBlock Text="Pick a note on the left, or start something new. " TextWrapping="Wrap" TextAlignment="Center" FontSize="15" Opacity="0.6" LineHeight="25" />

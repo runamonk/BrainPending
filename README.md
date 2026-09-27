@@ -29,8 +29,11 @@ dotnet run --project src/MyNotes -- --notes ./Notes
 - Insert/edit links from the toolbar; right-click an existing link to edit/remove
   it. Select text before inserting a link to use that text as the label.
 - Autosave after a short typing pause; save on note switch and close.
-- Search note/folder titles recursively in the current folder. Ctrl+F / Ctrl+H
-  search or replace text within the open document.
+- Search note/folder titles recursively in the current folder (Ctrl+Shift+F).
+- Ctrl+F opens a slide-down find panel above the editor and focuses its input.
+  Matches are highlighted as you type, with a match counter. F3 / Shift+F3
+  (or Enter / Shift+Enter in the input) move between matches with wrap-around;
+  Escape closes the panel and clears the highlights.
 - Right-click entries to rename, move to parent, move to another notebook folder,
   or delete to recoverable trash. Shift+F10 opens the menu for a selected entry.
 - Pin notes from their right-click menu to keep them above other entries. Pins

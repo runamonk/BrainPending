@@ -45,6 +45,7 @@ public partial class MainWindow : Window
         _settingsPath = settingsPath;
         _settings = NotebookSettings.Read(settingsPath);
         InitializeComponent();
+        InitializeFind();
         OpenNotebookButton.Flyout = _recentNotebooksMenu;
         _recentNotebooksMenu.Opening += (_, _) => RefreshRecentNotebooks();
         RefreshRecentNotebooks();
@@ -464,6 +465,7 @@ public partial class MainWindow : Window
 
     private void ClearNote(bool forget = true)
     {
+        CloseFind(false);
         CancelTitleEditing();
         if (forget && _note != null) RememberOpenNote(null);
         _note = null;
@@ -747,6 +749,7 @@ public partial class MainWindow : Window
     private async void OnShortcut(object? sender, KeyEventArgs e)
     {
         if (_inDialog || _titleEditingPath != null) return;
+        if (HandleFindShortcut(e)) return;
         if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.S) { e.Handled = true; SaveCurrent(); }
         else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.N) { e.Handled = true; await NewNote(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; SearchBox.Focus(); }

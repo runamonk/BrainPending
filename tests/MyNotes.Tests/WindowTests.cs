@@ -35,6 +35,40 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void FindShortcutsFocusInputNavigateWrapAndClearHighlightsWithoutEditing()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Find me");
+        workspace.Save(note, NoteWorkspace.PlainTextRtf("Apple pear apple"));
+        var window = OpenWindow();
+        Select(window, note.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        var input = window.FindControl<TextBox>("FindInput")!;
+        editor.Focus();
+        window.KeyPress(Key.F, RawInputModifiers.Control, PhysicalKey.F, "f");
+        Assert.True(input.IsFocused);
+        input.Text = "apple";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal((1, 2), editor.GetFindMatchPosition());
+        window.KeyPress(Key.F3, RawInputModifiers.None, PhysicalKey.F3, null);
+        Assert.Equal((2, 2), editor.GetFindMatchPosition());
+        Assert.True(input.IsFocused);
+        window.KeyPress(Key.F3, RawInputModifiers.None, PhysicalKey.F3, null);
+        Assert.Equal((1, 2), editor.GetFindMatchPosition());
+        window.KeyPress(Key.F3, RawInputModifiers.Shift, PhysicalKey.F3, null);
+        Assert.Equal((2, 2), editor.GetFindMatchPosition());
+        input.Text = "missing";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("0 matches", window.FindControl<TextBlock>("FindCount")!.Text);
+        Assert.False(window.FindControl<Button>("FindNextButton")!.IsEnabled);
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.False(window.FindControl<Border>("FindPanel")!.IsVisible);
+        Assert.True(editor.IsFocused);
+        Assert.Equal((0, 0), editor.GetFindMatchPosition());
+        Assert.False(editor.IsModified);
+    }
+
+    [AvaloniaFact]
     public void InlineTitleRenameSavesEditsAndUpdatesRememberedNote()
     {
         var workspace = new NoteWorkspace(_root);

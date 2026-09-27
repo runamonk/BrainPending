@@ -18,6 +18,9 @@ dotnet run --project src/MyNotes -- --notes ./Notes
 ## What works
 
 - Two primary panels, no tabs. Folders and notes share the left panel.
+- Use the pin at the right end of the left panel's toolbar to auto-hide the panel;
+  hover over the left edge to reveal it over the editor, or use Ctrl+Shift+F.
+  Pin it again to keep it visible. The pin preference is remembered across launches.
 - Nested folders, sliding folder navigation, an Up entry, and notebook-home button.
 - Individual `.rtf` files in real folders.
 - Formatting toolbar: fonts, size, bold/italic/underline/strike, colours,

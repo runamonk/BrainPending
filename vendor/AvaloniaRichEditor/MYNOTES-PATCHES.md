@@ -15,7 +15,8 @@ Local changes:
   margins, and line spacing.
 - Formatting toolbar: expose insert/edit hyperlink and clear-formatting actions.
 - Opt-in `Compact` toolbar layout puts common character controls in a flat row
-  and retains remaining controls in a More formatting flyout.
+  with font size immediately after font family, and retains remaining controls
+  in a More formatting flyout.
 - Theme-aware toolbar icons, popup surfaces and status text; transparent toolbar
   and status backgrounds inherit the application's canvas.
 - Opt-in `UseThemeColors` lightens dark document ink for a dark canvas at render

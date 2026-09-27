@@ -46,6 +46,7 @@ public partial class MainWindow : Window
         _settings = NotebookSettings.Read(settingsPath);
         InitializeComponent();
         InitializeFind();
+        InitializeSidebar();
         OpenNotebookButton.Flyout = _recentNotebooksMenu;
         _recentNotebooksMenu.Opening += (_, _) => RefreshRecentNotebooks();
         RefreshRecentNotebooks();
@@ -678,7 +679,14 @@ public partial class MainWindow : Window
             actions.Add(new Separator());
         }
         actions.AddRange(new Control[] { rename, moveUp, moveTo, new Separator(), trash });
-        return new ContextMenu { ItemsSource = actions };
+        var menu = new ContextMenu { ItemsSource = actions };
+        menu.Opened += (_, _) => _sidebarMenuOpen = true;
+        menu.Closed += (_, _) =>
+        {
+            _sidebarMenuOpen = false;
+            if (!_settings.SidebarPinned) _sidebarHide.Start();
+        };
+        return menu;
     }
 
     private static void RecycleItem(string path)
@@ -770,7 +778,7 @@ public partial class MainWindow : Window
         if (HandleFindShortcut(e)) return;
         if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.S) { e.Handled = true; SaveCurrent(); }
         else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.N) { e.Handled = true; await NewNote(); }
-        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; SearchBox.Focus(); }
+        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; ShowSidebar(); SearchBox.Focus(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.O)
         { e.Handled = true; await Run(SwitchNote); }
         else if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Up && _workspace != null && _folder != _workspace.Root)

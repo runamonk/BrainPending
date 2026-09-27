@@ -459,7 +459,7 @@ public partial class RichEditorToolbar : UserControl
         {
             var primary = new System.Collections.Generic.List<Control>();
             foreach (var control in new Control?[] { _boldBtn, _italicBtn, _underlineBtn, _strikeBtn,
-                colorButton, highlightButton, _sizeCombo, _fontCombo, linkButton })
+                colorButton, highlightButton, _fontCombo, _sizeCombo, linkButton })
                 if (control != null) primary.Add(control);
             var advanced = new WrapPanel { Orientation = Orientation.Horizontal, MaxWidth = 440 };
             foreach (var control in items)

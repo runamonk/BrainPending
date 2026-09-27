@@ -35,6 +35,84 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task SidebarCanAutoHideRevealAndRememberPinPreference()
+    {
+        var window = OpenWindow();
+        var sidebar = window.FindControl<Border>("Sidebar")!;
+        var pin = window.FindControl<Button>("SidebarPin")!;
+        var reveal = window.FindControl<Button>("SidebarReveal")!;
+        Assert.True(sidebar.IsVisible);
+        Assert.False(reveal.IsVisible);
+        pin.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        window.UpdateLayout();
+        Assert.True(reveal.IsVisible);
+        window.MouseMove(new Point(700, 200));
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Dispatcher.UIThread.RunJobs();
+        if (MotionSettings.AnimationsEnabled)
+        {
+            Assert.True(sidebar.IsVisible);
+            var hidingSlide = Assert.IsType<Avalonia.Media.TranslateTransform>(sidebar.RenderTransform);
+            Assert.InRange(hidingSlide.X, -299, -1);
+            await Task.Delay(450, TestContext.Current.CancellationToken);
+        }
+        Assert.False(sidebar.IsVisible);
+        window.MouseMove(new Point(14, 200));
+        Assert.False(sidebar.IsVisible);
+        window.MouseMove(new Point(700, 200));
+        await Task.Delay(150, TestContext.Current.CancellationToken);
+        Assert.False(sidebar.IsVisible);
+        window.MouseMove(new Point(14, 200));
+        Assert.False(sidebar.IsVisible);
+        await Task.Delay(150, TestContext.Current.CancellationToken);
+        window.UpdateLayout();
+        Assert.True(sidebar.IsVisible);
+        Assert.Equal(0, window.FindControl<Grid>("WorkspaceGrid")!.ColumnDefinitions[0].Width.Value);
+        Assert.Equal(15, reveal.Bounds.Width);
+        if (MotionSettings.AnimationsEnabled)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            var slide = Assert.IsType<Avalonia.Media.TranslateTransform>(sidebar.RenderTransform);
+            Assert.InRange(slide.X, -299, -1);
+            await Task.Delay(350, TestContext.Current.CancellationToken);
+            Assert.Equal(0, slide.X);
+        }
+
+        var reopened = OpenWindow();
+        Assert.False(reopened.FindControl<Border>("Sidebar")!.IsVisible);
+        reopened.KeyPress(Key.F, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.F, "f");
+        Assert.True(reopened.FindControl<Border>("Sidebar")!.IsVisible);
+        Assert.True(reopened.FindControl<TextBox>("SearchBox")!.IsFocused);
+        reopened.FindControl<Button>("SidebarPin")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.False(reopened.FindControl<Button>("SidebarReveal")!.IsVisible);
+        Assert.True(NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json")).SidebarPinned);
+    }
+
+    [AvaloniaFact]
+    public async Task SidebarStaysOpenAcrossChildrenAndCancelsHideOnPointerReturn()
+    {
+        var window = OpenWindow();
+        var sidebar = window.FindControl<Border>("Sidebar")!;
+        window.FindControl<Button>("SidebarPin")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        foreach (var point in new[] { new Point(100, 40), new Point(60, 80), new Point(150, 250) })
+        {
+            window.MouseMove(point);
+            await Task.Delay(950, TestContext.Current.CancellationToken);
+            Assert.True(sidebar.IsVisible);
+            Assert.Equal(0, Assert.IsType<Avalonia.Media.TranslateTransform>(sidebar.RenderTransform).X);
+        }
+        window.MouseMove(new Point(700, 200));
+        await Task.Delay(450, TestContext.Current.CancellationToken);
+        window.MouseMove(new Point(150, 250));
+        await Task.Delay(950, TestContext.Current.CancellationToken);
+        Assert.True(sidebar.IsVisible);
+        Assert.Equal(0, Assert.IsType<Avalonia.Media.TranslateTransform>(sidebar.RenderTransform).X);
+        window.MouseMove(new Point(700, 200));
+        await Task.Delay(950, TestContext.Current.CancellationToken);
+        Assert.False(sidebar.IsVisible);
+    }
+
+    [AvaloniaFact]
     public void FindShortcutsFocusInputNavigateWrapAndClearHighlightsWithoutEditing()
     {
         var workspace = new NoteWorkspace(_root);

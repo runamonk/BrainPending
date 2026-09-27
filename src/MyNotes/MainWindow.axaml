@@ -7,11 +7,17 @@
         Title="MyNotes" Width="1240" Height="820" MinWidth="850" MinHeight="550"
         Background="{DynamicResource AppSurfaceBrush}">
   <Grid RowDefinitions="*,36">
-    <Grid ColumnDefinitions="300,5,*">
-      <Border Background="{DynamicResource AppSurfaceBrush}" Padding="16,22,16,12">
-        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
-          <TextBox x:Name="SearchBox" Grid.Row="1" PlaceholderText="Search titles in this folder…" CornerRadius="7" FontSize="13" TextChanged="Search_Changed" />
-          <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,6,0,6">
+    <Grid x:Name="WorkspaceGrid" ColumnDefinitions="300,5,*" ClipToBounds="True">
+      <Button x:Name="SidebarReveal" Grid.ColumnSpan="3" ZIndex="1" IsVisible="False" Width="15" Padding="0" HorizontalAlignment="Left" VerticalAlignment="Stretch" AutomationProperties.Name="Show sidebar" PointerEntered="SidebarReveal_PointerEntered" PointerExited="Sidebar_PointerExited" Click="SidebarReveal_Click">
+        <Button.Template>
+          <ControlTemplate><Border Background="Transparent" /></ControlTemplate>
+        </Button.Template>
+      </Button>
+      <Border x:Name="Sidebar" ZIndex="2" Background="{DynamicResource AppSurfaceBrush}" Padding="16,22,16,12" PointerEntered="Sidebar_PointerEntered" PointerExited="Sidebar_PointerExited">
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+          <TextBox x:Name="SearchBox" Grid.Row="0" PlaceholderText="Search titles in this folder…" CornerRadius="7" FontSize="13" TextChanged="Search_Changed" />
+          <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,6,0,6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
             <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Notebook home" AutomationProperties.Name="Notebook home" Click="Home_Click">
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 1,9 L 10,2 L 19,9 M 4,7 L 4,18 L 8,18 L 8,12 L 12,12 L 12,18 L 16,18 L 16,7" />
             </Button>
@@ -25,7 +31,14 @@
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 9,18 L 3,18 L 3,2 L 15,2 L 15,7 M 6,2 L 6,18 M 14,9 A 4,4 0 1 0 14,17 A 4,4 0 1 0 14,9 M 17,16 L 20,19" />
             </Button>
           </StackPanel>
-          <Grid Grid.Row="3" ClipToBounds="True">
+            <Button x:Name="SidebarPin" Grid.Column="1" Classes="quiet" HorizontalAlignment="Right" Width="32" Height="32" Padding="6" Click="SidebarPin_Click">
+              <Grid Width="20" Height="20">
+                <Path x:Name="SidebarPinnedFill" Fill="{DynamicResource AppTextBrush}" Opacity="0.3" Data="M 2,3 L 7,3 L 7,17 L 2,17 Z" />
+                <Path Stroke="{DynamicResource AppTextBrush}" StrokeThickness="1.5" StrokeJoin="Round" Data="M 2,3 L 18,3 L 18,17 L 2,17 Z M 7,3 L 7,17" />
+              </Grid>
+            </Button>
+          </Grid>
+          <Grid Grid.Row="2" ClipToBounds="True">
             <ListBox x:Name="Browser" Background="Transparent" SelectionChanged="Browser_SelectionChanged" AutomationProperties.Name="Folders and notes">
               <ListBox.Styles>
                 <Style Selector="ListBoxItem">
@@ -44,10 +57,10 @@
             </ListBox>
             <TextBlock x:Name="FolderEmpty" IsVisible="False" IsHitTestVisible="False" Opacity="0.5" Margin="12,50,50,30" TextWrapping="Wrap" />
           </Grid>
-          <TextBlock x:Name="ItemCount" Grid.Row="4" FontSize="11" Opacity="0.5" Margin="10,14,0,0" />
+          <TextBlock x:Name="ItemCount" Grid.Row="3" FontSize="11" Opacity="0.5" Margin="10,14,0,0" />
         </Grid>
       </Border>
-      <GridSplitter Grid.Column="1" Background="{DynamicResource AppLineBrush}" ResizeDirection="Columns" />
+      <GridSplitter x:Name="SidebarSplitter" Grid.Column="1" Background="{DynamicResource AppLineBrush}" ResizeDirection="Columns" />
       <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto">
         <Border BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1" Padding="28,20,28,18">
           <Grid RowDefinitions="Auto,Auto,Auto">

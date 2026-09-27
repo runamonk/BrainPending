@@ -5,7 +5,7 @@ namespace MyNotes;
 internal sealed record NotebookSettings(string? NotebookPath = null, bool DarkTheme = false, int? WindowX = null, int? WindowY = null,
     string[]? RecentNotebooks = null, bool SkipAutomaticNotebook = false,
     double? WindowWidth = null, double? WindowHeight = null, bool WindowMaximized = false,
-    Dictionary<string, string>? LastOpenNotes = null, string? ColorTheme = null)
+    Dictionary<string, string>? LastOpenNotes = null, string? ColorTheme = null, bool SidebarPinned = true)
 {
     public string? LastNote(string notebook) => LastOpenNotes?.FirstOrDefault(p =>
         string.Equals(p.Key, notebook, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)).Value;

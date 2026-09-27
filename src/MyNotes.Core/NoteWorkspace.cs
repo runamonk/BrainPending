@@ -57,13 +57,13 @@ public sealed class NoteWorkspace
         return full;
     }
 
-    public IReadOnlyList<WorkspaceEntry> List(string folder, string search = "")
+    public IReadOnlyList<WorkspaceEntry> List(string folder, string search = "", bool recursive = false)
     {
         folder = CheckPath(folder);
         var pins = ReadPins();
         var options = new EnumerationOptions
         {
-            RecurseSubdirectories = !string.IsNullOrWhiteSpace(search),
+            RecurseSubdirectories = recursive || !string.IsNullOrWhiteSpace(search),
             AttributesToSkip = FileAttributes.ReparsePoint | FileAttributes.Hidden | FileAttributes.System,
             IgnoreInaccessible = true
         };

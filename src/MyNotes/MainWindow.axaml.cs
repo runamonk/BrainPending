@@ -198,6 +198,7 @@ public partial class MainWindow : Window
         var workspace = new NoteWorkspace(path);
         _watcher?.Dispose();
         _workspace = workspace;
+        _recentNotes.Clear();
         _folder = workspace.Root;
         ClearNote(forget: false);
         SearchBox.Text = "";
@@ -434,6 +435,8 @@ public partial class MainWindow : Window
         }
     }
 
+    private readonly List<string> _recentNotes = [];
+
     private void LoadNote(NoteSnapshot note)
     {
         if (!RtfDocumentFormatter.TryParse(note.Rtf, out var document, out var error))
@@ -454,6 +457,8 @@ public partial class MainWindow : Window
             Title = NoteTitle.Text + " — MyNotes";
         }
         finally { _loading = false; }
+        _recentNotes.RemoveAll(p => string.Equals(p, note.Path, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+        _recentNotes.Insert(0, note.Path);
         RememberOpenNote(note.Path);
     }
 
@@ -702,12 +707,32 @@ public partial class MainWindow : Window
     private void Dismiss_Click(object? sender, RoutedEventArgs e) => Notice.IsVisible = false;
     private void ShowNotice(string text) { NoticeText.Text = text; Notice.IsVisible = true; }
 
+    private async void SwitchNote_Click(object? sender, RoutedEventArgs e) => await Run(SwitchNote);
+
+    private async Task SwitchNote()
+    {
+        if (_workspace == null) return;
+        var dialog = new NoteSwitcherDialog(_workspace, _recentNotes, _note?.Path);
+        _inDialog = true;
+        string? selected;
+        try { selected = await dialog.ShowDialog<string?>(this); }
+        finally { _inDialog = false; }
+        if (selected == null || !SaveCurrent()) return;
+        LoadNote(_workspace.Read(selected));
+        _folder = Path.GetDirectoryName(selected)!;
+        SearchBox.Text = "";
+        RefreshBrowser(true);
+        EditorView.Editor.Focus();
+    }
+
     private async void OnShortcut(object? sender, KeyEventArgs e)
     {
         if (_inDialog || _titleEditingPath != null) return;
         if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.S) { e.Handled = true; SaveCurrent(); }
         else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.N) { e.Handled = true; await NewNote(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; SearchBox.Focus(); }
+        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.O)
+        { e.Handled = true; await Run(SwitchNote); }
         else if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Up && _workspace != null && _folder != _workspace.Root)
         { e.Handled = true; await Run(() => Navigate(_workspace.ParentFolder(_folder), true)); }
     }

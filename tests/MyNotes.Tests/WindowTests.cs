@@ -221,6 +221,48 @@ public sealed class WindowTests : IDisposable
         window.Close();
     }
 
+    [AvaloniaFact]
+    public async Task NoteSwitcherSearchesNotebookAndTogglesPreviousNote()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var first = workspace.CreateNote(_root, "First");
+        var folder = workspace.CreateFolder(_root, "Projects");
+        var second = workspace.CreateNote(folder, "Second");
+        var trashed = workspace.CreateNote(workspace.TrashPath, "Deleted");
+        var window = OpenWindow();
+        Select(window, first.Path);
+        window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Keep these edits");
+        window.KeyPress(Key.O, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.O, "o");
+        var dialog = Assert.IsType<NoteSwitcherDialog>(Assert.Single(window.OwnedWindows));
+        var results = dialog.FindControl<ListBox>("Results")!;
+        Assert.DoesNotContain(results.Items.OfType<NoteSwitchItem>(), n => n.Path == trashed.Path);
+        dialog.FindControl<TextBox>("Query")!.Text = "projects second";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(second.Path, Assert.IsType<NoteSwitchItem>(results.SelectedItem).Path);
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        await Task.Yield();
+        Assert.Equal("Second", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Contains("Keep these edits", workspace.Read(first.Path).Rtf);
+        window.KeyPress(Key.O, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.O, "o");
+        dialog = Assert.IsType<NoteSwitcherDialog>(Assert.Single(window.OwnedWindows));
+        Assert.Equal(first.Path, Assert.IsType<NoteSwitchItem>(dialog.FindControl<ListBox>("Results")!.SelectedItem).Path);
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        await Task.Yield();
+        Assert.Equal("First", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        window.KeyPress(Key.O, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.O, "o");
+        dialog = Assert.IsType<NoteSwitcherDialog>(Assert.Single(window.OwnedWindows));
+        Assert.Equal(second.Path, Assert.IsType<NoteSwitchItem>(dialog.FindControl<ListBox>("Results")!.SelectedItem).Path);
+        dialog.FindControl<TextBox>("Query")!.Text = "no such note";
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(dialog.FindControl<ListBox>("Results")!.SelectedItem);
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.True(dialog.IsVisible);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        await Task.Yield();
+        Assert.Equal("First", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        window.Close();
+    }
+
     private static IEnumerable<Button> RecentButtons(Flyout menu) =>
         ((StackPanel)menu.Content!).Children.OfType<Grid>().SelectMany(g => g.Children.OfType<Button>()).Where(b => b.Tag is string);
 

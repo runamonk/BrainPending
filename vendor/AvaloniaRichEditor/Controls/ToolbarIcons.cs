@@ -42,6 +42,8 @@ internal static class ToolbarIcons
     /// <summary>Built-in vector for a toolbar slot, or null if that slot uses a styled-text glyph.</summary>
     public static Control? Create(RichEditorIcon kind) => kind switch
     {
+        RichEditorIcon.InsertLink => Build(20,
+            ("M9 7 H7 A5 5 0 0 0 7 17 H9 M15 7 H17 A5 5 0 0 1 17 17 H15 M8 12 H16", false)),
         RichEditorIcon.FormatPainter => Build(20,
             ("M4 5 H15 V9 H4 Z", false),
             ("M15 7 H18 V11 H10.5 V13", false),

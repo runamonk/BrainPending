@@ -18,7 +18,7 @@
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="local:BrowserItem">
             <Grid ColumnDefinitions="28,*" MinHeight="28">
-              <Path Data="{Binding IconData}" Width="20" Height="20" Stroke="#789481" StrokeThickness="1.5" VerticalAlignment="Center" />
+              <Path Data="{Binding IconData}" Width="20" Height="20" Stroke="{DynamicResource AppIconBrush}" StrokeThickness="1.5" VerticalAlignment="Center" />
               <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </Grid>
           </DataTemplate>
@@ -26,10 +26,10 @@
       </ListBox>
       <TextBlock x:Name="EmptyMessage" Text="No folders here" IsVisible="False" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
     </Grid>
-    <TextBlock x:Name="Error" Grid.Row="3" Foreground="#E88787" TextWrapping="Wrap" Margin="0,8,0,0" />
+    <TextBlock x:Name="Error" Grid.Row="3" Foreground="{DynamicResource AppErrorBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
     <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
       <Button Classes="action quiet" Content="Cancel" Click="Cancel_Click" />
-      <Button x:Name="MoveButton" Classes="action" Content="Move here" Background="#526B59" Foreground="White" Click="Move_Click" />
+      <Button x:Name="MoveButton" Classes="action" Content="Move here" Background="{DynamicResource AppAccentBrush}" Foreground="{DynamicResource AppAccentTextBrush}" Click="Move_Click" />
     </StackPanel>
   </Grid>
 </Window>

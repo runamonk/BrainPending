@@ -40,8 +40,16 @@ public partial class RichEditor : Control
         if (!UseThemeColors || ActualThemeVariant != Avalonia.Styling.ThemeVariant.Dark
             || ShowPageBoundaries || background is ISolidColorBrush { Color.A: > 0 }) return ink;
         if (ink is ISolidColorBrush solid && solid.Color.R < 100 && solid.Color.G < 100 && solid.Color.B < 100)
-            return Brushes.WhiteSmoke;
+            return ThemeForeground;
         return ink;
+    }
+
+    public static readonly StyledProperty<IBrush> ThemeForegroundProperty =
+        AvaloniaProperty.Register<RichEditor, IBrush>(nameof(ThemeForeground), Brushes.WhiteSmoke);
+    public IBrush ThemeForeground
+    {
+        get => GetValue(ThemeForegroundProperty);
+        set => SetValue(ThemeForegroundProperty, value);
     }
 
 
@@ -299,12 +307,12 @@ public partial class RichEditor : Control
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == ThemeVariantScope.ActualThemeVariantProperty || change.Property == UseThemeColorsProperty)
+        if (change.Property == ThemeVariantScope.ActualThemeVariantProperty || change.Property == UseThemeColorsProperty || change.Property == ThemeForegroundProperty)
         {
             _layoutCache.Clear();
             _tableLayoutCache.Clear();
             if (UseThemeColors)
-                SetCurrentValue(CaretBrushProperty, ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark ? Brushes.WhiteSmoke : Brushes.Black);
+                SetCurrentValue(CaretBrushProperty, ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark ? ThemeForeground : Brushes.Black);
             InvalidateMeasure();
             InvalidateVisual();
         }

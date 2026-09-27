@@ -34,6 +34,49 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void InlineTitleRenameSavesEditsAndUpdatesRememberedNote()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Original");
+        var window = OpenWindow();
+        Select(window, note.Path);
+        window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Keep this edit");
+        window.BeginTitleEditing();
+        var input = window.FindControl<TextBox>("NoteTitleInput")!;
+        input.Text = "Renamed";
+        input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+        Assert.False(File.Exists(note.Path));
+        var target = Path.Combine(_root, "Renamed.rtf");
+        Assert.Contains("Keep this edit", workspace.Read(target).Rtf);
+        Assert.Equal("Renamed", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.False(input.IsVisible);
+        Assert.Equal("Renamed.rtf", NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json")).LastNote(_root));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void InlineTitleRenameRejectsDuplicatesAndEscapeCancels()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Original");
+        var other = workspace.CreateNote(_root, "Existing");
+        var window = OpenWindow();
+        Select(window, note.Path);
+        window.BeginTitleEditing();
+        var input = window.FindControl<TextBox>("NoteTitleInput")!;
+        input.Text = "Existing";
+        input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+        Assert.True(window.FindControl<TextBlock>("NoteTitleError")!.IsVisible);
+        Assert.True(input.IsVisible);
+        Assert.Equal(other.Revision, workspace.Read(other.Path).Revision);
+        input.Text = "Cancelled";
+        input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
+        Assert.Equal("Original", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.False(File.Exists(Path.Combine(_root, "Cancelled.rtf")));
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void LastOpenNoteRestoresItsFolderAndSelection()
     {
         var workspace = new NoteWorkspace(_root);

@@ -9,15 +9,57 @@
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FAFAFA" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#202020" />
+                    <SolidColorBrush x:Key="AppAccentBrush" Color="#526B59" />
+                    <SolidColorBrush x:Key="AppAccentTextBrush" Color="White" />
+                    <SolidColorBrush x:Key="AppIconBrush" Color="#526B59" />
+                    <SolidColorBrush x:Key="AppSelectionBrush" Color="#C8DCCE" />
+                    <SolidColorBrush x:Key="AppNoticeBrush" Color="#FFF0CA" />
+                    <SolidColorBrush x:Key="AppNoticeTextBrush" Color="#594718" />
+                    <SolidColorBrush x:Key="AppErrorBrush" Color="#B42318" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#202020" />
+                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#282A36" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#F8F8F2" />
+                    <SolidColorBrush x:Key="AppAccentBrush" Color="#BD93F9" />
+                    <SolidColorBrush x:Key="AppAccentTextBrush" Color="#282A36" />
+                    <SolidColorBrush x:Key="AppIconBrush" Color="#8BE9FD" />
+                    <SolidColorBrush x:Key="AppSelectionBrush" Color="#44475A" />
+                    <SolidColorBrush x:Key="AppNoticeBrush" Color="#44475A" />
+                    <SolidColorBrush x:Key="AppNoticeTextBrush" Color="#F1FA8C" />
+                    <SolidColorBrush x:Key="AppErrorBrush" Color="#FF5555" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
     <Application.Styles>
-        <FluentTheme />
+        <FluentTheme>
+            <FluentTheme.Palettes>
+                <ColorPaletteResources x:Key="Dark" Accent="#BD93F9"
+                    RegionColor="#282A36" AltHigh="#282A36" AltMedium="#282A36" AltLow="#282A36"
+                    AltMediumHigh="#282A36" AltMediumLow="#282A36"
+                    BaseHigh="#F8F8F2" BaseMediumHigh="#F8F8F2" BaseMedium="#BFC3D9"
+                    BaseMediumLow="#6272A4" BaseLow="#44475A"
+                    ChromeHigh="#6272A4" ChromeMedium="#44475A" ChromeMediumLow="#282A36"
+                    ChromeLow="#282A36" ChromeAltLow="#44475A" ChromeBlackHigh="#21222C"
+                    ChromeWhite="#F8F8F2" ChromeDisabledHigh="#6272A4" ChromeDisabledLow="#44475A" />
+            </FluentTheme.Palettes>
+        </FluentTheme>
+        <Style Selector="Window">
+            <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+        </Style>
+        <Style Selector="Button.primary">
+            <Setter Property="Background" Value="{DynamicResource AppAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppAccentTextBrush}" />
+        </Style>
+        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AppSelectionBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+        </Style>
+        <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AppSelectionBrush}" />
+        </Style>
         <Style Selector="Button.action">
             <Setter Property="CornerRadius" Value="7" />
             <Setter Property="Padding" Value="12,8" />

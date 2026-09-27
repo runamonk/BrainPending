@@ -22,6 +22,8 @@ dotnet run --project src/MyNotes -- --notes ./Notes
 - Individual `.rtf` files in real folders.
 - Formatting toolbar: fonts, size, bold/italic/underline/strike, colours,
   highlighting, headings, alignment, lists, indentation, and line spacing.
+- Compact toolbar keeps common text controls and a chain-link button in one row;
+  the “…” flyout exposes undo/redo, paragraph formatting, lists, inserts and clear formatting.
 - Image insertion, clipboard images, and resize handles. Click an image to select
   it; drag its corner to resize while retaining its proportions.
 - Insert/edit links from the toolbar; right-click an existing link to edit/remove
@@ -41,12 +43,15 @@ dotnet run --project src/MyNotes -- --notes ./Notes
 - Light/dark themes.
 - Split Open notebook button: click the label to browse, or the arrow for the ten
   most recently opened notebooks, remembered between sessions.
-- Dark mode uses a consistent charcoal surface, including the editor and toolbar.
+- Dark mode uses the Dracula palette, including the editor, toolbar, dialogs,
+  cyan folder icons, purple accents and muted selection backgrounds.
   Dark document ink is lightened for display without changing saved RTF colours.
 - Main-window size, position and maximized state are remembered on close and
   restored within an available monitor.
 - Each notebook remembers its last open note and restores its folder and selection.
   Missing or unreadable notes are skipped without preventing the notebook from opening.
+- Double-click the open note's title to rename it inline. Enter saves the name;
+  Escape or clicking away cancels the title edit.
 - File watching plus a three-second fallback scan for external changes.
 
 ## Portable Windows build

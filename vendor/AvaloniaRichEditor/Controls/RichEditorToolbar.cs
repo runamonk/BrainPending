@@ -32,6 +32,15 @@ namespace AvaloniaRichEditor.Controls;
 /// </summary>
 public partial class RichEditorToolbar : UserControl
 {
+    /// <summary>Show common character formatting inline and other commands in a flyout.</summary>
+    public static readonly StyledProperty<bool> CompactProperty =
+        AvaloniaProperty.Register<RichEditorToolbar, bool>(nameof(Compact));
+    public bool Compact
+    {
+        get => GetValue(CompactProperty);
+        set => SetValue(CompactProperty, value);
+    }
+
     /// <inheritdoc cref="Target"/>
     public static readonly StyledProperty<RichEditor?> TargetProperty =
         AvaloniaProperty.Register<RichEditorToolbar, RichEditor?>(nameof(Target));
@@ -178,6 +187,7 @@ public partial class RichEditorToolbar : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == CompactProperty) { Build(); Sync(); }
         if (change.Property == TargetProperty)
         {
             if (change.OldValue is RichEditor old)
@@ -231,6 +241,7 @@ public partial class RichEditorToolbar : UserControl
     private void Build()
     {
         var items = new System.Collections.Generic.List<Control>();
+        Control? colorButton = null, highlightButton = null, linkButton = null;
         void Add(Control c) => items.Add(c);
 
         Button Btn(object content, string tip, Action click, RichEditorIcon? icon = null)
@@ -267,7 +278,10 @@ public partial class RichEditorToolbar : UserControl
                 VerticalAlignment = VerticalAlignment.Center,
                 FontSize = 12,
                 // The Fluent theme's default combo border is much darker than the rest of the strip.
-                BorderBrush = new SolidColorBrush(Color.Parse("#DCDCDC")),
+                BorderBrush = Compact ? Brushes.Transparent : new SolidColorBrush(Color.Parse("#DCDCDC")),
+                BorderThickness = Compact ? new Thickness(0) : new Thickness(1),
+                Background = Brushes.Transparent,
+                Padding = Compact ? new Thickness(6, 2) : new Thickness(8, 4),
             };
             ToolTip.SetTip(cb, tip);
             // A combo legitimately needs focus while its list is open, so it can't simply refuse it like
@@ -324,8 +338,8 @@ public partial class RichEditorToolbar : UserControl
         // Color pickers (Normal+)
         if (normal)
         {
-            Add(BuildColorButton(highlight: false));
-            Add(BuildColorButton(highlight: true));
+            Add(colorButton = BuildColorButton(highlight: false));
+            Add(highlightButton = BuildColorButton(highlight: true));
             Add(Div());
         }
 
@@ -429,7 +443,7 @@ public partial class RichEditorToolbar : UserControl
         _imageBtn = Btn("🖼", Loc("InsertImage"), () => { _ = Target?.InsertImageFromFileAsync(); }, RichEditorIcon.InsertImage);
         _dividerBtn = Btn("―", Loc("InsertDivider"), () => Target?.InsertDivider(), RichEditorIcon.InsertDivider);
         Add(_tableBtn); Add(_imageBtn); Add(_dividerBtn);
-        Add(Btn("Link", "Insert or edit hyperlink", () => { _ = Target?.EditLinkFromToolbarAsync(); }, RichEditorIcon.InsertLink));
+        Add(linkButton = Btn("Link", "Insert or edit hyperlink", () => { _ = Target?.EditLinkFromToolbarAsync(); }, RichEditorIcon.InsertLink));
         Add(Btn("Clear", "Clear formatting", () => Target?.ClearFormatting()));
         }
 
@@ -440,6 +454,37 @@ public partial class RichEditorToolbar : UserControl
             if (ShowFileActions) { Add(Div()); BuildFileActions(items); }
         }
         } // end editable
+
+        if (Compact && !ro)
+        {
+            var primary = new System.Collections.Generic.List<Control>();
+            foreach (var control in new Control?[] { _boldBtn, _italicBtn, _underlineBtn, _strikeBtn,
+                colorButton, highlightButton, _sizeCombo, _fontCombo, linkButton })
+                if (control != null) primary.Add(control);
+            var advanced = new WrapPanel { Orientation = Orientation.Horizontal, MaxWidth = 440 };
+            foreach (var control in items)
+            {
+                if (primary.Contains(control) || control is Border { Width: 1 }) continue;
+                DisableButtonFocus(control);
+                advanced.Children.Add(control);
+            }
+            var more = Btn("⋯", "More formatting", () => { });
+            more.Name = "MoreFormattingButton";
+            more.Flyout = PickerFlyout(new Flyout
+            {
+                Content = new StackPanel
+                {
+                    Spacing = 8,
+                    Children =
+                    {
+                        new TextBlock { Text = "More formatting", FontWeight = FontWeight.SemiBold },
+                        advanced
+                    }
+                }
+            });
+            primary.Add(more);
+            items = primary;
+        }
 
         // When the host is narrower than the strip, items wrap to additional rows instead of
         // clipping or scrolling. WrapPanel never mutates the visual tree during layout, so it is
@@ -532,7 +577,7 @@ public partial class RichEditorToolbar : UserControl
         {
             var swatch = new Border
             {
-                Height = 6, MinWidth = 24,
+                Height = Compact ? 2 : 6, MinWidth = Compact ? 16 : 24,
                 CornerRadius = new CornerRadius(1),
                 Background = initial,
                 Margin = new Thickness(0, 2, 0, 0),

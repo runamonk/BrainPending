@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -34,6 +35,7 @@ public partial class MainWindow : Window
     private readonly MenuFlyout _recentNotebooksMenu = new();
     private readonly string? _startupPath;
     private bool _closed;
+    private string? _titleEditingPath;
 
     public MainWindow() : this(null) { }
 
@@ -49,9 +51,12 @@ public partial class MainWindow : Window
         RestoreWindowBounds();
         RichEditorLocalization.Language = "en";
         EditorView.Toolbar.ToolbarLevel = ToolbarLevel.Normal;
+        EditorView.Toolbar.Compact = true;
         EditorView.Editor.DefaultFontFamily = new FontFamily("Segoe UI");
         EditorView.Editor.DefaultFontSize = 12;
         EditorView.Editor.UseThemeColors = true;
+        EditorView.Editor.Bind(RichEditor.ThemeForegroundProperty, new DynamicResourceExtension("AppTextBrush"));
+        EditorView.Editor.Bind(RichEditor.SelectionBrushProperty, new DynamicResourceExtension("AppSelectionBrush"));
         EditorView.Editor.Margin = new Thickness(32, 24);
         EditorView.Editor.AllowRemoteImagesOnPaste = false;
         EditorView.Editor.FontFamilyChoices = ["Segoe UI", "Arial", "Calibri", "Georgia", "Times New Roman", "Consolas"];
@@ -329,8 +334,6 @@ public partial class MainWindow : Window
             Browser.SelectedItem = rows.FirstOrDefault(e => e.Path == _note?.Path);
         }
         finally { _refreshing = false; }
-        FolderHeading.IsVisible = _folder != _workspace.Root;
-        FolderHeading.Text = _workspace.IsTrash(_folder) ? "Trash" : Path.GetFileName(_folder);
         FolderEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? (_workspace.IsTrash(_folder) ? "Trash is empty." : "A fresh start.\nCreate your first note here.") : "No matching titles.";
         FolderEmpty.IsVisible = rows.All(r => r.IsUp);
         ItemCount.Text = $"{entries.Count(e => !e.IsFolder)} notes · {entries.Count(e => e.IsFolder)} folders";
@@ -398,6 +401,7 @@ public partial class MainWindow : Window
     {
         if (!RtfDocumentFormatter.TryParse(note.Rtf, out var document, out var error))
             throw new IOException("This RTF could not be opened: " + error + ". The file has not been changed.");
+        CancelTitleEditing();
         _loading = true;
         try
         {
@@ -409,7 +413,6 @@ public partial class MainWindow : Window
             Breadcrumb.Text = (_workspace!.IsInTrash(note.Path) ? "Trash  /  " + Path.GetRelativePath(_workspace.TrashPath, note.Path) : "Notebook  /  " + Path.GetRelativePath(_workspace.Root, note.Path)).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
             EditorView.IsVisible = true;
             Welcome.IsVisible = false;
-            RenameNoteButton.IsVisible = true;
             SaveStatus.Text = "Saved locally";
             Title = NoteTitle.Text + " — MyNotes";
         }
@@ -419,13 +422,13 @@ public partial class MainWindow : Window
 
     private void ClearNote(bool forget = true)
     {
+        CancelTitleEditing();
         if (forget && _note != null) RememberOpenNote(null);
         _note = null;
         _dirty = false;
         _autosave.Stop();
         EditorView.IsVisible = false;
         Welcome.IsVisible = true;
-        RenameNoteButton.IsVisible = false;
         NoteTitle.Text = "Make room for an idea.";
         Breadcrumb.Text = "Your notebook";
         Title = "MyNotes";
@@ -478,9 +481,59 @@ public partial class MainWindow : Window
         try { RefreshBrowser(); } catch (Exception error) { ShowNotice(error.Message); }
     }
     private async void Home_Click(object? sender, RoutedEventArgs e) => await Run(async () => { if (_workspace != null) await Navigate(_workspace.Root, true); });
-    private async void RenameNote_Click(object? sender, RoutedEventArgs e)
+    private void NoteTitle_DoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (_note != null) await Rename(_note.Path, Path.GetFileNameWithoutExtension(_note.Path));
+        if (_note == null) return;
+        e.Handled = true;
+        BeginTitleEditing();
+    }
+
+    internal void BeginTitleEditing()
+    {
+        if (_note == null) return;
+        _titleEditingPath = _note.Path;
+        NoteTitleInput.Text = Path.GetFileNameWithoutExtension(_note.Path);
+        NoteTitle.IsVisible = false;
+        NoteTitleInput.IsVisible = true;
+        NoteTitleError.IsVisible = false;
+        NoteTitleInput.Focus();
+        NoteTitleInput.SelectAll();
+    }
+
+    private void CancelTitleEditing()
+    {
+        _titleEditingPath = null;
+        NoteTitleInput.IsVisible = false;
+        NoteTitle.IsVisible = true;
+        NoteTitleError.IsVisible = false;
+    }
+
+    private void NoteTitleInput_LostFocus(object? sender, RoutedEventArgs e) => CancelTitleEditing();
+
+    private void NoteTitleInput_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape) { e.Handled = true; CancelTitleEditing(); EditorView.Editor.Focus(); }
+        else if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            try
+            {
+                if (_workspace == null || _note == null || _titleEditingPath == null) return;
+                var source = _titleEditingPath;
+                var name = NoteWorkspace.ValidateName(NoteTitleInput.Text ?? "");
+                if (!SaveCurrent()) throw new IOException("Save the note successfully before renaming it.");
+                if (_note.Path != source) throw new IOException("The note changed while editing. Cancel and try renaming the current note.");
+                var target = _workspace.Rename(source, name);
+                LoadNote(_workspace.Read(target));
+                RefreshBrowser(true);
+                EditorView.Editor.Focus();
+            }
+            catch (Exception error)
+            {
+                NoteTitleError.Text = error.Message;
+                NoteTitleError.IsVisible = true;
+            }
+        }
     }
 
     private async Task Rename(string path, string name) => await Run(async () =>
@@ -614,7 +667,7 @@ public partial class MainWindow : Window
 
     private async void OnShortcut(object? sender, KeyEventArgs e)
     {
-        if (_inDialog) return;
+        if (_inDialog || _titleEditingPath != null) return;
         if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.S) { e.Handled = true; SaveCurrent(); }
         else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.N) { e.Handled = true; await NewNote(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; SearchBox.Focus(); }
@@ -633,7 +686,7 @@ public partial class MainWindow : Window
         var input = new TextBox { Text = initial, CornerRadius = new CornerRadius(6) };
         var error = new TextBlock { Foreground = Brushes.IndianRed, TextWrapping = TextWrapping.Wrap };
         var dialog = Dialog(title);
-        var accept = new Button { Content = action, Classes = { "action" }, Background = Brush.Parse("#526B59"), Foreground = Brushes.White };
+        var accept = new Button { Content = action, Classes = { "action", "primary" } };
         var cancel = new Button { Content = "Cancel", Classes = { "action", "quiet" } };
         void Submit()
         {

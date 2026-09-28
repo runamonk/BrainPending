@@ -114,6 +114,7 @@ public partial class MainWindow
         SidebarSplitter.IsVisible = pinned;
         SidebarReveal.IsVisible = !pinned;
         SidebarPinnedFill.IsVisible = pinned;
+        SidebarPinIcon.RenderTransform = new RotateTransform(pinned ? 25 : 0);
         var label = pinned ? "Unpin sidebar (auto-hide)" : "Pin sidebar";
         ToolTip.SetTip(SidebarPin, label);
         AutomationProperties.SetName(SidebarPin, label);

@@ -51,9 +51,9 @@
               </StackPanel>
             </StackPanel>
             <Button x:Name="SidebarPin" Grid.Column="1" Classes="quiet" HorizontalAlignment="Right" Width="32" Height="32" Padding="6" Click="SidebarPin_Click">
-              <Grid Width="20" Height="20">
-                <Path x:Name="SidebarPinnedFill" Fill="{DynamicResource AppTextBrush}" Opacity="0.3" Data="M 2,3 L 7,3 L 7,17 L 2,17 Z" />
-                <Path Stroke="{DynamicResource AppTextBrush}" StrokeThickness="1.5" StrokeJoin="Round" Data="M 2,3 L 18,3 L 18,17 L 2,17 Z M 7,3 L 7,17" />
+              <Grid x:Name="SidebarPinIcon" Width="20" Height="20" RenderTransformOrigin="50%,50%">
+                <Path x:Name="SidebarPinnedFill" Fill="{DynamicResource AppTextBrush}" Opacity="0.3" Data="M 7,2 L 13,2 L 13,8 L 16,13 L 4,13 L 7,8 Z" />
+                <Path Stroke="{DynamicResource AppTextBrush}" StrokeThickness="1.5" StrokeJoin="Round" Data="M 6,2 L 14,2 M 7,2 L 7,8 L 4,13 L 16,13 L 13,8 L 13,2 M 10,13 L 10,19" />
               </Grid>
             </Button>
           </Grid>

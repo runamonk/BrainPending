@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace MyNotes;
 
-internal sealed record NotebookSettings(string? NotebookPath = null, bool DarkTheme = false, int? WindowX = null, int? WindowY = null,
+internal sealed record NotebookSettings(string? NotebookPath = null, bool? DarkTheme = null, int? WindowX = null, int? WindowY = null,
     string[]? RecentNotebooks = null, bool SkipAutomaticNotebook = false,
     double? WindowWidth = null, double? WindowHeight = null, bool WindowMaximized = false,
     Dictionary<string, string>? LastOpenNotes = null, string? ColorTheme = null, bool SidebarPinned = true)

@@ -651,7 +651,7 @@ public partial class MainWindow : Window
         // Handle before ListBox selects the row: selecting a folder navigates into it.
         e.Handled = true;
         var row = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<ListBoxItem>().FirstOrDefault();
-        if (row?.DataContext is BrowserItem { CanManage: true } item)
+        if (row?.DataContext is BrowserItem item && (item.CanManage || item.IsTrash))
             CreateItemMenu(item).Open(row);
     }
 
@@ -659,12 +659,33 @@ public partial class MainWindow : Window
     {
         if (e.Key != Key.Apps && !(e.Key == Key.F10 && e.KeyModifiers == KeyModifiers.Shift)) return;
         e.Handled = true;
-        if (Browser.SelectedItem is BrowserItem { CanManage: true } item)
+        if (Browser.SelectedItem is BrowserItem item && (item.CanManage || item.IsTrash))
             CreateItemMenu(item).Open(Browser.ContainerFromItem(item) as Control ?? Browser);
     }
 
     internal ContextMenu CreateItemMenu(BrowserItem item)
     {
+        if (item.IsTrash)
+        {
+            var empty = new MenuItem
+            {
+                Header = "Empty trash…",
+                IsEnabled = _workspace != null && Directory.EnumerateFileSystemEntries(_workspace.CheckPath(_workspace.TrashPath)).Any()
+            };
+            empty.Click += async (_, _) => await Run(async () =>
+            {
+                if (_workspace == null || !SaveCurrent()) return;
+                if (!await Confirm("Empty trash?", "Everything in this notebook’s Trash will move to the Windows Recycle Bin.", "Empty trash")) return;
+                try { _workspace.EmptyTrash(RecycleItem); }
+                finally
+                {
+                    if (_note != null && _workspace.IsInTrash(_note.Path) && !File.Exists(_note.Path)) ClearNote();
+                    if (_workspace.IsInTrash(_folder) && !Directory.Exists(_folder)) _folder = _workspace.TrashPath;
+                    RefreshBrowser(true);
+                }
+            });
+            return CreateBrowserContextMenu([empty]);
+        }
         var rename = new MenuItem { Header = "Rename…" };
         rename.Click += async (_, _) => await Rename(item.Path, item.Name);
         if (!item.CanManage) return new ContextMenu();
@@ -712,6 +733,11 @@ public partial class MainWindow : Window
             actions.Add(new Separator());
         }
         actions.AddRange(new Control[] { rename, moveUp, moveTo, new Separator(), trash });
+        return CreateBrowserContextMenu(actions);
+    }
+
+    private ContextMenu CreateBrowserContextMenu(IEnumerable<Control> actions)
+    {
         var menu = new ContextMenu { ItemsSource = actions };
         menu.Opened += (_, _) => _sidebarMenuOpen = true;
         menu.Closed += (_, _) =>

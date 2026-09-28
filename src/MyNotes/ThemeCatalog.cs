@@ -22,10 +22,13 @@ internal sealed class ThemeCatalog
         FilePath = Path.Combine(directory, "themes.json");
     }
 
-    public AppColorTheme Resolve(NotebookSettings settings) =>
-        Themes.FirstOrDefault(t => string.Equals(t.Name, settings.ColorTheme, StringComparison.OrdinalIgnoreCase))
-        ?? Themes.FirstOrDefault(t => t.Name == (settings.DarkTheme ? "Dracula" : "Default"))
-        ?? AppThemes.Resolve(settings);
+    public AppColorTheme Resolve(NotebookSettings settings, bool? systemDark = null)
+    {
+        var fallback = AppThemes.Resolve(settings, systemDark);
+        return Themes.FirstOrDefault(t => string.Equals(t.Name, settings.ColorTheme, StringComparison.OrdinalIgnoreCase))
+            ?? Themes.FirstOrDefault(t => t.Name == fallback.Name)
+            ?? fallback;
+    }
 
     public void EnsureFile()
     {
@@ -36,6 +39,13 @@ internal sealed class ThemeCatalog
     {
         EnsureFile();
         var themes = Read();
+        // Add the new system-dark default to older catalogs without replacing edited palettes.
+        if (!themes.Any(t => string.Equals(t.Name, "Default Dark", StringComparison.OrdinalIgnoreCase)))
+        {
+            File.Copy(FilePath, FilePath + $".{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.bak");
+            themes = themes.Append(AppThemes.All.Single(t => t.Name == "Default Dark")).ToArray();
+            Write(themes);
+        }
         // Only publish a fully validated catalog; failed reloads keep the current palette.
         Themes = themes;
     }

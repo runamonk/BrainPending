@@ -1,7 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="MyNotes.App"
-             RequestedThemeVariant="Light">
+             RequestedThemeVariant="Default">
              <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
 
     <Application.Resources>
@@ -20,33 +20,22 @@
                     <SolidColorBrush x:Key="AppErrorBrush" Color="#B42318" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#282A36" />
-                    <SolidColorBrush x:Key="AppTextBrush" Color="#F8F8F2" />
-                    <SolidColorBrush x:Key="AppAccentBrush" Color="#BD93F9" />
-                    <SolidColorBrush x:Key="AppAccentTextBrush" Color="#282A36" />
-                    <SolidColorBrush x:Key="AppIconBrush" Color="#8BE9FD" />
-                    <SolidColorBrush x:Key="AppSelectionBrush" Color="#44475A" />
-                    <SolidColorBrush x:Key="AppLinkBrush" Color="#FF79C6" />
-                    <SolidColorBrush x:Key="AppNoticeBrush" Color="#44475A" />
-                    <SolidColorBrush x:Key="AppNoticeTextBrush" Color="#F1FA8C" />
-                    <SolidColorBrush x:Key="AppErrorBrush" Color="#FF5555" />
+                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#202020" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AppAccentBrush" Color="#60CDFF" />
+                    <SolidColorBrush x:Key="AppAccentTextBrush" Color="#202020" />
+                    <SolidColorBrush x:Key="AppIconBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AppSelectionBrush" Color="#383838" />
+                    <SolidColorBrush x:Key="AppLinkBrush" Color="#60CDFF" />
+                    <SolidColorBrush x:Key="AppNoticeBrush" Color="#383838" />
+                    <SolidColorBrush x:Key="AppNoticeTextBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AppErrorBrush" Color="#FF99A4" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
     <Application.Styles>
-        <FluentTheme>
-            <FluentTheme.Palettes>
-                <ColorPaletteResources x:Key="Dark" Accent="#BD93F9"
-                    RegionColor="#282A36" AltHigh="#282A36" AltMedium="#282A36" AltLow="#282A36"
-                    AltMediumHigh="#282A36" AltMediumLow="#282A36"
-                    BaseHigh="#F8F8F2" BaseMediumHigh="#F8F8F2" BaseMedium="#BFC3D9"
-                    BaseMediumLow="#6272A4" BaseLow="#44475A"
-                    ChromeHigh="#6272A4" ChromeMedium="#44475A" ChromeMediumLow="#282A36"
-                    ChromeLow="#282A36" ChromeAltLow="#44475A" ChromeBlackHigh="#21222C"
-                    ChromeWhite="#F8F8F2" ChromeDisabledHigh="#6272A4" ChromeDisabledLow="#44475A" />
-            </FluentTheme.Palettes>
-        </FluentTheme>
+        <FluentTheme />
          <Style Selector=":is(Control)">
             <Setter Property="ToolTip.Placement" Value="Top" />
             <Setter Property="ToolTip.VerticalOffset" Value="5" />

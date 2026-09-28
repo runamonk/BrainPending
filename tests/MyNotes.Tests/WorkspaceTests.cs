@@ -8,6 +8,36 @@ public sealed class WorkspaceTests : IDisposable
     private NoteWorkspace Workspace => new(Path.Combine(_temp, "Notes"));
 
     [Fact]
+    public void EmptyTrashRecyclesContentsAndKeepsTrashAndActiveNotes()
+    {
+        var w = Workspace;
+        var keep = w.CreateNote(w.Root, "Keep");
+        var deleted = w.CreateNote(w.Root, "Deleted");
+        var folder = w.CreateFolder(w.Root, "Deleted folder");
+        w.CreateNote(folder, "Nested");
+        var trashedNote = w.MoveToTrash(deleted.Path);
+        var trashedFolder = w.MoveToTrash(folder);
+        var recycled = new List<string>();
+        var bin = Path.Combine(_temp, "RecycleBin");
+        Directory.CreateDirectory(bin);
+        w.EmptyTrash(path =>
+        {
+            Assert.Equal(w.TrashPath, Path.GetDirectoryName(path));
+            recycled.Add(path);
+            var destination = Path.Combine(bin, Path.GetFileName(path));
+            if (Directory.Exists(path)) Directory.Move(path, destination);
+            else File.Move(path, destination);
+        });
+        Assert.Equal(2, recycled.Count);
+        Assert.Contains(trashedNote, recycled);
+        Assert.Contains(trashedFolder, recycled);
+        Assert.True(Directory.Exists(w.TrashPath));
+        Assert.Empty(Directory.GetFileSystemEntries(w.TrashPath));
+        Assert.True(File.Exists(keep.Path));
+        w.EmptyTrash(_ => Assert.Fail("Empty Trash should not recycle anything."));
+    }
+
+    [Fact]
     public void PinnedNotesSortFirstPersistAndUnpinWithoutChangingRtf()
     {
         var w = Workspace;

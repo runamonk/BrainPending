@@ -300,6 +300,13 @@ public sealed class NoteWorkspace
         }
     }
 
+    public void EmptyTrash(Action<string> recycle)
+    {
+        var trash = CheckPath(TrashPath);
+        foreach (var path in Directory.GetFileSystemEntries(trash))
+            RecycleFromTrash(path, recycle);
+    }
+
     public void RecycleFromTrash(string path, Action<string> recycle)
     {
         path = CheckPath(path, false);

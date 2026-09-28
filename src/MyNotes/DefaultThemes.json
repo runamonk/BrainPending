@@ -11,6 +11,17 @@
     "Link": "#2457A7"
   },
   {
+    "Name": "Default Dark",
+    "Dark": true,
+    "Surface": "#202020",
+    "Text": "#FFFFFF",
+    "Accent": "#60CDFF",
+    "Selection": "#383838",
+    "Icon": "#FFFFFF",
+    "Line": "#454545",
+    "Link": "#60CDFF"
+  },
+  {
     "Name": "Autobiography",
     "Dark": true,
     "Surface": "#302C28",

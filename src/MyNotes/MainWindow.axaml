@@ -4,7 +4,7 @@
         xmlns:rte="using:AvaloniaRichEditor.Controls"
         x:Class="MyNotes.MainWindow"
         Icon="/Assets/MyNotes.ico"
-        Title="MyNotes" Width="1240" Height="820" MinWidth="850" MinHeight="550"
+        Title="MyNotes" Width="1240" Height="820" MinWidth="850" MinHeight="550" WindowStartupLocation="CenterScreen"
         Background="{DynamicResource AppSurfaceBrush}">
   <Grid RowDefinitions="*,36">
     <Grid x:Name="WorkspaceGrid" ColumnDefinitions="300,5,*" ClipToBounds="True">

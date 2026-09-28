@@ -7,6 +7,39 @@ public sealed class ThemeCatalogTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "MyNotes-themes-" + Guid.NewGuid().ToString("N"));
     private ThemeCatalog Catalog() => new(Path.Combine(_root, "settings.json"));
 
+    [Theory]
+    [InlineData(false, "Default")]
+    [InlineData(true, "Default Dark")]
+    public void NewSettingsUseSystemThemeUntilUserChooses(bool systemDark, string expected)
+    {
+        var path = Path.Combine(_root, "settings.json");
+        var settings = NotebookSettings.Read(path);
+        Assert.Null(settings.DarkTheme);
+        Assert.Equal(expected, Catalog().Resolve(settings, systemDark).Name);
+        settings.Save(path);
+        Assert.Equal(expected, Catalog().Resolve(NotebookSettings.Read(path), systemDark).Name);
+        Assert.Equal("Default", Catalog().Resolve(settings with { DarkTheme = false }, true).Name);
+        Assert.Equal("Default Dark", Catalog().Resolve(settings with { DarkTheme = true }, false).Name);
+        Assert.Equal("Default", Catalog().Resolve(settings with { ColorTheme = "Default" }, true).Name);
+    }
+
+    [Fact]
+    public void OlderCatalogGetsDefaultDarkWithoutChangingDraculaOrCustomThemes()
+    {
+        var catalog = Catalog();
+        Directory.CreateDirectory(_root);
+        var original = AppThemes.All.Where(t => t.Name != "Default Dark").ToArray();
+        var json = JsonSerializer.Serialize(original);
+        File.WriteAllText(catalog.FilePath, json);
+        catalog.Reload();
+        Assert.Equal("Default Dark", catalog.Resolve(new NotebookSettings(), true).Name);
+        Assert.Equal(original.Single(t => t.Name == "Dracula"), catalog.Resolve(new NotebookSettings(ColorTheme: "Dracula"), true));
+        Assert.Equal("#282A36", catalog.Resolve(new NotebookSettings(ColorTheme: "Dracula")).Surface);
+        Assert.Equal("#202020", catalog.Resolve(new NotebookSettings(), true).Surface);
+        Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.GetFiles(_root, "*.bak"))));
+        foreach (var theme in original) Assert.Contains(theme, catalog.Themes);
+    }
+
     [Fact]
     public void CreatesEditableDefaultsAndLoadsCustomThemesAfterRestart()
     {
@@ -36,7 +69,7 @@ public sealed class ThemeCatalogTests : IDisposable
         Assert.Equal(invalid, File.ReadAllText(catalog.FilePath));
         Assert.ThrowsAny<Exception>(() => catalog.ResetBuiltIns());
         Assert.Equal(invalid, File.ReadAllText(catalog.FilePath));
-        Assert.Equal("Dracula", Catalog().Resolve(new NotebookSettings(DarkTheme: true)).Name);
+        Assert.Equal("Default Dark", Catalog().Resolve(new NotebookSettings(DarkTheme: true)).Name);
     }
 
     [Fact]

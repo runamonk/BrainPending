@@ -17,8 +17,13 @@ internal static class AppThemes
         return System.Text.Json.JsonSerializer.Deserialize<AppColorTheme[]>(stream)!;
     }
 
-    public static AppColorTheme Resolve(NotebookSettings settings) =>
-        All.FirstOrDefault(t => t.Name == settings.ColorTheme) ?? All.Single(t => t.Name == (settings.DarkTheme ? "Dracula" : "Default"));
+    public static AppColorTheme Resolve(NotebookSettings settings, bool? systemDark = null)
+    {
+        var dark = settings.DarkTheme ?? systemDark
+            ?? (Application.Current?.PlatformSettings?.GetColorValues().ThemeVariant == Avalonia.Platform.PlatformThemeVariant.Dark);
+        return All.FirstOrDefault(t => t.Name == settings.ColorTheme)
+            ?? All.Single(t => t.Name == (dark ? "Default Dark" : "Default"));
+    }
 
     public static void Apply(AppColorTheme theme)
     {

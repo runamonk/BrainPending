@@ -18,6 +18,13 @@ public sealed class WindowTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "MyNotes-window-" + Guid.NewGuid().ToString("N"));
     private readonly List<MainWindow> _windows = [];
 
+    [AvaloniaFact]
+    public void FirstLaunchCentersWindowWithoutSavedPosition()
+    {
+        var window = OpenWindow();
+        Assert.Equal(WindowStartupLocation.CenterScreen, window.WindowStartupLocation);
+    }
+
     private MainWindow OpenWindow()
     {
         var window = new MainWindow(_root, Path.Combine(_root, ".mynotes", "settings.json"));
@@ -670,7 +677,7 @@ public sealed class WindowTests : IDisposable
         var reopened = OpenWindow();
         Assert.Equal(Avalonia.Media.Color.Parse(AppThemes.All.Last().Surface), Assert.IsType<Avalonia.Media.SolidColorBrush>(reopened.Background).Color);
         reopened.Close();
-        Assert.Equal("Dracula", AppThemes.Resolve(new NotebookSettings(DarkTheme: true)).Name);
+        Assert.Equal("Default Dark", AppThemes.Resolve(new NotebookSettings(DarkTheme: true)).Name);
     }
 
     private static IEnumerable<Button> RecentButtons(Flyout menu) =>
@@ -961,7 +968,9 @@ public sealed class WindowTests : IDisposable
         var browser = window.FindControl<ListBox>("Browser")!;
         var trash = Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => i.IsTrash);
         Assert.False(trash.CanManage);
-        Assert.Empty(window.CreateItemMenu(trash).Items);
+        var emptyTrash = Assert.Single(window.CreateItemMenu(trash).Items.OfType<MenuItem>());
+        Assert.Equal("Empty trash…", emptyTrash.Header);
+        Assert.True(emptyTrash.IsEnabled);
         Select(window, workspace.TrashPath);
         Assert.Contains(browser.ItemsSource!.Cast<BrowserItem>(), i => i.Path == trashed);
         Assert.Equal(workspace.Root, Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => i.IsUp).Path);
@@ -973,6 +982,7 @@ public sealed class WindowTests : IDisposable
             .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Assert.True(File.Exists(note.Path));
         Assert.False(File.Exists(trashed));
+        Assert.False(Assert.Single(window.CreateItemMenu(trash).Items.OfType<MenuItem>()).IsEnabled);
         window.Close();
     }
 

@@ -447,30 +447,48 @@ public partial class RichEditor
 
     private async Task EditHyperlinkAsync(string? current, Run? targetRun)
     {
-        if (TopLevel.GetTopLevel(this) is not Window owner) return;
-        string? url = await InputDialog.ShowAsync(owner, Loc("Hyperlink"), current ?? "https://");
-        if (string.IsNullOrWhiteSpace(url)) return;
-        SetHyperlink(url, targetRun);
+        if (Document == null || IsReadOnly || TopLevel.GetTopLevel(this) is not Window owner) return;
+        var range = new TextRange(_selectionStart, _selectionEnd);
+        string initialText = range.IsEmpty ? targetRun?.Text ?? "" : range.GetText();
+        var result = await InputDialog.ShowAsync(owner, Loc("Hyperlink"), initialText, current ?? "https://");
+        if (result is not { } link || string.IsNullOrWhiteSpace(link.Url)) return;
+        string text = string.IsNullOrEmpty(link.Text) ? link.Url : link.Text;
+        PushUndo();
+        if (!range.IsEmpty && text == initialText)
+        {
+            range.ApplyPropertyValue(r => r.NavigateUri = link.Url);
+        }
+        else if (range.IsEmpty && targetRun != null)
+        {
+            targetRun.Text = text;
+            targetRun.NavigateUri = link.Url;
+            if (_caretPosition.Paragraph is { } paragraph)
+                _caretPosition.Offset = Math.Min(_caretPosition.Offset, BuildPlain(paragraph).Length);
+            _selectionStart = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+            _selectionEnd = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        }
+        else
+        {
+            var start = range.IsEmpty
+                ? new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset)
+                : new TextPointer(range.Start.Paragraph, range.Start.Offset);
+            InsertText(text);
+            _selectionStart = start;
+            _selectionEnd = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+            new TextRange(_selectionStart, _selectionEnd).ApplyPropertyValue(r => r.NavigateUri = link.Url);
+        }
+        MarkTextChanged();
+        InvalidateMeasure();
+        InvalidateVisual();
+        Focus();
     }
 
     // MyNotes: make the existing link action accessible from the formatting toolbar.
     internal async Task EditLinkFromToolbarAsync()
     {
-        if (Document == null || IsReadOnly || TopLevel.GetTopLevel(this) is not Window owner) return;
+        if (Document == null || IsReadOnly) return;
         var paragraph = _caretPosition.Paragraph;
         var run = paragraph == null ? null : RunAtOffset(paragraph, Math.Max(0, _caretPosition.Offset - 1));
-        if (_selectionStart.CompareTo(_selectionEnd) != 0 || !string.IsNullOrEmpty(run?.NavigateUri))
-        {
-            await EditHyperlinkAsync(run?.NavigateUri, run);
-            return;
-        }
-        var url = await InputDialog.ShowAsync(owner, Loc("Hyperlink"), "https://");
-        if (string.IsNullOrWhiteSpace(url)) return;
-        var start = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
-        InsertText(url);
-        _selectionStart = start;
-        _selectionEnd = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
-        SetHyperlink(url, null);
-        Focus();
+        await EditHyperlinkAsync(run?.NavigateUri, string.IsNullOrEmpty(run?.NavigateUri) ? null : run);
     }
 }

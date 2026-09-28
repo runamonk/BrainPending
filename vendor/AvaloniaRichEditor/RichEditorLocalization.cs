@@ -90,6 +90,8 @@ public static class RichEditorLocalization
             ["LineSpacing"] = "Line Spacing",
             // Links
             ["Hyperlink"] = "Hyperlink",
+            ["LinkText"] = "Text",
+            ["LinkUrl"] = "Link",
             ["OpenLink"] = "Open Link",
             ["EditLink"] = "Edit Link...",
             ["RemoveLink"] = "Remove Link",

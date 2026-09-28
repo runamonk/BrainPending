@@ -458,7 +458,7 @@ public partial class RichEditor
         }
         else
         {
-            items.Add(Mi(Loc("InsertLink"), () => { _ = EditHyperlinkAsync(null, null); }, hasSelection, RichEditorIcon.InsertLink));
+            items.Add(Mi(Loc("InsertLink"), () => { _ = EditHyperlinkAsync(null, null); }, _caretPosition.Paragraph != null, RichEditorIcon.InsertLink));
         }
         items.Add(new Separator());
         items.Add(Mi(Loc("SelectAll"), SelectAll, icon: RichEditorIcon.SelectAll, gesture: RichEditorShortcuts.Gesture(ShortcutId.SelectAll)));

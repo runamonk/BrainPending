@@ -22,6 +22,36 @@ public static class TestApplication
 public sealed class EditorTests
 {
     [AvaloniaFact]
+    public async Task LinkDialogPrefillsAndUpdatesExistingLinkTextAndDestination()
+    {
+        var editor = new RichEditor();
+        editor.LoadHtml("<p><a href='https://example.com/old'>Original label</a></p>");
+        var window = new Window { Content = editor };
+        window.Show();
+        try
+        {
+            var run = editor.Document!.Blocks.OfType<Paragraph>().Single().Inlines.OfType<Run>().Single();
+            var method = typeof(RichEditor).GetMethod("EditHyperlinkAsync",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            var task = (Task)method.Invoke(editor, new object?[] { run.NavigateUri, run })!;
+            var dialog = Assert.Single(window.OwnedWindows);
+            var panel = Assert.IsType<StackPanel>(dialog.Content);
+            var fields = panel.Children.OfType<TextBox>().ToArray();
+            Assert.Equal("Original label", fields[0].Text);
+            Assert.Equal("https://example.com/old", fields[1].Text);
+            fields[0].Text = "Updated label";
+            fields[1].Text = "https://example.com/new";
+            var buttons = panel.Children.OfType<StackPanel>().Single();
+            buttons.Children.OfType<Button>().First().RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await task;
+            Assert.Equal("Updated label", run.Text);
+            Assert.Equal("https://example.com/new", run.NavigateUri);
+            Assert.True(editor.IsModified);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
     public void LinkHoverShowsDestinationAndClearsOverPlainTextAndOnExit()
     {
         var editor = new RichEditor();

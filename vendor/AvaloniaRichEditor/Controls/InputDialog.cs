@@ -5,13 +5,14 @@ using Avalonia.Layout;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Minimal modal text-input dialog (OK/Cancel). Returns the entered text, or null on cancel.
+// Minimal modal text-input dialog (OK/Cancel). Returns the link text and URL, or null on cancel.
 internal static class InputDialog
 {
-    public static async Task<string?> ShowAsync(Window owner, string title, string initial)
+    public static async Task<(string Text, string Url)?> ShowAsync(Window owner, string title, string initialText, string initial)
     {
         var box = new TextBox { Text = initial, PlaceholderText = "https://...", Width = 320 };
-        string? result = null;
+        var textBox = new TextBox { Text = initialText, Width = 320 };
+        (string Text, string Url)? result = null;
 
         var ok = new Button { Content = RichEditorLocalization.GetString("OK"), IsDefault = true };
         var cancel = new Button { Content = RichEditorLocalization.GetString("Cancel"), IsCancel = true };
@@ -25,7 +26,7 @@ internal static class InputDialog
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
 
-        ok.Click += (_, _) => { result = box.Text; dialog.Close(); };
+        ok.Click += (_, _) => { result = (textBox.Text ?? "", box.Text ?? ""); dialog.Close(); };
         cancel.Click += (_, _) => { result = null; dialog.Close(); };
 
         var buttons = new StackPanel
@@ -38,6 +39,9 @@ internal static class InputDialog
         buttons.Children.Add(cancel);
 
         var panel = new StackPanel { Margin = new Thickness(16), Spacing = 12 };
+        panel.Children.Add(new TextBlock { Text = RichEditorLocalization.GetString("LinkText") });
+        panel.Children.Add(textBox);
+        panel.Children.Add(new TextBlock { Text = RichEditorLocalization.GetString("LinkUrl") });
         panel.Children.Add(box);
         panel.Children.Add(buttons);
         dialog.Content = panel;

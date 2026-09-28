@@ -65,7 +65,7 @@ public partial class MainWindow : Window
         EditorView.Editor.DefaultFontFamily = new FontFamily("Segoe UI");
         EditorView.Editor.DefaultFontSize = 12;
         // The editor adds a 10px text inset; align with the 14px title inset.
-        EditorView.Editor.Margin = new Thickness(4, 24);
+        EditorView.Editor.Margin = new Thickness(4, 0, 4, 24);
         EditorView.Editor.UseThemeColors = true;
         EditorView.Editor.Bind(RichEditor.ThemeForegroundProperty, new DynamicResourceExtension("AppTextBrush"));
         EditorView.Editor.Bind(RichEditor.LinkForegroundProperty, new DynamicResourceExtension("AppLinkBrush"));

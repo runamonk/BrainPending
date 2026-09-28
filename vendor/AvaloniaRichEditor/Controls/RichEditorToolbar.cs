@@ -825,8 +825,8 @@ public partial class RichEditorToolbar : UserControl
         Target?.SetLineSpacing(pct / 100.0);
     }
 
-    // A combo-style list control: a bordered box of [icon (toggles the list) | current marker | ▾ (style
-    // menu)], matching the line-spacing box. Returns the box plus the icon button and preview label so
+    // A combo-style list control: [icon (toggles the list) | current marker | ▾ (style
+    // menu)]. Returns the box plus the icon button and preview label so
     // Sync can highlight the active state and show the caret paragraph's current marker.
     private (Control Box, Button Icon, TextBlock Preview) BuildListBox(
         RichEditorIcon iconKind, string tip, Action toggle, ListKind kind,
@@ -884,7 +884,7 @@ public partial class RichEditorToolbar : UserControl
             Child = row,
             [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),
             [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
-            BorderThickness = new Thickness(1),
+            BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(4),
             Padding = new Thickness(0),
             Margin = new Thickness(2, 0),

@@ -2,6 +2,8 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 
 namespace AvaloniaRichEditor.Controls;
 
@@ -25,6 +27,14 @@ internal static class InputDialog
             CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
+
+        dialog.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            e.Handled = true;
+            result = null;
+            dialog.Close();
+        }, RoutingStrategies.Tunnel);
 
         ok.Click += (_, _) => { result = (textBox.Text ?? "", box.Text ?? ""); dialog.Close(); };
         cancel.Click += (_, _) => { result = null; dialog.Close(); };

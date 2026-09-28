@@ -34,6 +34,73 @@ public sealed class WindowTests : IDisposable
         window.UpdateLayout();
     }
 
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EscapeCancelsNewNoteAndFolderAndAllowsReopening(bool folder)
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "First");
+        var window = OpenWindow();
+        Select(window, note.Path);
+        window.FindControl<RichEditorView>("EditorView")!.Editor.Focus();
+        var key = folder ? Key.D : Key.N;
+        var physical = folder ? PhysicalKey.D : PhysicalKey.N;
+        window.KeyPress(key, RawInputModifiers.Control, physical, null);
+        var dialog = Assert.Single(window.OwnedWindows);
+        Assert.Equal(folder ? "New folder" : "New note", dialog.Title);
+        dialog.GetVisualDescendants().OfType<TextBox>().Single().Text = "Cancelled";
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        await Task.Yield();
+        Assert.Empty(window.OwnedWindows);
+        Assert.False(File.Exists(Path.Combine(_root, "Cancelled.rtf")));
+        Assert.False(Directory.Exists(Path.Combine(_root, "Cancelled")));
+        Assert.Equal("First", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        window.KeyPress(key, RawInputModifiers.Control, physical, null);
+        dialog = Assert.Single(window.OwnedWindows);
+        dialog.GetVisualDescendants().OfType<TextBox>().Single().Text = "Created";
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        await Task.Yield();
+        Assert.True(folder ? Directory.Exists(Path.Combine(_root, "Created"))
+            : File.Exists(Path.Combine(_root, "Created.rtf")));
+    }
+
+    [AvaloniaFact]
+    public async Task EscapeRejectsConfirmationEvenWhenAcceptButtonHasFocus()
+    {
+        var window = OpenWindow();
+        var method = typeof(MainWindow).GetMethod("Confirm",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var result = (Task<bool>)method.Invoke(window, new object[] { "Confirm", "Continue?", "Accept" })!;
+        var dialog = Assert.Single(window.OwnedWindows);
+        dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Accept")).Focus();
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.False(await result);
+        Assert.Empty(window.OwnedWindows);
+    }
+
+    [AvaloniaFact]
+    public async Task ControlNCreatesNoteFromFocusedEditorAndSavesCurrentNote()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var first = workspace.CreateNote(_root, "First");
+        var window = OpenWindow();
+        Select(window, first.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        editor.Focus();
+        editor.InsertText("Keep these edits");
+        window.KeyPress(Key.N, RawInputModifiers.Control, PhysicalKey.N, "n");
+        var dialog = Assert.Single(window.OwnedWindows);
+        Assert.Equal("New note", dialog.Title);
+        dialog.GetVisualDescendants().OfType<TextBox>().Single().Text = "Created by shortcut";
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        await Task.Yield();
+        Assert.Equal("Created by shortcut", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.True(File.Exists(Path.Combine(_root, "Created by shortcut.rtf")));
+        Assert.Contains("Keep these edits", workspace.Read(first.Path).Rtf);
+        Assert.True(editor.IsFocused);
+    }
+
     [AvaloniaFact]
     public void FirstSidebarRevealDisplaysAllVisibleRowsAfterRestoringNote()
     {

@@ -21,6 +21,33 @@ public static class TestApplication
 
 public sealed class EditorTests
 {
+    [AvaloniaFact]
+    public async Task EscapeCancelsLinkEdits()
+    {
+        var editor = new RichEditor();
+        editor.LoadHtml("<p><a href='https://example.com'>Original</a></p>");
+        var window = new Window { Content = editor };
+        window.Show();
+        try
+        {
+            var run = editor.Document!.Blocks.OfType<Paragraph>().Single().Inlines.OfType<Run>().Single();
+            var method = typeof(RichEditor).GetMethod("EditHyperlinkAsync",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            var task = (Task)method.Invoke(editor, new object?[] { run.NavigateUri, run })!;
+            var dialog = Assert.Single(window.OwnedWindows);
+            var field = Assert.IsType<StackPanel>(dialog.Content).Children.OfType<TextBox>().First();
+            field.Text = "Discard me";
+            field.Focus();
+            dialog.KeyPress(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None,
+                Avalonia.Input.PhysicalKey.Escape, null);
+            await task;
+            Assert.Equal("Original", run.Text);
+            Assert.Equal("https://example.com", run.NavigateUri);
+            Assert.False(editor.IsModified);
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]

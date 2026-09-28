@@ -534,7 +534,9 @@ public partial class MainWindow : Window
         });
     }
 
-    private async void NewFolder_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
+    private async void NewFolder_Click(object? sender, RoutedEventArgs e) => await NewFolder();
+
+    private Task NewFolder() => Run(async () =>
     {
         if (_workspace == null) return;
         var name = await Prompt("New folder", "Keep related notes together", "New folder", "Create folder");
@@ -780,6 +782,7 @@ public partial class MainWindow : Window
         if (HandleFindShortcut(e)) return;
         if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.S) { e.Handled = true; SaveCurrent(); }
         else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.N) { e.Handled = true; await NewNote(); }
+        else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.D) { e.Handled = true; await NewFolder(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; ShowSidebar(); SearchBox.Focus(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.O)
         { e.Handled = true; await Run(SwitchNote); }
@@ -799,7 +802,7 @@ public partial class MainWindow : Window
         var error = new TextBlock { Foreground = Brushes.IndianRed, TextWrapping = TextWrapping.Wrap };
         var dialog = Dialog(title);
         var accept = new Button { Content = action, Classes = { "action", "primary" } };
-        var cancel = new Button { Content = "Cancel", Classes = { "action", "quiet" } };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, Classes = { "action", "quiet" } };
         void Submit()
         {
             try { dialog.Close(NoteWorkspace.ValidateName(input.Text ?? "")); }
@@ -824,7 +827,7 @@ public partial class MainWindow : Window
     {
         var dialog = Dialog(title);
         var accept = new Button { Content = action, Classes = { "action" } };
-        var cancel = new Button { Content = "Cancel", Classes = { "action", "quiet" } };
+        var cancel = new Button { Content = "Cancel", IsCancel = true, Classes = { "action", "quiet" } };
         accept.Click += (_, _) => dialog.Close(true);
         cancel.Click += (_, _) => dialog.Close(false);
         dialog.Content = new StackPanel { Margin = new Thickness(26), Spacing = 20, Children =
@@ -838,9 +841,19 @@ public partial class MainWindow : Window
         finally { _inDialog = false; }
     }
 
-    private static Window Dialog(string title) => new()
+    private static Window Dialog(string title)
     {
-        Title = title, Width = 450, SizeToContent = SizeToContent.Height, CanResize = false,
-        WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false
-    };
+        var dialog = new Window
+        {
+            Title = title, Width = 450, SizeToContent = SizeToContent.Height, CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, ShowInTaskbar = false
+        };
+        dialog.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Escape) return;
+            e.Handled = true;
+            dialog.Close(); // Default result: null for prompts, false for confirmations.
+        }, RoutingStrategies.Tunnel);
+        return dialog;
+    }
 }

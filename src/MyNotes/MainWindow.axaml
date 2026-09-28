@@ -24,7 +24,7 @@
             <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New note (Ctrl+N)" AutomationProperties.Name="New note" Click="NewNote_Click">
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 12,18 L 4,18 L 4,2 L 12,2 L 16,6 L 16,10 M 12,2 L 12,6 L 16,6 M 11,15 L 19,15 M 15,11 L 15,19" />
             </Button>
-            <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New folder" AutomationProperties.Name="New folder" Click="NewFolder_Click">
+            <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New folder (Ctrl+D)" AutomationProperties.Name="New folder" Click="NewFolder_Click">
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 10,17 L 2,17 L 2,4 L 8,4 L 10,7 L 18,7 L 18,10 M 11,15 L 19,15 M 15,11 L 15,19" />
             </Button>
             <Button x:Name="SwitchNoteButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Switch note (Ctrl+Shift+O)" AutomationProperties.Name="Switch note" Click="SwitchNote_Click">

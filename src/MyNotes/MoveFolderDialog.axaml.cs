@@ -34,12 +34,12 @@ public partial class MoveFolderDialog : Window
         HomeButton.IsEnabled = true;
         MoveHeading.Text = $"Move “{item.Name}”";
         Navigate(_folder);
-        KeyDown += (_, e) =>
+        AddHandler(KeyDownEvent, (_, e) =>
         {
             if (e.Key == Key.Escape) { e.Handled = true; Close(); }
             else if (e.Key == Key.Up && e.KeyModifiers == KeyModifiers.Alt && _folder != _workspace.Root)
             { e.Handled = true; Navigate(_workspace.ParentFolder(_folder)); }
-        };
+        }, RoutingStrategies.Tunnel);
     }
 
     private void Navigate(string folder)

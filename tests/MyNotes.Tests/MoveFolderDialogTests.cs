@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Input;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using MyNotes.Core;
@@ -8,6 +10,27 @@ namespace MyNotes.Tests;
 public sealed class MoveFolderDialogTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "MyNotes-move-" + Guid.NewGuid().ToString("N"));
+
+    [AvaloniaFact]
+    public void EscapeClosesMoveDialogWithoutMoving()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Keep me");
+        workspace.CreateFolder(_root, "Destination");
+        var moved = false;
+        var dialog = new MoveFolderDialog(workspace, new(note.Path, "Keep me", false, false, ""),
+            _ => { moved = true; return true; });
+        dialog.Show();
+        try
+        {
+            dialog.FindControl<ListBox>("Folders")!.Focus();
+            dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            Assert.False(dialog.IsVisible);
+            Assert.False(moved);
+            Assert.True(File.Exists(note.Path));
+        }
+        finally { dialog.Close(); }
+    }
 
     [AvaloniaFact]
     public void FolderNavigationExcludesSourceAndMovesIntoChosenFolder()

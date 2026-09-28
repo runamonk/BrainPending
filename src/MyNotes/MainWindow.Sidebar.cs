@@ -194,6 +194,13 @@ public partial class MainWindow
         else { ShowSidebar(); SearchBox.Focus(); }
     }
 
+    private void CollapseSidebarAfterNoteSelection()
+    {
+        if (_settings.SidebarPinned) return;
+        EditorView.Editor.Focus();
+        CollapseSidebarFromButton();
+    }
+
     private void CollapseSidebarFromButton()
     {
         _sidebarHide.Stop();

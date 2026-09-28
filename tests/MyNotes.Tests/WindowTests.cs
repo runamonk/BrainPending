@@ -273,6 +273,31 @@ public sealed class WindowTests : IDisposable
         Assert.True(NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json")).SidebarPinned);
     }
 
+    [AvaloniaTheory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task ClickingNoteCollapsesOnlyUnpinnedSidebar(bool pinned, bool alreadySelected)
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Select me");
+        var window = OpenWindow();
+        if (alreadySelected) Select(window, note.Path);
+        if (!pinned)
+            window.FindControl<Button>("SidebarPin")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        window.UpdateLayout();
+        var browser = window.FindControl<ListBox>("Browser")!;
+        var item = browser.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == note.Path);
+        var row = (ListBoxItem)browser.ContainerFromItem(item)!;
+        var point = row.TranslatePoint(new Point(30, row.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(point);
+        window.MouseDown(point, MouseButton.Left);
+        window.MouseUp(point, MouseButton.Left);
+        await Task.Delay(700, TestContext.Current.CancellationToken);
+        Assert.Equal(pinned, window.FindControl<Border>("Sidebar")!.IsVisible);
+        Assert.Equal(note.Path, Assert.IsType<BrowserItem>(browser.SelectedItem).Path);
+    }
+
     [AvaloniaFact]
     public async Task SidebarToggleClosesWithoutHoverReopeningAndHomeStaysOpen()
     {

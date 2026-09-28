@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -78,7 +79,7 @@ public class RichEditorView : UserControl
         set => SetValue(ShowFileActionsProperty, value);
     }
 
-    private TextBlock _statusInfo = null!, _pageInfo = null!, _limitInfo = null!;
+    private TextBlock _statusInfo = null!, _pageInfo = null!, _limitInfo = null!, _zoomInfo = null!;
     private Border _statusBar = null!;
 
     private EventHandler? _printRequested;
@@ -118,6 +119,8 @@ public class RichEditorView : UserControl
 
     public RichEditorView()
     {
+        // Consume zoom gestures before the scroll viewer handles the wheel event.
+        AddHandler(PointerWheelChangedEvent, OnZoomWheel, RoutingStrategies.Tunnel);
         Toolbar = new RichEditorToolbar { Target = Editor, ToolbarLevel = ToolbarLevel.Maximum };
         // Zoom is view-level here (a LayoutTransform around the editor), so the toolbar's zoom combo is
         // driven through these hooks rather than the editor directly.
@@ -242,6 +245,7 @@ public class RichEditorView : UserControl
             // An explicit zoom (not our own fit write) cancels fit-to-width.
             if (!_settingZoomInternally) SetCurrentValue(FitToWidthProperty, false);
             Toolbar.RefreshPageControls(); // zoom is view-level, so push it onto the toolbar's zoom combo
+            UpdateZoomStatus();
         }
         else if (change.Property == FitToWidthProperty)
         {
@@ -265,16 +269,15 @@ public class RichEditorView : UserControl
         SetCurrentValue(ZoomFactorProperty, Math.Clamp(factor, 0.2, 5.0));
     }
 
-    /// <inheritdoc/>
-    protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+    private void OnZoomWheel(object? sender, PointerWheelEventArgs e)
     {
         if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
         {
-            ZoomToPercent(ZoomFactor + (e.Delta.Y > 0 ? 0.1 : -0.1));
+            if (e.Delta.Y != 0)
+                ZoomToPercent(ZoomFactor + (e.Delta.Y > 0 ? 0.1 : -0.1));
             e.Handled = true;
             return;
         }
-        base.OnPointerWheelChanged(e);
     }
 
     /// <inheritdoc/>
@@ -303,10 +306,15 @@ public class RichEditorView : UserControl
         _pageInfo.Margin = new Thickness(0, 0, 12, 0);
         _limitInfo = Tb("#CC6600");
         _limitInfo.Margin = new Thickness(0, 0, 12, 0);
+        _zoomInfo = Tb("#444444");
+        ToolTip.SetTip(_zoomInfo, Loc("ZoomTip"));
+        UpdateZoomStatus();
 
         var panel = new DockPanel();
+        DockPanel.SetDock(_zoomInfo, Dock.Right);
         DockPanel.SetDock(_limitInfo, Dock.Right);
         DockPanel.SetDock(_pageInfo, Dock.Right);
+        panel.Children.Add(_zoomInfo);
         panel.Children.Add(_limitInfo);
         panel.Children.Add(_pageInfo);
         panel.Children.Add(_statusInfo);
@@ -320,6 +328,11 @@ public class RichEditorView : UserControl
             Child = panel,
             IsVisible = ShowStatusBar,
         };
+    }
+
+    private void UpdateZoomStatus()
+    {
+        if (_zoomInfo != null) _zoomInfo.Text = $"{Math.Round(ZoomFactor * 100)}%";
     }
 
     private void UpdateStatus()

@@ -257,7 +257,9 @@ public partial class RichEditorToolbar : UserControl
         }
         Control Div() => new Border
         {
-            Width = 1, Height = 22, Margin = new Thickness(6, 4),
+            Width = 1,
+            Height = 22,
+            Margin = new Thickness(6, 4),
             [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -272,8 +274,6 @@ public partial class RichEditorToolbar : UserControl
         Control? bulletBox = null, numberBox = null;
         bool ro = Target?.IsReadOnly == true;
         var lvl = EffectiveLevel();
-        bool normal = lvl >= ToolbarLevel.Normal;
-        bool maximum = lvl >= ToolbarLevel.Maximum;
 
         if (ro)
         {
@@ -282,130 +282,75 @@ public partial class RichEditorToolbar : UserControl
         }
         else
         {
+            _boldBtn = Btn(new TextBlock { Text = "B", FontWeight = FontWeight.Bold }, Loc("Bold") + " (Ctrl+B)", () => Target?.ToggleBold(), RichEditorIcon.Bold);
+            _italicBtn = Btn(new TextBlock { Text = "I", FontStyle = FontStyle.Italic }, Loc("Italic") + " (Ctrl+I)", () => Target?.ToggleItalic(), RichEditorIcon.Italic);
+            _underlineBtn = Btn(new TextBlock { Text = "U", TextDecorations = TextDecorations.Underline }, Loc("Underline") + " (Ctrl+U)", () => Target?.ToggleUnderline(), RichEditorIcon.Underline);
+            _strikeBtn = Btn(new TextBlock { Text = "S", TextDecorations = TextDecorations.Strikethrough }, Loc("Strikethrough"), () => Target?.ToggleStrikethrough(), RichEditorIcon.Strikethrough);
+            Add(_boldBtn); Add(_italicBtn); Add(_underlineBtn); Add(_strikeBtn);
+            Add(Div());
 
-        _undoBtn = Btn("↶", Loc("Undo") + " (Ctrl+Z)", () => Target?.Undo(), RichEditorIcon.Undo);
-        _redoBtn = Btn("↷", Loc("Redo") + " (Ctrl+Y)", () => Target?.Redo(), RichEditorIcon.Redo);
-        Add(_undoBtn); Add(_redoBtn);
-        Add(Div());
-
-        _boldBtn = Btn(new TextBlock { Text = "B", FontWeight = FontWeight.Bold }, Loc("Bold") + " (Ctrl+B)", () => Target?.ToggleBold(), RichEditorIcon.Bold);
-        _italicBtn = Btn(new TextBlock { Text = "I", FontStyle = FontStyle.Italic }, Loc("Italic") + " (Ctrl+I)", () => Target?.ToggleItalic(), RichEditorIcon.Italic);
-        _underlineBtn = Btn(new TextBlock { Text = "U", TextDecorations = TextDecorations.Underline }, Loc("Underline") + " (Ctrl+U)", () => Target?.ToggleUnderline(), RichEditorIcon.Underline);
-        _strikeBtn = Btn(new TextBlock { Text = "S", TextDecorations = TextDecorations.Strikethrough }, Loc("Strikethrough"), () => Target?.ToggleStrikethrough(), RichEditorIcon.Strikethrough);
-        Add(_boldBtn); Add(_italicBtn); Add(_underlineBtn); Add(_strikeBtn);
-        Add(Div());
-
-        if (normal)
-        {
             Add(colorButton = BuildColorButton(highlight: false));
             Add(highlightButton = BuildColorButton(highlight: true));
             Add(Div());
-        }
 
-        // Scope each font preview to its item TextBlock so it cannot change the rest of the toolbar.
-        if (normal)
-        {
-        _fontCombo = Combo(Loc("FontFamily"), 120);
-        // The closed selection may supply null. Disable recycling because FontFamily is set at build time.
-        _fontCombo.ItemTemplate = new FuncDataTemplate<string>(
-            (name, _) => new TextBlock
+            _fontCombo = Combo(Loc("FontFamily"), 120);
+            // The closed selection may supply null. Disable recycling because FontFamily is set at build time.
+            _fontCombo.ItemTemplate = new FuncDataTemplate<string>(
+                (name, _) => new TextBlock
+                {
+                    Text = name,
+                    FontFamily = string.IsNullOrEmpty(name) ? FontFamily.Default : new FontFamily(name)
+                });
+            foreach (var f in Target?.FontFamilyChoices ?? Array.Empty<string>())
+                _fontCombo.Items.Add(f);
+            _fontCombo.SelectionChanged += (_, _) =>
             {
-                Text = name,
-                FontFamily = string.IsNullOrEmpty(name) ? FontFamily.Default : new FontFamily(name)
-            });
-        foreach (var f in Target?.FontFamilyChoices ?? Array.Empty<string>())
-            _fontCombo.Items.Add(f);
-        _fontCombo.SelectionChanged += (_, _) =>
-        {
-            if (_suppress || _fontCombo.SelectedItem is not string fam) return;
-            Target?.SetFontFamily(fam);
-        };
-        Add(_fontCombo);
-        }
+                if (_suppress || _fontCombo.SelectedItem is not string fam) return;
+                Target?.SetFontFamily(fam);
+            };
+            Add(_fontCombo);
+            
 
-        _sizeCombo = Combo(Loc("FontSize"), 60);
-        foreach (var s in FontSizes)
-            _sizeCombo.Items.Add(new ComboBoxItem { Content = SizeText(s) });
-        _sizeCombo.SelectionChanged += (_, _) =>
-        {
-            if (_suppress || _sizeCombo.SelectedItem is not ComboBoxItem it) return;
-            if (double.TryParse(it.Content?.ToString(), System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double size))
-                Target?.SetFontSize(size);
-        };
-        Add(_sizeCombo);
-        Add(Div());
-
-        if (normal)
-        {
-        _headingCombo = Combo(Loc("ParagraphStyle"));
-        foreach (var key in new[] { "BodyText", "Heading1", "Heading2", "Heading3", "Heading4", "Heading5", "Heading6" })
-            _headingCombo.Items.Add(new ComboBoxItem { Content = Loc(key) });
-        _headingCombo.SelectionChanged += (_, _) =>
-        {
-            if (_suppress || _headingCombo.SelectedIndex < 0) return;
-            Target?.SetHeading(_headingCombo.SelectedIndex);
-        };
-        Add(_headingCombo);
-
-        _alignCombo = Combo(Loc("Alignment"));
-        foreach (var key in new[] { "AlignLeft", "AlignCenter", "AlignRight", "AlignJustify" })
-            _alignCombo.Items.Add(new ComboBoxItem { Content = Loc(key) });
-        _alignCombo.SelectionChanged += (_, _) =>
-        {
-            if (_suppress || _alignCombo.SelectedIndex < 0) return;
-            Target?.SetTextAlignment(_alignCombo.SelectedIndex switch
+            _sizeCombo = Combo(Loc("FontSize"), 60);
+            foreach (var s in FontSizes)
+                _sizeCombo.Items.Add(new ComboBoxItem { Content = SizeText(s) });
+            _sizeCombo.SelectionChanged += (_, _) =>
             {
-                1 => TextAlignment.Center,
-                2 => TextAlignment.Right,
-                3 => TextAlignment.Justify,
-                _ => TextAlignment.Left,
-            });
-        };
-        Add(_alignCombo);
-        Add(Div());
+                if (_suppress || _sizeCombo.SelectedItem is not ComboBoxItem it) return;
+                if (double.TryParse(it.Content?.ToString(), System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double size))
+                    Target?.SetFontSize(size);
+            };
+            Add(_sizeCombo);
+            Add(Div());
 
-        var bullet = BuildListBox(RichEditorIcon.BulletList, Loc("BulletList"), () => Target?.ToggleBullet(), ListKind.Bullet,
-            (ListMarkerStyle.Disc, "•"), (ListMarkerStyle.Circle, "◦"),
-            (ListMarkerStyle.Square, "▪"), (ListMarkerStyle.Dash, "–"));
-        _bulletBtn = bullet.Icon; _bulletPreview = bullet.Preview;
-        Add(bulletBox = bullet.Box);
-        var number = BuildListBox(RichEditorIcon.NumberedList, Loc("NumberedList"), () => Target?.ToggleNumbering(), ListKind.Ordered,
-            (ListMarkerStyle.Decimal, "1."), (ListMarkerStyle.DecimalParen, "1)"),
-            (ListMarkerStyle.LowerAlpha, "a)"), (ListMarkerStyle.UpperAlpha, "A)"),
-            (ListMarkerStyle.LowerRoman, "i)"));
-        _numberBtn = number.Icon; _numberPreview = number.Preview;
-        Add(numberBox = number.Box);
-        Add(Btn("→|", Loc("IndentIncrease"), () => Target?.Indent(20), RichEditorIcon.IndentIncrease));
-        Add(Btn("|←", Loc("IndentDecrease"), () => Target?.Indent(-20), RichEditorIcon.IndentDecrease));
-        Add(Div());
+            var bullet = BuildListBox(RichEditorIcon.BulletList, Loc("BulletList"), () => Target?.ToggleBullet(), ListKind.Bullet,
+                (ListMarkerStyle.Disc, "•"), (ListMarkerStyle.Circle, "◦"),
+                (ListMarkerStyle.Square, "▪"), (ListMarkerStyle.Dash, "–"));
+            _bulletBtn = bullet.Icon; _bulletPreview = bullet.Preview;
+            Add(bulletBox = bullet.Box);
+            var number = BuildListBox(RichEditorIcon.NumberedList, Loc("NumberedList"), () => Target?.ToggleNumbering(), ListKind.Ordered,
+                (ListMarkerStyle.Decimal, "1."), (ListMarkerStyle.DecimalParen, "1)"),
+                (ListMarkerStyle.LowerAlpha, "a)"), (ListMarkerStyle.UpperAlpha, "A)"),
+                (ListMarkerStyle.LowerRoman, "i)"));
+            _numberBtn = number.Icon; _numberPreview = number.Preview;
+            Add(numberBox = number.Box);
+            Add(Div());
 
-        // Line spacing: an icon dropdown (HWP-style %), where the value maps to Paragraph.LineSpacing
-        // = %/100. 160% is the HWP default; the list spans 100–300%. Scales with font size.
-        Add(BuildLineSpacingControl());
-        Add(Div());
+            _tableBtn = BuildTableButton();
+            _imageBtn = Btn("🖼", Loc("InsertImage"), () => { _ = Target?.InsertImageFromFileAsync(); }, RichEditorIcon.InsertImage);
+            _dividerBtn = Btn("―", Loc("InsertDivider"), () => Target?.InsertDivider(), RichEditorIcon.InsertDivider);
+            Add(_tableBtn); Add(_imageBtn); Add(_dividerBtn);
+            Add(linkButton = Btn("Link", "Insert or edit hyperlink", () => { _ = Target?.EditLinkFromToolbarAsync(); }, RichEditorIcon.InsertLink));           
+            Add(Btn("Clear", "Clear formatting", () => Target?.ClearFormatting()));
 
-        _tableBtn = BuildTableButton();
-        _imageBtn = Btn("🖼", Loc("InsertImage"), () => { _ = Target?.InsertImageFromFileAsync(); }, RichEditorIcon.InsertImage);
-        _dividerBtn = Btn("―", Loc("InsertDivider"), () => Target?.InsertDivider(), RichEditorIcon.InsertDivider);
-        Add(_tableBtn); Add(_imageBtn); Add(_dividerBtn);
-        Add(linkButton = Btn("Link", "Insert or edit hyperlink", () => { _ = Target?.EditLinkFromToolbarAsync(); }, RichEditorIcon.InsertLink));
-        Add(Btn("Clear", "Clear formatting", () => Target?.ClearFormatting()));
-        }
-
-        if (maximum)
-        {
-            if (ShowPageControls) { Add(Div()); BuildPageControls(items); }
-            if (ShowFileActions) { Add(Div()); BuildFileActions(items); }
-        }
         }
 
         if (Compact && !ro)
         {
             var primary = new System.Collections.Generic.List<Control>();
             foreach (var control in new Control?[] { _boldBtn, _italicBtn, _underlineBtn, _strikeBtn,
-                colorButton, highlightButton, _fontCombo, _sizeCombo, linkButton,
-                bulletBox, numberBox, _imageBtn, _tableBtn })
+                colorButton, highlightButton, _fontCombo, _sizeCombo, linkButton,_imageBtn, bulletBox, numberBox, _tableBtn })
                 if (control != null) primary.Add(control);
             items = primary;
         }
@@ -484,7 +429,8 @@ public partial class RichEditorToolbar : UserControl
         {
             var swatch = new Border
             {
-                Height = Compact ? 2 : 6, MinWidth = Compact ? 16 : 24,
+                Height = Compact ? 2 : 6,
+                MinWidth = Compact ? 16 : 24,
                 CornerRadius = new CornerRadius(1),
                 Background = initial,
                 Margin = new Thickness(0, 2, 0, 0),
@@ -532,8 +478,12 @@ public partial class RichEditorToolbar : UserControl
             var sw = new Button
             {
                 Background = new SolidColorBrush(color),
-                Width = 22, Height = 22, Margin = new Thickness(1), Padding = new Thickness(0),
-                [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"), BorderThickness = new Thickness(1),
+                Width = 22,
+                Height = 22,
+                Margin = new Thickness(1),
+                Padding = new Thickness(0),
+                [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
+                BorderThickness = new Thickness(1),
                 Focusable = false, // see the Btn factory — the caret must survive a swatch click
             };
             sw.Click += (_, _) => Apply(color);
@@ -606,8 +556,12 @@ public partial class RichEditorToolbar : UserControl
                 int rr = r, cc = c;
                 var cell = new Border
                 {
-                    Width = 16, Height = 16, Margin = new Thickness(1),
-                    [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"), [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"), BorderThickness = new Thickness(1),
+                    Width = 16,
+                    Height = 16,
+                    Margin = new Thickness(1),
+                    [!Border.BackgroundProperty] = new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush"),
+                    [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
+                    BorderThickness = new Thickness(1),
                 };
                 cell.PointerEntered += (_, _) => Highlight(rr, cc);
                 cell.PointerPressed += (_, _) =>
@@ -662,17 +616,26 @@ public partial class RichEditorToolbar : UserControl
             var chevron = new Avalonia.Controls.Shapes.Path
             {
                 Data = Avalonia.Media.Geometry.Parse(up ? "M0 3 L3 0 L6 3" : "M0 0 L3 3 L6 0"),
-                Stroke = ink, StrokeThickness = 1.2,
-                StrokeLineCap = Avalonia.Media.PenLineCap.Round, StrokeJoin = Avalonia.Media.PenLineJoin.Round,
-                Width = 6, Height = 3,
-                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+                Stroke = ink,
+                StrokeThickness = 1.2,
+                StrokeLineCap = Avalonia.Media.PenLineCap.Round,
+                StrokeJoin = Avalonia.Media.PenLineJoin.Round,
+                Width = 6,
+                Height = 3,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
             };
             var b = new Button
             {
                 Content = chevron,
-                Width = 15, Height = 8, Padding = new Thickness(0),
-                Background = Brushes.Transparent, BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(2),
-                VerticalAlignment = VerticalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Center,
+                Width = 15,
+                Height = 8,
+                Padding = new Thickness(0),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                CornerRadius = new CornerRadius(2),
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
             };
             b.Click += (_, _) => ApplySpacingPercent(CurrentSpacingPercent() + delta);
             return b;
@@ -752,8 +715,12 @@ public partial class RichEditorToolbar : UserControl
         var icon = new Button
         {
             Content = glyph ?? (object)options[0].Glyph,
-            Background = Brushes.Transparent, BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(4, 0), MinWidth = 28, MinHeight = 28,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(4, 0),
+            MinWidth = 28,
+            MinHeight = 28,
             VerticalAlignment = VerticalAlignment.Stretch,
         };
         icon.Click += (_, _) => toggle();
@@ -761,8 +728,11 @@ public partial class RichEditorToolbar : UserControl
 
         var preview = new TextBlock
         {
-            Text = options[0].Glyph, FontSize = 12, MinWidth = 16,
-            TextAlignment = Avalonia.Media.TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            Text = options[0].Glyph,
+            FontSize = 12,
+            MinWidth = 16,
+            TextAlignment = Avalonia.Media.TextAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
         };
 
         var presetContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
@@ -771,8 +741,12 @@ public partial class RichEditorToolbar : UserControl
         var presets = new Button
         {
             Content = presetContent,
-            Background = Brushes.Transparent, BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(6, 0), MinWidth = 40, MinHeight = 28,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(6, 0),
+            MinWidth = 40,
+            MinHeight = 28,
             VerticalAlignment = VerticalAlignment.Stretch,
         };
         ToolTip.SetTip(presets, tip);
@@ -786,7 +760,9 @@ public partial class RichEditorToolbar : UserControl
                 Content = g,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Left,
-                Background = Brushes.Transparent, BorderThickness = new Thickness(0), FontSize = 14,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                FontSize = 14,
             };
             item.Click += (_, _) => { Target?.SetListStyle(s); flyout.Hide(); };
             panel.Children.Add(item);

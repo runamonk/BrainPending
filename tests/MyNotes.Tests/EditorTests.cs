@@ -21,6 +21,38 @@ public static class TestApplication
 
 public sealed class EditorTests
 {
+    [AvaloniaTheory]
+    [InlineData(1, true)]
+    [InlineData(-1, true)]
+    [InlineData(1, false)]
+    [InlineData(-1, false)]
+    public void WheelZoomDoesNotScroll(double direction, bool control)
+    {
+        var view = new RichEditorView { FitToWidth = false, ZoomFactor = 1 };
+        view.Editor.LoadHtml(string.Concat(Enumerable.Repeat("<p>A line of text</p>", 200)));
+        var window = new Window { Content = view, Width = 800, Height = 600 };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            view.ScrollOffset = new Vector(0, 500);
+            window.UpdateLayout();
+            var before = view.ScrollOffset;
+            Assert.True(before.Y > 0);
+
+            window.MouseWheel(new Point(400, 300), new Vector(0, direction),
+                control ? Avalonia.Input.RawInputModifiers.Control : Avalonia.Input.RawInputModifiers.None);
+            window.UpdateLayout();
+
+            Assert.Equal(control ? 1 + direction * 0.1 : 1, view.ZoomFactor, 6);
+            if (control)
+                Assert.Equal(before, view.ScrollOffset);
+            else
+                Assert.True(direction > 0 ? view.ScrollOffset.Y < before.Y : view.ScrollOffset.Y > before.Y);
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaFact]
     public async Task EscapeCancelsLinkEdits()
     {

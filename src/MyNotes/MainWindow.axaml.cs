@@ -544,7 +544,12 @@ public partial class MainWindow : Window
         await Run(async () =>
         {
             if (item.IsFolder) await Navigate(item.Path, item.IsUp);
-            else if (SaveCurrent()) { LoadNote(_workspace.Read(item.Path)); RefreshBrowser(true); }
+            else if (SaveCurrent())
+            {
+                LoadNote(_workspace.Read(item.Path));
+                RefreshBrowser(true);
+                CollapseSidebarAfterNoteSelection();
+            }
         });
     }
 
@@ -647,10 +652,19 @@ public partial class MainWindow : Window
 
     private void Browser_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
+        var row = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<ListBoxItem>().FirstOrDefault();
+        if (e.GetCurrentPoint(Browser).Properties.IsLeftButtonPressed &&
+            row?.DataContext is BrowserItem selected && !selected.IsFolder &&
+            Equals(Browser.SelectedItem, selected) && !_settings.SidebarPinned)
+        {
+            // Clicking the current note does not raise SelectionChanged.
+            e.Handled = true;
+            CollapseSidebarAfterNoteSelection();
+            return;
+        }
         if (!e.GetCurrentPoint(Browser).Properties.IsRightButtonPressed) return;
         // Handle before ListBox selects the row: selecting a folder navigates into it.
         e.Handled = true;
-        var row = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<ListBoxItem>().FirstOrDefault();
         if (row?.DataContext is BrowserItem item && (item.CanManage || item.IsTrash))
             CreateItemMenu(item).Open(row);
     }

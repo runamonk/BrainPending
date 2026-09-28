@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     private FileSystemWatcher? _watcher;
     private NotebookSettings _settings;
     private readonly string? _settingsPath;
+    private readonly ThemeCatalog _themes;
     private PixelPoint? _normalPosition;
     private Size _normalSize;
     private readonly Flyout _recentNotebooksMenu = new() { Placement = PlacementMode.Top };
@@ -44,6 +45,10 @@ public partial class MainWindow : Window
         _startupPath = notebookPath;
         _settingsPath = settingsPath;
         _settings = NotebookSettings.Read(settingsPath);
+        _themes = new ThemeCatalog(settingsPath);
+        string? themeError = null;
+        try { _themes.Reload(); }
+        catch (Exception error) { themeError = "Could not load themes; using defaults. " + error.Message; }
         InitializeComponent();
         InitializeFind();
         InitializeSidebar();
@@ -82,6 +87,7 @@ public partial class MainWindow : Window
                 _normalSize = ClientSize;
             }
             InitializeNotebook();
+            if (themeError != null) ShowNotice(themeError);
         };
         PositionChanged += (_, _) =>
         {
@@ -728,10 +734,10 @@ public partial class MainWindow : Window
 
     private void Theme_Click(object? sender, RoutedEventArgs e)
     {
-        var active = AppThemes.Resolve(_settings);
+        var active = _themes.Resolve(_settings);
         var menu = new MenuFlyout { Placement = PlacementMode.Top };
         menu.Items.Add(new MenuItem { Header = "APPEARANCE", IsEnabled = false });
-        foreach (var theme in AppThemes.All)
+        foreach (var theme in _themes.Themes)
         {
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("24,*,24"), Width = 230 };
             row.Children.Add(new TextBlock { Text = theme.Name == active.Name ? "●" : "○", Foreground = new SolidColorBrush(Color.Parse(theme.Accent)) });
@@ -751,10 +757,45 @@ public partial class MainWindow : Window
             });
             menu.Items.Add(item);
         }
+        menu.Items.Add(new Separator());
+        void Action(string title, Action action)
+        {
+            var item = new MenuItem { Header = title };
+            item.Click += async (_, _) => await Run(() => { action(); return Task.CompletedTask; });
+            menu.Items.Add(item);
+        }
+        var editThemes = new MenuItem { Header = "Edit themes…" };
+        editThemes.Click += async (_, _) => await Run(async () =>
+        {
+            var dialog = new ThemeEditorDialog(_themes, _themes.Resolve(_settings).Name);
+            _inDialog = true;
+            try
+            {
+                if (await dialog.ShowDialog<bool>(this))
+                {
+                    ApplyTheme();
+                    SaveStatus.Text = "Themes saved";
+                }
+            }
+            finally { _inDialog = false; }
+        });
+        menu.Items.Add(editThemes);
+        Action("Reload themes", () =>
+        {
+            _themes.Reload();
+            ApplyTheme();
+            SaveStatus.Text = "Themes reloaded";
+        });
+        Action("Reset built-in themes", () =>
+        {
+            var backup = _themes.ResetBuiltIns();
+            ApplyTheme();
+            ShowNotice("Built-in themes restored. Custom themes kept. Backup: " + backup);
+        });
         AppearanceButton.Flyout = menu;
         menu.ShowAt(AppearanceButton);
     }
-    private void ApplyTheme() => AppThemes.Apply(AppThemes.Resolve(_settings));
+    private void ApplyTheme() => AppThemes.Apply(_themes.Resolve(_settings));
     private void Dismiss_Click(object? sender, RoutedEventArgs e) => Notice.IsVisible = false;
     private void ShowNotice(string text) { NoticeText.Text = text; Notice.IsVisible = true; }
 

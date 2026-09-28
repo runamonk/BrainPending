@@ -134,3 +134,24 @@ are kept. Windows is the validated target; macOS/Linux have not been validated.
 - `vendor/AvaloniaRichEditor`: pinned MIT editor source with documented RTF fixes.
 
 See `THIRD-PARTY-NOTICES.md` and `vendor/AvaloniaRichEditor/MYNOTES-PATCHES.md`.
+
+### Custom themes
+
+Open the color-theme menu and choose **Edit themes…** for the built-in two-pane
+editor: JSON on the left and a live theme preview on the right. Choose a theme
+in the preview list, then edit its colors or copy an entry with a unique `Name`.
+**Save themes** (Ctrl+S) validates, backs up, and applies the file; **Cancel** or
+Escape discards edits. Invalid JSON keeps the last valid preview and disables
+Save. Previewing does not change the app's active theme.
+
+The file lives at `%LOCALAPPDATA%\MyNotes\themes.json` and is created on first
+launch. External edits can still be applied with **Reload themes**; themes also
+load on startup. `Dark` selects light/dark control styling; `Surface`, `Text`, `Accent`,
+`Selection`, `Icon`, `Line`, and `Link` define the palette colors (for example,
+`#FF79C6`). JSON comments and trailing commas are supported.
+
+Invalid files show an error without replacing the current palette; startup uses
+bundled defaults if loading fails. **Reset built-in themes** restores all supplied
+themes, preserves custom entries, and saves a uniquely named `.bak` beside the
+file. Correct invalid JSON before resetting so custom entries can be preserved.
+The bundled defaults are maintained in `src/MyNotes/DefaultThemes.json`.

@@ -1,0 +1,112 @@
+[
+  {
+    "Name": "Default",
+    "Dark": false,
+    "Surface": "#FAFAFA",
+    "Text": "#202020",
+    "Accent": "#526B59",
+    "Selection": "#C8DCCE",
+    "Icon": "#526B59",
+    "Line": "#A5B8AB",
+    "Link": "#2457A7"
+  },
+  {
+    "Name": "Autobiography",
+    "Dark": true,
+    "Surface": "#302C28",
+    "Text": "#F0E6D6",
+    "Accent": "#C9A768",
+    "Selection": "#514638",
+    "Icon": "#D8BC86",
+    "Line": "#75644E",
+    "Link": "#E6B86A"
+  },
+  {
+    "Name": "Dark",
+    "Dark": true,
+    "Surface": "#252525",
+    "Text": "#EEEEEE",
+    "Accent": "#BB86D9",
+    "Selection": "#44384F",
+    "Icon": "#C5A3DB",
+    "Line": "#64516E",
+    "Link": "#82B1FF"
+  },
+  {
+    "Name": "Carbon",
+    "Dark": true,
+    "Surface": "#18181C",
+    "Text": "#E4E4EB",
+    "Accent": "#A8A8BA",
+    "Selection": "#35353F",
+    "Icon": "#BFC0D0",
+    "Line": "#50505E",
+    "Link": "#91B7FF"
+  },
+  {
+    "Name": "Dracula",
+    "Dark": true,
+    "Surface": "#282A36",
+    "Text": "#F8F8F2",
+    "Accent": "#BD93F9",
+    "Selection": "#44475A",
+    "Icon": "#8BE9FD",
+    "Line": "#6272A4",
+    "Link": "#FF79C6"
+  },
+  {
+    "Name": "Futura",
+    "Dark": true,
+    "Surface": "#292C34",
+    "Text": "#F5F0E5",
+    "Accent": "#F2B134",
+    "Selection": "#514634",
+    "Icon": "#F2C66D",
+    "Line": "#75613C",
+    "Link": "#80CBC4"
+  },
+  {
+    "Name": "Midnight",
+    "Dark": true,
+    "Surface": "#182238",
+    "Text": "#E2E9F7",
+    "Accent": "#729EFF",
+    "Selection": "#2D4269",
+    "Icon": "#91B7FF",
+    "Line": "#405D8A",
+    "Link": "#82CFFF"
+  },
+  {
+    "Name": "Solarized Dark",
+    "Dark": true,
+    "Surface": "#002B36",
+    "Text": "#93A1A1",
+    "Accent": "#63B5AD",
+    "Selection": "#17434D",
+    "Icon": "#78C3BB",
+    "Line": "#32616A",
+    "Link": "#2AA198"
+  },
+  {
+    "Name": "Titanium",
+    "Dark": true,
+    "Surface": "#302F3F",
+    "Text": "#F0EBF7",
+    "Accent": "#C293EF",
+    "Selection": "#514365",
+    "Icon": "#D3AEF2",
+    "Line": "#75608C",
+    "Link": "#E6A0D8"
+  },
+  {
+    "Name": "Xanth",
+    "Dark": true,
+    "Surface": "#000000",
+    "Text": "#39FF14",
+    "Accent": "#39FF14",
+    "Selection": "#123B0C",
+    "Icon": "#39FF14",
+    "Line": "#236B16",
+    "Link": "#00E5FF"
+  }
+]

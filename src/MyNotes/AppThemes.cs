@@ -9,19 +9,13 @@ internal sealed record AppColorTheme(string Name, bool Dark, string Surface, str
 
 internal static class AppThemes
 {
-    public static readonly AppColorTheme[] All =
-    [
-        new("Default", false, "#FAFAFA", "#202020", "#526B59", "#C8DCCE", "#526B59", "#A5B8AB", "#2457A7"),
-        new("Autobiography", true, "#302C28", "#F0E6D6", "#C9A768", "#514638", "#D8BC86", "#75644E", "#E6B86A"),
-        new("Dark", true, "#252525", "#EEEEEE", "#BB86D9", "#44384F", "#C5A3DB", "#64516E", "#82B1FF"),
-        new("Carbon", true, "#18181C", "#E4E4EB", "#A8A8BA", "#35353F", "#BFC0D0", "#50505E", "#91B7FF"),
-        new("Dracula", true, "#282A36", "#F8F8F2", "#BD93F9", "#44475A", "#8BE9FD", "#6272A4", "#FF79C6"),
-        new("Futura", true, "#292C34", "#F5F0E5", "#F2B134", "#514634", "#F2C66D", "#75613C", "#80CBC4"),
-        new("Midnight", true, "#182238", "#E2E9F7", "#729EFF", "#2D4269", "#91B7FF", "#405D8A", "#82CFFF"),
-        new("Solarized Dark", true, "#002B36", "#93A1A1", "#63B5AD", "#17434D", "#78C3BB", "#32616A", "#2AA198"),
-        new("Titanium", true, "#302F3F", "#F0EBF7", "#C293EF", "#514365", "#D3AEF2", "#75608C", "#E6A0D8"),
-        new("Xanth", true, "#000000", "#39FF14", "#39FF14", "#123B0C", "#39FF14", "#236B16", "#00E5FF")
-    ];
+    public static readonly AppColorTheme[] All = LoadDefaults();
+
+    private static AppColorTheme[] LoadDefaults()
+    {
+        using var stream = typeof(AppThemes).Assembly.GetManifestResourceStream("MyNotes.DefaultThemes.json")!;
+        return System.Text.Json.JsonSerializer.Deserialize<AppColorTheme[]>(stream)!;
+    }
 
     public static AppColorTheme Resolve(NotebookSettings settings) =>
         All.FirstOrDefault(t => t.Name == settings.ColorTheme) ?? All.Single(t => t.Name == (settings.DarkTheme ? "Dracula" : "Default"));

@@ -32,7 +32,7 @@ namespace AvaloniaRichEditor.Controls;
 /// </summary>
 public partial class RichEditorToolbar : UserControl
 {
-    /// <summary>Show common character formatting inline and other commands in a flyout.</summary>
+    /// <summary>Show common text, list, and insert controls inline without an overflow menu.</summary>
     public static readonly StyledProperty<bool> CompactProperty =
         AvaloniaProperty.Register<RichEditorToolbar, bool>(nameof(Compact));
     public bool Compact
@@ -305,6 +305,7 @@ public partial class RichEditorToolbar : UserControl
         _zoomCombo = _paperCombo = _orientCombo = null; _exportBtn = _importBtn = _printBtn = null;
         _colorSwatch = _highlightSwatch = null; _colorIconHost = _highlightIconHost = null;
 
+        Control? bulletBox = null, numberBox = null;
         bool ro = Target?.IsReadOnly == true;
         var lvl = EffectiveLevel();
         bool normal = lvl >= ToolbarLevel.Normal;
@@ -421,13 +422,13 @@ public partial class RichEditorToolbar : UserControl
             (ListMarkerStyle.Disc, "•"), (ListMarkerStyle.Circle, "◦"),
             (ListMarkerStyle.Square, "▪"), (ListMarkerStyle.Dash, "–"));
         _bulletBtn = bullet.Icon; _bulletPreview = bullet.Preview;
-        Add(bullet.Box);
+        Add(bulletBox = bullet.Box);
         var number = BuildListBox(RichEditorIcon.NumberedList, Loc("NumberedList"), () => Target?.ToggleNumbering(), ListKind.Ordered,
             (ListMarkerStyle.Decimal, "1."), (ListMarkerStyle.DecimalParen, "1)"),
             (ListMarkerStyle.LowerAlpha, "a)"), (ListMarkerStyle.UpperAlpha, "A)"),
             (ListMarkerStyle.LowerRoman, "i)"));
         _numberBtn = number.Icon; _numberPreview = number.Preview;
-        Add(number.Box);
+        Add(numberBox = number.Box);
         // Quote (blockquote) is available via the right-click List menu and ToggleQuote(); no toolbar button.
         Add(Btn("→|", Loc("IndentIncrease"), () => Target?.Indent(20), RichEditorIcon.IndentIncrease));
         Add(Btn("|←", Loc("IndentDecrease"), () => Target?.Indent(-20), RichEditorIcon.IndentDecrease));
@@ -459,30 +460,9 @@ public partial class RichEditorToolbar : UserControl
         {
             var primary = new System.Collections.Generic.List<Control>();
             foreach (var control in new Control?[] { _boldBtn, _italicBtn, _underlineBtn, _strikeBtn,
-                colorButton, highlightButton, _fontCombo, _sizeCombo, linkButton })
+                colorButton, highlightButton, _fontCombo, _sizeCombo, linkButton,
+                bulletBox, numberBox, _imageBtn, _tableBtn })
                 if (control != null) primary.Add(control);
-            var advanced = new WrapPanel { Orientation = Orientation.Horizontal, MaxWidth = 440 };
-            foreach (var control in items)
-            {
-                if (primary.Contains(control) || control is Border { Width: 1 }) continue;
-                DisableButtonFocus(control);
-                advanced.Children.Add(control);
-            }
-            var more = Btn("⋯", "More formatting", () => { });
-            more.Name = "MoreFormattingButton";
-            more.Flyout = PickerFlyout(new Flyout
-            {
-                Content = new StackPanel
-                {
-                    Spacing = 8,
-                    Children =
-                    {
-                        new TextBlock { Text = "More formatting", FontWeight = FontWeight.SemiBold },
-                        advanced
-                    }
-                }
-            });
-            primary.Add(more);
             items = primary;
         }
 
@@ -857,7 +837,8 @@ public partial class RichEditorToolbar : UserControl
         {
             Content = glyph ?? (object)options[0].Glyph,
             Background = Brushes.Transparent, BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(2, 0), VerticalAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(4, 0), MinWidth = 28, MinHeight = 28,
+            VerticalAlignment = VerticalAlignment.Stretch,
         };
         icon.Click += (_, _) => toggle();
         ToolTip.SetTip(icon, tip);
@@ -868,11 +849,15 @@ public partial class RichEditorToolbar : UserControl
             TextAlignment = Avalonia.Media.TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
         };
 
+        var presetContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        presetContent.Children.Add(preview);
+        presetContent.Children.Add(ToolbarIcons.ChevronDown());
         var presets = new Button
         {
-            Content = ToolbarIcons.ChevronDown(),
+            Content = presetContent,
             Background = Brushes.Transparent, BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(2, 0), MinWidth = 16, VerticalAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(6, 0), MinWidth = 40, MinHeight = 28,
+            VerticalAlignment = VerticalAlignment.Stretch,
         };
         ToolTip.SetTip(presets, tip);
         var flyout = PickerFlyout(new Flyout { Placement = Avalonia.Controls.PlacementMode.BottomEdgeAlignedLeft });
@@ -892,8 +877,8 @@ public partial class RichEditorToolbar : UserControl
         }
         flyout.Content = panel;
 
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-        row.Children.Add(icon); row.Children.Add(preview); row.Children.Add(presets);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 0, VerticalAlignment = VerticalAlignment.Stretch };
+        row.Children.Add(icon); row.Children.Add(presets);
         var box = new Border
         {
             Child = row,
@@ -901,7 +886,7 @@ public partial class RichEditorToolbar : UserControl
             [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(4, 0),
+            Padding = new Thickness(0),
             Margin = new Thickness(2, 0),
             MinHeight = 28,
             VerticalAlignment = VerticalAlignment.Center,

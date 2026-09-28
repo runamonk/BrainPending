@@ -14,9 +14,8 @@ Local changes:
   read/write, scoped character state, paragraph alignment, indentation, headings,
   margins, and line spacing.
 - Formatting toolbar: expose insert/edit hyperlink and clear-formatting actions.
-- Opt-in `Compact` toolbar layout puts common character controls in a flat row
-  with font size immediately after font family, and retains remaining controls
-  in a More formatting flyout.
+- Opt-in `Compact` toolbar layout puts common character controls, lists, image insertion,
+  and table insertion directly in the wrapping toolbar, with no overflow menu.
 - Theme-aware toolbar icons, popup surfaces and status text; transparent toolbar
   and status backgrounds inherit the application's canvas.
 - Opt-in `UseThemeColors` lightens dark document ink for a dark canvas at render

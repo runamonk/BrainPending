@@ -24,9 +24,8 @@ dotnet run --project src/MyNotes -- --notes ./Notes
 - Nested folders, sliding folder navigation, an Up entry, and notebook-home button.
 - Individual `.rtf` files in real folders.
 - Formatting toolbar: fonts, size, bold/italic/underline/strike, colours,
-  highlighting, headings, alignment, lists, indentation, and line spacing.
-- Compact toolbar keeps common text controls and a chain-link button in one row;
-  the “…” flyout exposes undo/redo, paragraph formatting, lists, inserts and clear formatting.
+  highlighting, links, bulleted and numbered lists, image insertion, and table insertion.
+  Controls wrap onto another row when needed; there is no overflow menu.
 - Image insertion, clipboard images, and resize handles. Click an image to select
   it; drag its corner to resize while retaining its proportions.
 - Insert/edit links from the toolbar; right-click an existing link to edit/remove

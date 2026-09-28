@@ -23,6 +23,8 @@ dotnet run --project src/MyNotes -- --notes ./Notes
   Pin it again to keep it visible. The pin preference is remembered across launches.
 - Nested folders, sliding folder navigation, an Up entry, and notebook-home button.
 - Individual `.rtf` files in real folders.
+- Unpin the sidebar to keep a narrow vertical toolbar. Click its top button
+  to toggle the note list; pin the expanded pane to keep it open.
 - Formatting toolbar: fonts, size, bold/italic/underline/strike, colours,
   highlighting, links, bulleted and numbered lists, image insertion, and table insertion.
   Controls wrap onto another row when needed; there is no overflow menu.

@@ -21,6 +21,56 @@ public static class TestApplication
 
 public sealed class EditorTests
 {
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SpaceOrEnterAfterLinkStartsUnlinkedText(bool enter)
+    {
+        var editor = new RichEditor();
+        editor.LoadHtml("<p><a href='https://example.com'>Link</a></p>");
+        var window = new Window { Content = editor };
+        window.Show();
+        try
+        {
+            editor.Focus();
+            window.KeyPress(Avalonia.Input.Key.End, Avalonia.Input.RawInputModifiers.None,
+                Avalonia.Input.PhysicalKey.End, null);
+            if (enter)
+                window.KeyPress(Avalonia.Input.Key.Enter, Avalonia.Input.RawInputModifiers.None,
+                    Avalonia.Input.PhysicalKey.Enter, null);
+            else
+                editor.InsertText(" ");
+            editor.InsertText("next");
+            var runs = editor.Document!.Blocks.OfType<Paragraph>().SelectMany(p => p.Inlines.OfType<Run>()).ToArray();
+            Assert.Equal("Link", Assert.Single(runs.Where(r => r.NavigateUri != null)).Text);
+            var plain = Assert.Single(runs.Where(r => r.Text?.Contains("next") == true));
+            Assert.Null(plain.NavigateUri);
+            Assert.Null(plain.Foreground);
+            Assert.Equal(enter ? "next" : " next", plain.Text);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void SpaceInsideLinkPreservesTheLink()
+    {
+        var editor = new RichEditor();
+        editor.LoadHtml("<p><a href='https://example.com'>Link</a></p>");
+        var window = new Window { Content = editor };
+        window.Show();
+        try
+        {
+            editor.Focus();
+            window.KeyPress(Avalonia.Input.Key.Right, Avalonia.Input.RawInputModifiers.None,
+                Avalonia.Input.PhysicalKey.ArrowRight, null);
+            editor.InsertText(" ");
+            var run = Assert.Single(editor.Document!.Blocks.OfType<Paragraph>().Single().Inlines.OfType<Run>());
+            Assert.Equal("L ink", run.Text);
+            Assert.Equal("https://example.com", run.NavigateUri);
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaFact]
     public async Task LinkDialogPrefillsAndUpdatesExistingLinkTextAndDestination()
     {
@@ -103,6 +153,7 @@ public sealed class EditorTests
         Assert.Contains("café 😀", string.Concat(runs.Select(r => r.Text)));
         var link = Assert.Single(runs, r => r.NavigateUri == "https://example.com/notes");
         Assert.Equal("My link", link.Text);
+        Assert.False(link.TextDecorations?.Any(d => d.Location == TextDecorationLocation.Underline) == true);
         var restoredImage = Assert.Single(restored.Blocks.OfType<ImageBlock>());
         Assert.Equal(imageBytes, restoredImage.RawBytes);
         Assert.Equal(240, restoredImage.Width, 1);

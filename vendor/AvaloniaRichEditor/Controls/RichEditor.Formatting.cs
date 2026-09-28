@@ -477,6 +477,11 @@ public partial class RichEditor
             _selectionEnd = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
             new TextRange(_selectionStart, _selectionEnd).ApplyPropertyValue(r => r.NavigateUri = link.Url);
         }
+        // Continue typing after the link instead of replacing the selected label.
+        var end = new TextRange(_selectionStart, _selectionEnd).End;
+        _caretPosition = new TextPointer(end.Paragraph, end.Offset);
+        _selectionStart = new TextPointer(end.Paragraph, end.Offset);
+        _selectionEnd = new TextPointer(end.Paragraph, end.Offset);
         MarkTextChanged();
         InvalidateMeasure();
         InvalidateVisual();

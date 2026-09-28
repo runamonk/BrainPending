@@ -60,6 +60,7 @@ public partial class MainWindow : Window
         EditorView.Editor.Margin = new Thickness(4, 24);
         EditorView.Editor.UseThemeColors = true;
         EditorView.Editor.Bind(RichEditor.ThemeForegroundProperty, new DynamicResourceExtension("AppTextBrush"));
+        EditorView.Editor.Bind(RichEditor.LinkForegroundProperty, new DynamicResourceExtension("AppLinkBrush"));
         EditorView.Editor.Bind(RichEditor.SelectionBrushProperty, new DynamicResourceExtension("AppSelectionBrush"));
         EditorView.Editor.AllowRemoteImagesOnPaste = false;
         EditorView.Editor.FontFamilyChoices = ["Segoe UI", "Arial", "Calibri", "Georgia", "Times New Roman", "Consolas"];

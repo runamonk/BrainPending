@@ -1375,7 +1375,7 @@ internal sealed class RtfWriter
         _body.Append('{');
         if (r.FontWeight == FontWeight.Bold || heading) _body.Append(@"\b");
         if (r.FontStyle == FontStyle.Italic) _body.Append(@"\i");
-        if (HasDecoration(r.TextDecorations, TextDecorationLocation.Underline) || !string.IsNullOrEmpty(r.NavigateUri)) _body.Append(@"\ul");
+        if (HasDecoration(r.TextDecorations, TextDecorationLocation.Underline)) _body.Append(@"\ul");
         if (HasDecoration(r.TextDecorations, TextDecorationLocation.Strikethrough)) _body.Append(@"\strike");
         int f = FontIndex(r.FontFamily);
         if (f > 0) _body.Append($@"\f{f}");

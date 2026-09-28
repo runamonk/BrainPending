@@ -53,6 +53,16 @@ public partial class RichEditor : Control
     }
 
 
+    /// <summary>Default display color for hyperlinks without a custom foreground.</summary>
+    public static readonly StyledProperty<IBrush> LinkForegroundProperty =
+        AvaloniaProperty.Register<RichEditor, IBrush>(nameof(LinkForeground), Brushes.RoyalBlue);
+
+    public IBrush LinkForeground
+    {
+        get => GetValue(LinkForegroundProperty);
+        set => SetValue(LinkForegroundProperty, value);
+    }
+
     private DispatcherTimer _caretTimer;
     private UndoManager _undoManager = new UndoManager();
     private bool _isCaretVisible;
@@ -307,7 +317,7 @@ public partial class RichEditor : Control
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == ThemeVariantScope.ActualThemeVariantProperty || change.Property == UseThemeColorsProperty || change.Property == ThemeForegroundProperty)
+        if (change.Property == ThemeVariantScope.ActualThemeVariantProperty || change.Property == UseThemeColorsProperty || change.Property == ThemeForegroundProperty || change.Property == LinkForegroundProperty)
         {
             _layoutCache.Clear();
             _tableLayoutCache.Clear();
@@ -599,7 +609,7 @@ public partial class RichEditor : Control
     {
         if (r == null) return false;
         if (r.TextDecorations == null)
-            return loc == TextDecorationLocation.Underline && !string.IsNullOrEmpty(r.NavigateUri);
+            return false;
         foreach (var d in r.TextDecorations) if (d.Location == loc) return true;
         return false;
     }
@@ -954,6 +964,22 @@ public partial class RichEditor : Control
             int len = InlineLen(p.Inlines[i]);
             if (p.Inlines[i] is Run run && localIndex >= currentIndex && localIndex <= currentIndex + len)
             {
+                // A separator at the end of a hyperlink starts ordinary text. Adjacent
+                // runs with the same URL are still one link (for example, a bold word).
+                if ((text == " " || text == "\n") && localIndex == currentIndex + len
+                    && !string.IsNullOrEmpty(run.NavigateUri)
+                    && !(p.Inlines.Skip(i + 1).FirstOrDefault(inline => InlineLen(inline) > 0)
+                        is Run next && next.NavigateUri == run.NavigateUri))
+                {
+                    var plain = (Run)run.Clone();
+                    plain.Text = text;
+                    plain.NavigateUri = null;
+                    plain.Foreground = null;
+                    plain.TextDecorations = null;
+                    plain.Parent = p;
+                    p.Inlines.Insert(i + 1, plain);
+                    return;
+                }
                 run.Text = (run.Text ?? "").Insert(localIndex - currentIndex, text);
                 return;
             }
@@ -1342,7 +1368,6 @@ public partial class RichEditor : Control
                 var weight = heading ? FontWeight.Bold : r.FontWeight;
                 var typeface = new Typeface(family, r.FontStyle, weight);
                 TextDecorationCollection? decos = r.TextDecorations;
-                if (decos == null && !string.IsNullOrEmpty(r.NavigateUri)) decos = TextDecorations.Underline;
                 double size = r.FontSize <= 0 ? defaultSize : r.FontSize; // pt
                 if (heading && RunSizeIsBodyDefault(r)) size = headingSize;
                 if (size > maxRunPt) maxRunPt = size;
@@ -1350,7 +1375,9 @@ public partial class RichEditor : Control
                     typeface,
                     PtToPx(size),
                     decos,
-                    DisplayInk(r.Foreground, r.Background ?? p.Background),
+                    !string.IsNullOrEmpty(r.NavigateUri) && (r.Foreground == null
+                        || r.Foreground is ISolidColorBrush { Color: var color } && color == Colors.Black)
+                        ? LinkForeground : DisplayInk(r.Foreground, r.Background ?? p.Background),
                     r.Background);
                 segs.Add(new LayoutSeg { Text = r.Text, Props = props });
             }

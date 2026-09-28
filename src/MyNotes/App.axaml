@@ -14,6 +14,7 @@
                     <SolidColorBrush x:Key="AppAccentTextBrush" Color="White" />
                     <SolidColorBrush x:Key="AppIconBrush" Color="#526B59" />
                     <SolidColorBrush x:Key="AppSelectionBrush" Color="#C8DCCE" />
+                    <SolidColorBrush x:Key="AppLinkBrush" Color="#2457A7" />
                     <SolidColorBrush x:Key="AppNoticeBrush" Color="#FFF0CA" />
                     <SolidColorBrush x:Key="AppNoticeTextBrush" Color="#594718" />
                     <SolidColorBrush x:Key="AppErrorBrush" Color="#B42318" />
@@ -25,6 +26,7 @@
                     <SolidColorBrush x:Key="AppAccentTextBrush" Color="#282A36" />
                     <SolidColorBrush x:Key="AppIconBrush" Color="#8BE9FD" />
                     <SolidColorBrush x:Key="AppSelectionBrush" Color="#44475A" />
+                    <SolidColorBrush x:Key="AppLinkBrush" Color="#FF79C6" />
                     <SolidColorBrush x:Key="AppNoticeBrush" Color="#44475A" />
                     <SolidColorBrush x:Key="AppNoticeTextBrush" Color="#F1FA8C" />
                     <SolidColorBrush x:Key="AppErrorBrush" Color="#FF5555" />

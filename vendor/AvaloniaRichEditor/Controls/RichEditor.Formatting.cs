@@ -9,13 +9,9 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Character/paragraph formatting commands (toolbar/context-menu surface), list toggling with
-// hard-line splitting, hyperlinks, and the format painter. Part of RichEditor (split out of the
-// main file for readability).
 public partial class RichEditor
 {
-    // ---- Format painter ----
-    // Snapshot of character formatting captured from the source selection; non-null while armed.
+    // Non-null while the format painter is armed.
     private (FontWeight w, FontStyle st, TextDecorationCollection? dec, double size, string? family, IBrush? fg, IBrush? bg)? _painterFmt;
 
     /// <summary>True while the format painter is armed (the next selection receives the captured formatting).</summary>
@@ -28,7 +24,7 @@ public partial class RichEditor
     /// </summary>
     public void StartFormatPainter()
     {
-        if (_painterFmt != null) { CancelFormatPainter(); return; } // toggle off
+        if (_painterFmt != null) { CancelFormatPainter(); return; }
         var p = _selectionStart.Paragraph ?? _caretPosition.Paragraph;
         if (p == null) return;
         int off = _selectionStart.Paragraph != null ? _selectionStart.Offset : _caretPosition.Offset;
@@ -39,7 +35,6 @@ public partial class RichEditor
         Cursor = CrossCursor;
     }
 
-    /// <summary>Disarms the format painter without applying.</summary>
     public void CancelFormatPainter()
     {
         _painterFmt = null;
@@ -58,14 +53,10 @@ public partial class RichEditor
         CancelFormatPainter();
     }
 
-    /// <summary>Toggles bold on the current selection (or the caret run).</summary>
     public void ToggleBold() { ApplyStyleToSelection(r => r.FontWeight = r.FontWeight == FontWeight.Bold ? FontWeight.Normal : FontWeight.Bold); }
-    /// <summary>Toggles italic on the current selection (or the caret run).</summary>
     public void ToggleItalic() { ApplyStyleToSelection(r => r.FontStyle = r.FontStyle == FontStyle.Italic ? FontStyle.Normal : FontStyle.Italic); }
-    /// <summary>Sets the font size of the current selection (or the caret run).</summary>
     public void SetFontSize(double size) { ApplyStyleToSelection(r => r.FontSize = size); }
 
-    // Standard point-size ladder for the 크게/작게 (larger/smaller) commands.
     private static readonly double[] FontSizeLadder =
         { 8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 72, 96 };
 
@@ -90,9 +81,7 @@ public partial class RichEditor
         }
         SetFontSize(target);
     }
-    /// <summary>Sets the foreground brush of the current selection (or the caret run).</summary>
     public void SetForeground(IBrush brush) { ApplyStyleToSelection(r => r.Foreground = brush); }
-    /// <summary>Sets the font family of the current selection (or the caret run).</summary>
     public void SetFontFamily(string family) { ApplyStyleToSelection(r => r.FontFamily = family); }
     /// <summary>Sets the highlight (background) brush of the current selection; pass <see langword="null"/> to clear.</summary>
     public void SetHighlight(IBrush? brush) { ApplyStyleToSelection(r => r.Background = brush); }
@@ -118,8 +107,6 @@ public partial class RichEditor
     /// (each clamped 0–400); the caret paragraph alone when nothing is selected.</summary>
     public void Indent(double delta)
         => ApplyToSelectedParagraphs(p => p.Indent = Math.Clamp(p.Indent + delta, 0, 400));
-    /// <summary>Sets the text alignment of every selected paragraph (the caret paragraph when nothing
-    /// is selected).</summary>
     public void SetTextAlignment(TextAlignment align)
         => ApplyToSelectedParagraphs(p => p.TextAlignment = align);
     /// <summary>Sets the absolute line-box height (px) of every selected paragraph ("exactly" spacing).
@@ -130,9 +117,7 @@ public partial class RichEditor
     /// single-line height (1.0 = single, 1.5 = 1.5 lines; HWP % ÷ 100). <see cref="double.NaN"/> clears it.</summary>
     public void SetLineSpacing(double multiplier)
         => ApplyToSelectedParagraphs(p => p.LineSpacing = multiplier);
-    /// <summary>Toggles a bullet list on the selected paragraphs.</summary>
     public void ToggleBullet() { SetListType(ListKind.Bullet); }
-    /// <summary>Toggles a numbered list on the selected paragraphs.</summary>
     public void ToggleNumbering() { SetListType(ListKind.Ordered); }
     /// <summary>Applies a specific bullet/number marker style to the selected paragraphs, turning the
     /// list on (never a toggle). The style implies the list kind (bullets vs numbers).</summary>
@@ -158,7 +143,6 @@ public partial class RichEditor
         InvalidateVisual();
     }
 
-    // The list kind a marker style belongs to (number formats -> Ordered, everything else -> Bullet).
     private static ListKind ListMarkerStyleKind(ListMarkerStyle s) => s switch
     {
         ListMarkerStyle.Decimal or ListMarkerStyle.DecimalParen or ListMarkerStyle.LowerAlpha
@@ -204,7 +188,6 @@ public partial class RichEditor
         var cpP = _caretPosition.Paragraph; int cpO = _caretPosition.Offset;
         TextPointer? nSs = null, nSe = null, nCp = null;
 
-        // Maps an (offset within a multi-line paragraph) onto the matching split item + local offset.
         (Paragraph, int) MapInto(List<Paragraph> items, Paragraph tp, int off)
         {
             string plain = BuildPlain(tp);
@@ -258,7 +241,6 @@ public partial class RichEditor
         return result;
     }
 
-    // Top-level paragraphs touched by the current selection (or just the caret's when collapsed).
     private List<Paragraph> SelectedTopLevelParagraphs()
     {
         var result = new List<Paragraph>();
@@ -339,9 +321,7 @@ public partial class RichEditor
         ApplyToSelectedParagraphs(p => p.IsQuote = on);
     }
 
-    /// <summary>Toggles strikethrough on the current selection (or the caret run).</summary>
     public void ToggleStrikethrough() { ApplyStyleToSelection(r => r.TextDecorations = ToggleDecoration(r.TextDecorations, TextDecorationLocation.Strikethrough)); }
-    /// <summary>Toggles underline on the current selection (or the caret run).</summary>
     public void ToggleUnderline() { ApplyStyleToSelection(r => r.TextDecorations = ToggleDecoration(r.TextDecorations, TextDecorationLocation.Underline)); }
 
     // Toggles a single decoration (underline/strikethrough) while preserving the other, so the two
@@ -488,7 +468,6 @@ public partial class RichEditor
         Focus();
     }
 
-    // MyNotes: make the existing link action accessible from the formatting toolbar.
     internal async Task EditLinkFromToolbarAsync()
     {
         if (Document == null || IsReadOnly) return;

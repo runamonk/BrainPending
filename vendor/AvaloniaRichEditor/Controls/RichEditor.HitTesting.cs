@@ -5,16 +5,13 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Hit-testing: point -> document position/block/run mapping, shared table geometry (LayoutTable)
-// and the inline-image offset helpers. All consumers (render, caret, selection, context menu)
-// derive geometry from the same code here so they can never disagree. Part of RichEditor (split
-// out of the main file for readability).
+// Rendering, caret placement, selection, and context menus must share the same hit-test geometry.
 public partial class RichEditor
 {
     // Returns the Run directly under the point if the point lands on rendered text, else null.
     // Used for hyperlink hover/click detection.
     // Recursive link hit-test inside a cell's block list (mirror of HitTestBlockList), descending into
-    // nested tables (P4-2b). Returns the hyperlink Run under the point, or null.
+    // nested tables. Returns the hyperlink Run under the point, or null.
     private Run? LinkRunInBlockList(System.Collections.Generic.IList<Block> blocks, double ox, double oy, double innerW, Point p)
     {
         double by = 0;
@@ -80,7 +77,6 @@ public partial class RichEditor
         return null;
     }
 
-    // True when paragraph p lives anywhere inside table tb, including inside a nested table (P4-2b).
     private static bool IsCellOf(TableBlock tb, Paragraph p)
     {
         for (int r = 0; r < tb.Rows; r++)
@@ -106,13 +102,7 @@ public partial class RichEditor
         { ColX = colX; RowY = rowY; TableWidth = w; TotalHeight = h; AnchorRects = anchors; }
     }
 
-    // P2 primitive: the content height of a cell's block list laid out in `innerWidth`. A cell is a
-    // mini block container, so its height is the sum of its blocks' heights — the same shape as the
-    // document-level measure walk, scoped to one cell's content box. Through P1/P2 a cell holds exactly
-    // one paragraph, so this equals the previous BuildTextLayout(cell.Para, innerWidth).Height; P3/P4
-    // add real multi-block cells (and the render side iterates the same list). Cells use their own
-    // width convention (innerWidth directly), distinct from the document walk's ParaLeft/MarginRight
-    // math, so this stays cell-specific rather than routing through BlockExtent.
+    // Measure a cell as a block container using its own padding convention, not the document gutter.
     private double MeasureCellContentHeight(TableCell cell, double innerWidth)
     {
         double h = 0;
@@ -122,10 +112,7 @@ public partial class RichEditor
             switch (b)
             {
                 case Paragraph p:
-                    // Wraps at the content width minus the list/indent gutter, as the render walk draws it —
-                    // including the IME composition, which the render walk splices in (DrawCellBlockList).
-                    // Without it the row is sized for the text without the composition and the composed
-                    // glyphs spill past the cell's bottom border on every wrap.
+                    // Include IME preedit in row height so composition cannot spill below the cell border.
                     h += PreeditAwareLayout(p, Math.Max(10, w - CellParaLeft(p))).Height;
                     break;
                 case ImageBlock im:
@@ -135,10 +122,7 @@ public partial class RichEditor
                     h += DividerHeight;
                     break;
                 case TableBlock nt:
-                    // P4-2b: a nested table. Its total height is independent of the absolute startX/top
-                    // (row heights depend only on column widths, which telescope), so measure at (0,0).
-                    // LayoutTable -> MeasureCellContentHeight is already mutually recursive, so this
-                    // closes the recursion for arbitrarily deep nesting.
+                    // Nested-table height depends on column widths, not position; measure at the origin.
                     h += LayoutTable(nt, 0, 0).TotalHeight;
                     break;
             }
@@ -146,14 +130,8 @@ public partial class RichEditor
         return h;
     }
 
-    // A block image's drawn size inside a cell of content width `innerWidth`: the declared size, scaled
-    // down to fit the cell width (preserving aspect ratio). Shared by the cell measure, render and
-    // hit-test walks so they advance by identical per-block heights.
-    //
-    // The cap is on the DRAWN size only — ImageBlock.Width keeps whatever it was set to (CSS max-width
-    // semantics), so a picture that is too big for its cell takes the room back if the column is later
-    // widened. A resize drag therefore stops moving once it reaches the cell edge while still growing
-    // the stored size; that is intended (decision 2026-07-31), not the handle failing to respond.
+    // Clamp only the drawn image size to the cell width. Preserve declared dimensions so widening the
+    // column restores the larger image; all cell geometry walks must use this same drawn size.
     private static (double w, double h) CellImageSize(ImageBlock im, double innerWidth)
     {
         double w = im.Width > 0 ? im.Width : 200, h = im.Height > 0 ? im.Height : 200;
@@ -173,9 +151,7 @@ public partial class RichEditor
             // Exact match (same startX AND top): reuse the cached geometry verbatim — zero allocation,
             // the common case in continuous mode across blink/scroll/hover frames.
             if (ct.top == top) return ct.layout;
-            // Same startX, different top (every frame in page view: pagination measures at continuous y,
-            // render at per-page slice y): the column geometry and the measured row heights are unchanged,
-            // so reuse them and only re-place the rows/anchors at the new top — skips re-measuring cells.
+            // A vertical shift does not affect measured row heights; reuse them when only top changes.
             var moved = AssembleTableLayout(tb, ct.layout.ColX, ct.rowH, startX, top);
             _tableLayoutCache[tb] = (startX, top, ct.rowH, moved);
             return moved;
@@ -189,7 +165,6 @@ public partial class RichEditor
         var rowH = new double[rows];
         for (int r = 0; r < rows; r++) rowH[r] = 20;
 
-        // Base row heights come from single-row cells (rowSpan == 1) measured at their merged width.
         foreach (var (r, c, cell) in tb.LogicalCells())
         {
             var (cs, rs) = tb.SpanOf(r, c);
@@ -201,7 +176,6 @@ public partial class RichEditor
         for (int r = 0; r < rows; r++)
             if (r < tb.RowHeights.Count && tb.RowHeights[r] > rowH[r]) rowH[r] = tb.RowHeights[r];
 
-        // Row-spanning cells: if content needs more than the spanned rows provide, grow the last row.
         foreach (var (r, c, cell) in tb.LogicalCells())
         {
             var (cs, rs) = tb.SpanOf(r, c);
@@ -214,15 +188,12 @@ public partial class RichEditor
         }
 
         var result = AssembleTableLayout(tb, colX, rowH, startX, top);
-        // Refresh the cache (even on an untrusted/edit pass) so the next trusted frame can reuse it.
         if (_tableLayoutCache.Count > 2000) _tableLayoutCache.Clear();
         _tableLayoutCache[tb] = (startX, top, rowH, result);
         return result;
     }
 
-    // Places the rows at `top` and builds the anchor rects from the (position-independent) measured
-    // column edges `colX` and row heights `rowH`. Split out so a cached table can be re-placed at a new
-    // `top` without re-measuring its cells (the costly part).
+    // Reposition cached cells without remeasuring their content.
     private static TableLayout AssembleTableLayout(TableBlock tb, double[] colX, double[] rowH, double startX, double top)
     {
         int cols = tb.Columns, rows = tb.Rows;
@@ -240,14 +211,7 @@ public partial class RichEditor
         return new TableLayout(colX, rowY, colX[cols] - startX, rowY[rows] - top, anchors);
     }
 
-    // G1 — single source of a block's vertical extent (height, EXCLUDING MarginTop/MarginBottom) at the
-    // given top, plus the layout objects the walkers reuse (a paragraph's TextLayout / a table's
-    // TableLayout; null otherwise). Every read-only document walk — measure, hit-tests, block-at-y —
-    // advances through this so they can never disagree on a block's height the way the duplicated
-    // per-walker `switch`es used to (the historical hardcoded-10 MarginBottom bug came from exactly that
-    // drift). Pagination also advances through this (it adds only the within-block row/line atom split
-    // on top). Render still computes its own advance (it needs the draw/cull logic); migrating it is the
-    // last G1 phase.
+    // Shared block extent excludes margins and returns reusable layout objects for geometry walks.
     private double BlockExtent(Block block, double maxWidth, double top,
         out Avalonia.Media.TextFormatting.TextLayout? paraLayout, out TableLayout? tableLayout)
     {
@@ -284,7 +248,6 @@ public partial class RichEditor
         }
     }
 
-    // The block (image or table) whose rendered rectangle contains the point, or null.
     private Block? GetBlockAtPoint(Point p)
     {
         if (Document == null) return null;
@@ -308,7 +271,6 @@ public partial class RichEditor
         return null;
     }
 
-    // Top y and geometry of a given table, mirroring the block advancement used by the hit-tests.
     private (double top, TableLayout tl)? GetTableRect(TableBlock target)
     {
         if (Document == null) return null;
@@ -336,9 +298,7 @@ public partial class RichEditor
         return (inY && Math.Abs(p.X - left) <= m) || (inX && Math.Abs(p.Y - top) <= m);
     }
 
-    // The table whose outer left/top border the point sits on, else null — in ONE document walk.
-    // The hover path used GetBlockAtPoint + IsOnTableLeftOrTopBorder (which re-walks via GetTableRect),
-    // so this folds two of the per-mouse-move walks into one. Geometry matches IsOnTableLeftOrTopBorder.
+    // Resolve the outer table border in one document walk; this runs on every pointer move.
     private TableBlock? TableLeftOrTopBorderAtPoint(Point p)
     {
         if (Document == null) return null;
@@ -387,12 +347,8 @@ public partial class RichEditor
         return null;
     }
 
-    // Works around an Avalonia hit-test quirk: a DrawableTextRun at the very end of a line is
-    // excluded from caret-distance computation, so the position right after a trailing inline object
-    // (image OR table) collapses to the object's *left* edge (the caret looked stuck in front of it
-    // when there was no text after). When the caret sits right after such an object and the reported X
-    // didn't advance past its start, pin it to the object's right edge. The object's run width comes
-    // from the model (image) or, for a table, from the layout's own range geometry (its padded box).
+    // Avalonia can report the left edge for a caret after a trailing DrawableTextRun. Clamp it to
+    // the object right edge, using model width for images and layout range geometry for tables.
     internal static Rect FixCaretAfterTrailingImage(Avalonia.Media.TextFormatting.TextLayout layout,
         Paragraph p, int logicalOffset, int displayIndex, Rect cr)
     {
@@ -425,15 +381,7 @@ public partial class RichEditor
         return null;
     }
 
-    // The logical caret offset for a point inside a paragraph's layout.
-    //
-    // Past the end of a line Avalonia reports the last position with IsTrailing set, so
-    // TextPosition + IsTrailing comes back ONE PAST the paragraph's length — and clicking the empty
-    // space to the right of a line is an everyday action. The caret then sat at an offset that does not
-    // exist: Backspace deleted nothing (the delete range fell outside every run) and typing appended a
-    // fresh unformatted run instead of continuing the run it was clicked after, so text typed there lost
-    // the line's bold/colour. Clamping here rather than at the call sites keeps the guarantee in one
-    // place — every caret placement, drag selection, link and cell hit-test funnels through this.
+    // Avalonia trailing hits can exceed the paragraph length by one; clamp before any caret or selection update.
     private int HitTestIndex(Avalonia.Media.TextFormatting.TextLayout layout, Point localPoint, Paragraph p)
     {
         var hit = layout.HitTestPoint(localPoint);
@@ -448,14 +396,7 @@ public partial class RichEditor
             ? BuildTextLayout(p, width, _caretPosition.Offset, _preeditText).Height
             : plain.Height;
 
-    // A point inside a paragraph -> a LOGICAL caret offset, with an IME composition accounted for.
-    //
-    // While composing, the glyphs on screen include the preedit, so the plain layout's geometry no
-    // longer matches what was clicked — a click landed at the offset it would have had if the
-    // composition weren't there, drifting further the longer the composition got. Hit-test the composed
-    // layout instead and convert its DISPLAY index back: before the composition maps straight through,
-    // after it shifts back by its length, and inside it resolves to its start (it is one pending unit,
-    // not addressable positions).
+    // Hit-test IME display text, then map to logical offsets: preedit is one pending unit, not stored content.
     private int HitTestLogicalIndex(Paragraph p, double width,
         Avalonia.Media.TextFormatting.TextLayout plain, Point localPoint)
     {
@@ -474,7 +415,7 @@ public partial class RichEditor
 
     // Recursive hit-test of a block list laid out at (ox,oy) of width innerW (a cell content box, mirror
     // of DrawCellBlockList's advance). Returns the caret position the point lands in; a point below all
-    // blocks snaps to the last paragraph. Descends into nested tables (P4-2b). Null only when the list
+    // blocks snaps to the last paragraph. Descends into nested tables. Null only when the list
     // holds no paragraph anywhere (caller falls back).
     private TextPointer? HitTestBlockList(System.Collections.Generic.IList<Block> blocks, double ox, double oy, double innerW, Point p)
     {
@@ -494,10 +435,7 @@ public partial class RichEditor
                 lastPara = bp; lastLayout = bl; lastTop = blkTop; lastLeft = ox + pl; lastWidth = bw;
                 if (p.Y <= blkTop + bh)
                 {
-                    // A cell paragraph can host an inline table too (paste a paragraph containing one into
-                    // a cell). The top-level paragraph walk descended into it; this one didn't, so the
-                    // click stopped at the host paragraph's ObjChar — the table rendered but its cells
-                    // could not be entered or drag-selected.
+                    // Cell paragraphs may contain inline tables too; descend instead of stopping at their object placeholder.
                     if (InlineTableHitDescent(bp, bl, ox + pl, blkTop, p) is { } descended) return descended;
                     return new TextPointer(bp, HitTestLogicalIndex(bp, bw, bl, new Point(p.X - ox - pl, p.Y - blkTop)));
                 }
@@ -516,17 +454,12 @@ public partial class RichEditor
                 by += tl.TotalHeight;
             }
         }
-        // Below all blocks (or in a nested table's border gap): snap to the last paragraph seen.
         return lastPara != null && lastLayout != null
             ? new TextPointer(lastPara, HitTestLogicalIndex(lastPara, lastWidth, lastLayout, new Point(p.X - lastLeft, p.Y - lastTop)))
             : null;
     }
 
-    // Milestone B P3: a point landing on an inline table's drawn box descends into its cells (mirror of
-    // the block-table descent). The table's document-space top-left is bottom-aligned in its line, exactly
-    // as RegisterInlineImages places inline images (and as TableTextRun.Draw receives its origin), so the
-    // geometry agrees with what was painted. Returns null so the caller falls back to the host paragraph's
-    // text hit-test when the point misses every inline table.
+    // Match the drawn inline-table box, including its baseline alignment. A miss falls back to host text.
     private TextPointer? InlineTableHitDescent(Paragraph host, Avalonia.Media.TextFormatting.TextLayout ft,
         double px, double top, Point p)
     {
@@ -535,7 +468,6 @@ public partial class RichEditor
             if (rect.Contains(p) &&
                 HitTestBlockList(found.it.Table.Cells[rr][cc].Blocks, rect.X + 5, rect.Y + 5, Math.Max(10, rect.Width - 10), p) is { } hit)
                 return hit;
-        // Inside the box but in a border gap: snap to the first cell's first paragraph.
         return new TextPointer(found.it.Table.Cells[0][0].Para, 0);
     }
 
@@ -606,13 +538,12 @@ public partial class RichEditor
                     if (xInside && p.Y >= rect.Y && p.Y <= rect.Bottom)
                     {
                         // Descend into the cell's stacked block list (P3), recursing through nested tables
-                        // (P4-2b), to the paragraph the point lands in (or the nearest one).
+                        //, to the paragraph the point lands in (or the nearest one).
                         double innerW = Math.Max(10, rect.Width - 10);
                         if (HitTestBlockList(tcell.Blocks, rect.X + 5, rect.Y + 5, innerW, p) is { } hit)
                             return hit;
                     }
                 }
-                // Outside any cell: remember the nearest anchor (by vertical distance) as a fallback.
                 foreach (var (r, c, rect) in t.AnchorRects)
                 {
                     double distY = p.Y < rect.Y ? rect.Y - p.Y : (p.Y > rect.Bottom ? p.Y - rect.Bottom : 0);
@@ -634,7 +565,6 @@ public partial class RichEditor
                 else
                 {
                     double ppos = ParaLeft(paragraph);
-                    // A point on an inline table descends into its cells (returns immediately).
                     if (p.Y >= top && p.Y <= top + h &&
                         InlineTableHitDescent(paragraph, ft, ppos, top, p) is { } descended)
                         return descended;

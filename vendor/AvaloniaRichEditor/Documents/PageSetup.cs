@@ -2,11 +2,7 @@
 
 namespace AvaloniaRichEditor.Documents;
 
-/// <summary>Per-document page setup: paper size, orientation, page boundaries, header/footer, and page
-/// numbers. Persisted in the JSON/.flow format and applied to the editor on load (like a word processor's
-/// page setup). View-only state such as zoom is deliberately NOT part of this — it isn't a document property.
-/// <para>The page-size/orientation enums live in the Controls namespace but are plain value enums (no
-/// rendering dependency), so the model/formatters can use them freely.</para></summary>
+/// <summary>Persisted page setup. Zoom belongs to the view and is not serialized here.</summary>
 public class PageSetup
 {
     /// <summary>Paper size. <see cref="RichEditorPageSize.Continuous"/> (the default, matching the control)
@@ -14,18 +10,14 @@ public class PageSetup
     public RichEditorPageSize PageSize { get; set; } = RichEditorPageSize.Continuous;
     /// <summary>Page orientation (ignored for Continuous).</summary>
     public RichEditorPageOrientation Orientation { get; set; } = RichEditorPageOrientation.Portrait;
-    /// <summary>Whether page boundaries are drawn for a concrete paper size.</summary>
     public bool ShowPageBoundaries { get; set; } = true;
-    /// <summary>Header text drawn in each page's top margin (null/empty = none).</summary>
     public string? Header { get; set; }
-    /// <summary>Footer text drawn in each page's bottom margin (null/empty = none).</summary>
     public string? Footer { get; set; }
     /// <summary>Whether "page / total" is drawn in the bottom margin.</summary>
     public bool ShowPageNumbers { get; set; }
 
     /// <summary>The page margin, in DIPs, that the editor draws and that the header/footer band lives in.</summary>
-    // Here rather than on the control because the RTF writer needs it too, and a formatter reaching for a
-    // control's statics is how a headless formatter stops being headless.
+    // Shared with formatters so they need no dependency on a control instance.
     internal const double MarginX = 48;
     internal const double MarginY = 40;
 
@@ -47,7 +39,6 @@ public class PageSetup
         return orientation == Controls.RichEditorPageOrientation.Landscape ? (h, w) : (w, h);
     }
 
-    /// <summary>Returns a shallow value copy of this page setup.</summary>
     public PageSetup Clone() => new()
     {
         PageSize = PageSize,

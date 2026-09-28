@@ -2,14 +2,10 @@ using Avalonia.Media.Imaging;
 
 namespace AvaloniaRichEditor.Documents;
 
-/// <summary>A block-level image (its own line/paragraph), as opposed to a small in-line
-/// <see cref="InlineImage"/>. Used for larger pictures; supports resize.</summary>
 public class ImageBlock : Block
 {
     private Bitmap? _cachedBitmap;
-    // Set when a decode of RawBytes threw, so the render path doesn't retry the bad bytes every frame.
-    // Crucially the bytes themselves are KEPT (the format may decode on another platform/codec, and a
-    // save must not silently drop the picture); only the decode attempt is suppressed.
+    // Stop retrying failed decodes, but retain encoded bytes so saving never drops an unsupported image.
     private bool _decodeFailed;
 
     /// <summary>Original encoded image bytes (JPEG/PNG/...). When present this is the data source
@@ -17,7 +13,6 @@ public class ImageBlock : Block
     /// is decoded from them lazily on first access.</summary>
     public byte[]? RawBytes { get; private set; }
 
-    /// <summary>MIME type of <see cref="RawBytes"/> (e.g. "image/jpeg").</summary>
     public string? MimeType { get; private set; }
 
     /// <summary>Decoded bitmap (render cache). Lazily created from <see cref="RawBytes"/> on first
@@ -34,7 +29,6 @@ public class ImageBlock : Block
                     using var ms = new System.IO.MemoryStream(RawBytes);
                     _cachedBitmap = new Bitmap(ms);
                 }
-                // undecodable now: stop retrying, but keep the bytes
                 catch (System.Exception ex) { RichEditorDiagnostics.Report(ex); _decodeFailed = true; }
             }
             return _cachedBitmap;
@@ -49,7 +43,7 @@ public class ImageBlock : Block
         RawBytes = bytes;
         MimeType = mimeType ?? "image/png";
         _cachedBitmap = decoded;
-        _decodeFailed = false; // new bytes deserve a fresh decode attempt
+        _decodeFailed = false;
     }
 
     /// <summary>Display width in device-independent pixels. <see cref="double.NaN"/> = natural size.</summary>

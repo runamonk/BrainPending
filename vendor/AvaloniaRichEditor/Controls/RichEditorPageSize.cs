@@ -28,8 +28,6 @@ public enum RichEditorPageSize
 /// Landscape swaps the paper's width and height (affects both the editor view and print/PDF output).</summary>
 public enum RichEditorPageOrientation
 {
-    /// <summary>Portrait: the paper's natural (taller-than-wide) dimensions.</summary>
     Portrait = 0,
-    /// <summary>Landscape: width and height swapped.</summary>
     Landscape = 1,
 }

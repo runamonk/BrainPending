@@ -100,21 +100,13 @@ namespace AvaloniaRichEditor.Formatters
 
             if (flowDoc.Blocks.Count == 0)
             {
-                // The fallback is for input that was never markup — a caller handing us plain text should
-                // get that text, not an empty document. It must NOT fire for input that WAS markup and
-                // simply had no content: our own export of an empty document is `<p style="…"></p>`, whose
-                // walk yields no block, and dumping the source then put the editor's own tags on screen as
-                // literal body text (save an empty document as HTML, reopen it, and there they were).
-                // An element node anywhere is the discriminator: markup in, empty paragraph out.
+                // Plain text may fall back to its original input; empty markup must stay empty rather than appear as literal tags.
                 bool wasMarkup = root.Descendants().Any(n => n.NodeType == HtmlNodeType.Element);
                 var p = new Paragraph();
                 if (!wasMarkup) p.Inlines.Add(new Run { Text = HtmlEntity.DeEntitize(html) });
                 flowDoc.Blocks.Add(p);
             }
-            // One run per source node fragments a line that the model would otherwise hold as one run —
-            // an &nbsp;, an <a> that carries no formatting, the text of a table this parse flattened. The
-            // export then welds those neighbours back into a single text node, so importing our own export
-            // twice gave two different run lists for the same text.
+            // Coalesce source-node fragments so repeated HTML round trips retain the same run structure.
             TextRange.CoalesceAll(flowDoc);
             return flowDoc;
         }
@@ -149,15 +141,7 @@ namespace AvaloniaRichEditor.Formatters
         {
             Paragraph? current = null;
 
-            // A whitespace-only #text between inline siblings is a WORD SEPARATOR, not layout padding:
-            // `<span>a</span> <span>b</span>` reads "a b" everywhere, and dropping it merged them ("ab").
-            // MergeCells joins a covered cell's text with exactly that space, which is how a merged cell
-            // lost a word boundary on the second HTML round trip.
-            //
-            // It is DEFERRED rather than appended on sight, and that distinction is the whole design: the
-            // same whitespace before `</p>` is padding, which a browser drops — appending eagerly grew a
-            // trailing space on every cycle, the "separator becomes content and accumulates" failure this
-            // codebase has now hit several times.
+            // Defer whitespace between inline nodes until content follows: it separates words, but trailing whitespace is padding.
             bool pendingSpace = false;
             void Flush()
             {
@@ -166,7 +150,6 @@ namespace AvaloniaRichEditor.Formatters
                 pendingSpace = false; // never carries across a block boundary
             }
 
-            // Call immediately before adding inline content, once that content is certain.
             void TakeSpace()
             {
                 if (!pendingSpace) return;
@@ -231,7 +214,6 @@ namespace AvaloniaRichEditor.Formatters
                     {
                         if (w < IconMaxSize && h < IconMaxSize)
                         {
-                            // Small icon/logo -> keep on a text line rather than its own block.
                             var icon = new InlineImage { Width = w, Height = h };
                             icon.SetImageData(bytes, ImageMime.Detect(bytes), bmp);
                             TakeSpace();
@@ -243,9 +225,9 @@ namespace AvaloniaRichEditor.Formatters
                             // above it.
                             bool imgOpens = child.GetAttributeValue("data-are-opens", "") == "1";
                             if (current != null)
-                                current.Inlines.Add(icon);                       // inline with pending text
+                                current.Inlines.Add(icon);
                             else if (!imgOpens && flow.Blocks.Count > 0 && flow.Blocks[flow.Blocks.Count - 1] is Paragraph lastP)
-                                lastP.Inlines.Add(icon);                          // join the preceding line (e.g. a title)
+                                lastP.Inlines.Add(icon);
                             else
                             {
                                 current = new Paragraph();
@@ -303,21 +285,11 @@ namespace AvaloniaRichEditor.Formatters
                 }
                 else if (name == "#comment" || name == "script" || name == "style" || name == "head" || name == "meta" || name == "link")
                 {
-                    // ignore
                 }
                 else if (HasBlockOrMedia(child))
                 {
-                    // Container with nested block/media content -> recurse to preserve structure.
                     Flush();
-                    // A paragraph element whose only block-or-media content is MEDIA is still a paragraph.
-                    // This branch runs before the BlockLeaf one below, so `<p style="…">text<img/></p>` was
-                    // walked as a mere container and the element's own paragraph formatting — alignment,
-                    // indent, fill, heading level, quote — was dropped on the way in. Every picture with a
-                    // caption line lost it, in a cell or not.
-                    //
-                    // A container with real BLOCK children (a <div> wrapping <p>s) is deliberately left as
-                    // it was: whether formatting should inherit down to them is a separate question, and
-                    // foreign HTML depends on today's answer.
+                    // Media-only children still belong to this paragraph and inherit its formatting; real block children recurse.
                     if (BlockLeaf.Contains(name) && !HasBlockChild(child))
                     {
                         int at = flow.Blocks.Count;
@@ -329,7 +301,6 @@ namespace AvaloniaRichEditor.Formatters
                 }
                 else if (BlockLeaf.Contains(name))
                 {
-                    // Block-level element with only inline content -> its own paragraph.
                     Flush();
                     var p = new Paragraph();
                     ApplyBlockLeafFormat(child, name, p);
@@ -347,7 +318,6 @@ namespace AvaloniaRichEditor.Formatters
                 }
                 else
                 {
-                    // Inline element (span, a, b, i, font, ...) -> accumulate into current paragraph.
                     current ??= new Paragraph();
                     // Unlike the branches above, this one may contribute NOTHING (an empty or ignorable
                     // element), and a separator with no content after it is a trailing space — so take
@@ -364,26 +334,11 @@ namespace AvaloniaRichEditor.Formatters
             Flush();
         }
 
-        // Recursively flattens a <ul>/<ol> into list-item paragraphs tagged with their nesting level.
         private static void ParseList(HtmlNode listNode, FlowDocument flow, ListKind kind, int level, string? linkUri)
         {
-            // Bullet glyph / number format from the list's CSS list-style-type (Default when absent/unknown).
             var marker = ListMarkerFromCss(ReadStyleValue(listNode, "list-style-type"));
 
-            // ONE pass, in document order. Two things live side by side here and the order between them
-            // is the content's order, not a category order:
-            //   <li>            — an item at this level.
-            //   <ul>/<ol>       — a sublist that is a DIRECT child, with no <li> wrapping it. Our own
-            //                     export makes exactly that shape whenever a deeper item follows a
-            //                     shallower one (A / B-indented / C emits
-            //                     <ul><li>A</li><ul><li>B</li></ul><li>C</li></ul>), and also for an item
-            //                     with no shallower item above it at all (indent the only list item in a
-            //                     document and you get <ol><ol><li>…).
-            // Iterating only <li> never reached the second shape: those items VANISHED, and when they
-            // were the whole document the parse produced zero blocks and the raw-text fallback dumped the
-            // entire file as literal markup. Handling the two in separate passes — sublists first, then
-            // items — fixes that but silently REORDERS the first, lifting every nested item above the one
-            // it belongs under. Walking the children once is what gets both right.
+            // Walk items and directly nested lists together in document order; separate passes lose or reorder nested items.
             foreach (var child in listNode.ChildNodes)
             {
                 bool isSub = child.Name.Equals("ul", StringComparison.OrdinalIgnoreCase)
@@ -409,8 +364,6 @@ namespace AvaloniaRichEditor.Formatters
             }
         }
 
-        // The raw value of a CSS property from a node's style attribute (e.g. "list-style-type" -> "circle"),
-        // or null if absent.
         private static string? ReadStyleValue(HtmlNode node, string prop)
         {
             var style = node.GetAttributeValue("style", "");
@@ -420,7 +373,6 @@ namespace AvaloniaRichEditor.Formatters
             return m.Success ? m.Groups[1].Value.Trim() : null;
         }
 
-        // Paragraph text alignment from a node's align attr or style text-align.
         private static TextAlignment ReadAlign(HtmlNode node)
         {
             string a = node.GetAttributeValue("align", "").ToLowerInvariant();
@@ -482,14 +434,7 @@ namespace AvaloniaRichEditor.Formatters
             if (double.TryParse(parts[2], System.Globalization.NumberStyles.Float, inv, out double r)) p.MarginRight = r;
         }
 
-        // HTML collapses runs of COLLAPSIBLE whitespace to one space. A non-breaking space is not
-        // collapsible — that is the whole point of it, and the export relies on it to carry the editor's
-        // consecutive spaces (see PreserveRunsOfSpaces). Regex `\s` matches U+00A0 (Unicode class Zs), so
-        // the old `\s+` folded exactly the character that was there to survive folding.
-        //
-        // The model has no non-breaking space of its own, so an nbsp becomes a plain space AFTER the
-        // fold. Foreign HTML gains from this too: Word and HWP pad with runs of &nbsp;, which used to
-        // arrive as a single space and now keep their width.
+        // Collapse HTML whitespace before converting nbsp to spaces. Regex \s would collapse nbsp and lose authored spacing.
         private static string CollapseWhitespace(string s)
         {
             s = System.Text.RegularExpressions.Regex.Replace(s, "[ \t\r\n\f\v]+", " ");
@@ -514,7 +459,6 @@ namespace AvaloniaRichEditor.Formatters
         private static TableBlock? ParseTable(HtmlNode node)
         {
             var rows = node.Descendants("tr")
-                // Exclude rows belonging to a nested table.
                 .Where(tr => tr.Ancestors("table").FirstOrDefault() == node)
                 .ToList();
             if (rows.Count == 0) return null;
@@ -542,11 +486,7 @@ namespace AvaloniaRichEditor.Formatters
                 {
                     Ensure(occupied[r], col);
                     while (col < occupied[r].Count && occupied[r][col]) col++;
-                    // Both spans are attacker-controlled (any pasted web page is foreign input) and the
-                    // occupancy grid is sized from them, so both need a ceiling. rowspan is naturally
-                    // bounded by the rows that actually exist; colspan had none, so a single
-                    // colspan="100000000" grew the grid — and then the TableBlock — until the process
-                    // ran out of memory. No real table is anywhere near the cap.
+                    // Bound spans before allocating the occupancy grid; pasted HTML controls both values.
                     int cs = Math.Clamp(td.GetAttributeValue("colspan", 1), 1, MaxTableColumns);
                     int rs = Math.Max(1, Math.Min(td.GetAttributeValue("rowspan", 1), R - r));
                     placements[r].Add((col, cs, rs, td));
@@ -582,7 +522,7 @@ namespace AvaloniaRichEditor.Formatters
                 {
                     if (cs > 1 || rs > 1) tb.SetSpan(r, col, cs, rs);
                     var cell = tb.Cells[r][col];
-                    cell.Background = ReadBackground(td); // cell-level background lives on the cell
+                    cell.Background = ReadBackground(td);
                     // Parse the cell as blocks so nested tables / block images / multiple paragraphs survive
                     // the round-trip (mirrors the export's per-cell block emit). WalkBlocks yields the same
                     // block types as a top-level walk; a plain inline cell yields a single paragraph.
@@ -595,9 +535,7 @@ namespace AvaloniaRichEditor.Formatters
             return tb;
         }
 
-        // Images below this size (px, both dimensions) are treated as inline icons/logos/emoji
-        // and skipped — this editor renders every image as its own block line, so tiny icons
-        // would otherwise land on their own awkward line after each heading.
+        // Images below this size on both axes are treated as inline content.
         private const double IconMaxSize = 64;
 
         // Loads an <img> and returns the original encoded bytes, the decoded bitmap, and its
@@ -621,7 +559,7 @@ namespace AvaloniaRichEditor.Formatters
                 }
                 else if (src.StartsWith("http"))
                 {
-                    if (_blockRemoteImages) return (null, null, 0, 0); // remote images opted out
+                    if (_blockRemoteImages) return (null, null, 0, 0);
                     // Only the async path fetches. The synchronous parse never touches the network:
                     // downloading on the calling thread froze the UI for up to the whole budget, and a
                     // hung UI is a worse failure than a missing image (ParseHtmlAsync loads them).
@@ -774,7 +712,6 @@ namespace AvaloniaRichEditor.Formatters
             if (System.Text.RegularExpressions.Regex.IsMatch(s, "text-decoration[^;]*underline")) underline = true;
             if (System.Text.RegularExpressions.Regex.IsMatch(s, "text-decoration[^;]*line-through")) strike = true;
 
-            // color: (but not background-color)
             var m = System.Text.RegularExpressions.Regex.Match(s, "(?<!background-)color\\s*:\\s*([^;]+)");
             if (m.Success)
             {
@@ -806,7 +743,6 @@ namespace AvaloniaRichEditor.Formatters
                 size = fm.Groups[2].Value == "pt" ? val : val * 72.0 / 96.0;
         }
 
-        // Left indent (px) from style margin-left / padding-left (px or pt).
         private static double ReadIndentPx(HtmlNode node)
         {
             var style = node.GetAttributeValue("style", "").ToLowerInvariant();
@@ -817,7 +753,6 @@ namespace AvaloniaRichEditor.Formatters
             return 0;
         }
 
-        // Background color from a node's style="background[-color]:..." or legacy bgcolor="..." attr.
         private static IBrush? ReadBackground(HtmlNode node)
         {
             var style = node.GetAttributeValue("style", "");
@@ -851,15 +786,7 @@ namespace AvaloniaRichEditor.Formatters
         private static IBrush? ParseCssColor(string value)
         {
             value = value.Trim();
-            // Channels accept CSS's two spellings — 0..255 numbers and 0%..100% percentages. Percentages
-            // are legal in the same position and rare from browsers (they serialize computed styles as
-            // integers) but normal in hand-written CSS; `rgb(100%, 0%, 0%)` used to fail the match and
-            // the colour was silently dropped.
-            //
-            // And the channels are TryParse'd, not Parse'd: `\d+` puts no ceiling on the digit run, so
-            // `rgb(99999999999, 0, 0)` threw OverflowException — out of ParseCssColor, out of the walk,
-            // out of ParseHtml itself. A malformed colour in pasted HTML must cost that colour, not the
-            // paste. (Ported from the WinUI peer, which carries this in ColorUtil.)
+            // Accept numeric and percentage RGB channels. Malformed or overflowing values must not abort the paste.
             var rgb = System.Text.RegularExpressions.Regex.Match(
                 value, "rgba?\\(\\s*([0-9]*\\.?[0-9]+%?)\\s*,\\s*([0-9]*\\.?[0-9]+%?)\\s*,\\s*([0-9]*\\.?[0-9]+%?)");
             if (rgb.Success
@@ -899,7 +826,6 @@ namespace AvaloniaRichEditor.Formatters
             _ => kind == ListKind.Ordered ? "decimal" : "disc",
         };
 
-        // Reverse of CssListStyle: a CSS list-style-type value to a marker style (Default when unknown).
         private static ListMarkerStyle ListMarkerFromCss(string? cssValue) => (cssValue ?? "").Trim().ToLowerInvariant() switch
         {
             "circle" => ListMarkerStyle.Circle,
@@ -910,7 +836,6 @@ namespace AvaloniaRichEditor.Formatters
             _ => ListMarkerStyle.Default,
         };
 
-        /// <summary>Serializes <paramref name="doc"/> to an HTML string.</summary>
         public static string ToHtml(FlowDocument doc)
         {
             var sb = new StringBuilder();
@@ -1004,16 +929,7 @@ namespace AvaloniaRichEditor.Formatters
             }
         }
 
-        // One paragraph as its own HTML element, carrying the paragraph-level formatting the reader knows
-        // how to read back. Shared by the document's top level and by table cells, which is the point: a
-        // cell paragraph used to go out as bare inlines, and bare inlines can express NOTHING
-        // paragraph-level, so a bulleted / centred / indented / shaded / heading cell paragraph lost all of
-        // it on export — including into the clipboard's HTML flavour. The reader has always handled the
-        // element form inside a <td> (foreign Word tables with bulleted cells parse correctly); only the
-        // writer could not produce it.
-        //
-        // newlineAfter is false inside a <td>, where a pretty-printing newline is not decoration: the
-        // cell's content is parsed as inline, so it becomes a whitespace text node and comes back as content.
+        // Share paragraph-element output between document and cells so paragraph formatting survives clipboard/export.
         private static void EmitParagraphElement(StringBuilder sb, Paragraph p, bool newlineAfter)
         {
             string tag = p.IsListItem ? "li"
@@ -1031,11 +947,7 @@ namespace AvaloniaRichEditor.Formatters
             // empty <p>/<div> used for spacing) — so it is marked too.
             string extraAttr = p.IsListItem && p.HeadingLevel >= 1 && p.HeadingLevel <= 6
                 ? $" data-are-h=\"{p.HeadingLevel}\"" : "";
-            // Paragraph spacing went out as nothing at all and came back as the defaults. It goes out
-            // TWICE on purpose: as real CSS so a browser or Word shows the spacing, and as a marker
-            // because only the marker is read back. Reading foreign margin-top/bottom would give every
-            // web paste that page's vertical rhythm — the same reason data-are-empty exists. margin-left
-            // is not here: it is Indent, and reading that from foreign HTML is long-standing behaviour.
+            // Emit spacing as CSS for other consumers and as our marker for round trips; foreign vertical margins are ignored.
             string Px(double v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
             if (p.MarginTop != 0) pStyle += $"margin-top:{Px(p.MarginTop)}px;";
             if (p.MarginBottom != DefaultMarginBottom) pStyle += $"margin-bottom:{Px(p.MarginBottom)}px;";
@@ -1046,12 +958,7 @@ namespace AvaloniaRichEditor.Formatters
             sb.Append($"<{tag}{extraAttr} style=\"{pStyle}\">");
             for (int i = 0; i < p.Inlines.Count; i++)
                 EmitInline(sb, p.Inlines[i], i == 0, i == p.Inlines.Count - 1);
-            // The marker alone told only THIS reader about the blank line. An element with no content has
-            // zero height, so in a browser the author's blank line was invisible — measured: the gap
-            // across it was the same 16px as between any two adjacent paragraphs. The <br> is what gives
-            // it a line everywhere else (it is what contenteditable editors emit for the same reason);
-            // the marker still carries it back here, and the reader drops this <br> so one blank line
-            // does not become two. Same both-ways rule as the paragraph spacing above.
+            // A marked blank paragraph needs <br> to occupy a line in other consumers; our importer drops that structural break.
             if (p.Inlines.Count == 0) sb.Append("<br>");
             sb.Append($"</{tag}>");
             if (newlineAfter) sb.Append('\n');
@@ -1068,7 +975,7 @@ namespace AvaloniaRichEditor.Formatters
                || p.Indent > 0
                || p.MarginTop != 0 || p.MarginBottom != DefaultMarginBottom || p.MarginRight != 0;
 
-        // Emits a table as an HTML <table>. Shared by block tables and inline tables (milestone B). Cell
+        // Emits a table as an HTML <table>. Shared by block tables and inline tables. Cell
         // content emits every paragraph (separated by <br>), block images, and nested tables (recursing),
         // so the structure survives a copy to Word/HWP.
         private static double SumColumnWidths(TableBlock tb)
@@ -1119,26 +1026,13 @@ namespace AvaloniaRichEditor.Formatters
                         sb.Append($"<td{span} style=\"background-color:{CssColor(cbg.Color)}\">");
                     else
                         sb.Append($"<td{span}>");
-                    // <br> separates two CONSECUTIVE paragraphs emitted in the bare form. After a block
-                    // element (an element-form paragraph, a nested table, an image, a rule) the paragraph
-                    // boundary already exists, and an extra <br> there is not a separator at all — it
-                    // parses back as a newline INSIDE the next paragraph and grows by one on every cycle.
-                    // So the flag has to mean "the previous block was a BARE paragraph", not "some
-                    // paragraph has been emitted".
+                    // Add <br> only between consecutive bare paragraphs; block elements already supply a boundary.
                     bool prevWasBareParagraph = false;
                     // A cell can hold list items, so it needs its own nesting — opened and closed inside
                     // this <td>, never spanning cells, and tight because a newline here becomes content.
                     var cellLists = new ListNesting(sb, tight: true);
-                    // <br> is not a paragraph boundary to the reader, so two plain paragraphs in one cell
-                    // came back as ONE on every cycle — and the collapse is idempotent, which is exactly
-                    // why a round-trip test never saw it. So a paragraph goes out as an ELEMENT whenever
-                    // the bare form cannot represent it: more than one paragraph in the cell, or
-                    // formatting on this one. A lone plain paragraph keeps the bare form, so the common
-                    // cell's bytes do not change and the whitespace rules earned there still stand.
-                    // An <img> is INLINE, so a bare paragraph followed by a block image in the same cell
-                    // shared the image's line — the picture sat beside the text instead of under it.
-                    // Counting paragraphs alone missed this: the cell has only ONE. <hr> and <table> are
-                    // block-level and break the line by themselves, so only an image forces the issue.
+                    // Multiple paragraphs, paragraph formatting, or a following block image require paragraph elements.
+                    // Bare inlines cannot preserve those boundaries; a lone plain cell keeps the compact representation.
                     bool needsElementForm = cell.Blocks.Count(b => b is Paragraph) > 1
                                             || cell.Blocks.Any(b => b is ImageBlock);
                     foreach (var cblk in cell.Blocks)
@@ -1165,7 +1059,7 @@ namespace AvaloniaRichEditor.Formatters
                         else if (cblk is ImageBlock cib && (cib.RawBytes != null || cib.Image != null))
                         { cellLists.CloseAll(); sb.Append(ImgTag(cib.RawBytes, cib.MimeType, cib.RawBytes == null ? cib.Image : null, cib.Width, cib.Height)); prevWasBareParagraph = false; }
                         else if (cblk is TableBlock nt)
-                        { cellLists.CloseAll(); EmitTable(sb, nt); prevWasBareParagraph = false; } // nested table
+                        { cellLists.CloseAll(); EmitTable(sb, nt); prevWasBareParagraph = false; }
                         else if (cblk is DividerBlock)
                         { cellLists.CloseAll(); sb.Append("<hr/>"); prevWasBareParagraph = false; }
                     }
@@ -1203,11 +1097,7 @@ namespace AvaloniaRichEditor.Formatters
             string t = HtmlEntity.Entitize(r.Text);
             t = PreserveRunsOfSpaces(t);
             t = PreserveDroppableSpaces(t, closesParagraph);
-            // A soft break (Shift+Enter) lives INSIDE a run as `\n`. HTML collapses that to a single
-            // space, so without this the line break was lost on every export — while the reader turns
-            // `<br>` back into `\n` (see the "br" branch in the parser), leaving the round trip lopsided.
-            // Must run after PreserveDroppableSpaces, which finds the space in front of a `\n` while the
-            // newline is still a character rather than a tag.
+            // Encode soft breaks after preserving spaces, while that pass can still see the newline character.
             t = t.Replace("\n", "<br/>", StringComparison.Ordinal);
 
             var styles = new System.Collections.Generic.List<string>();
@@ -1221,11 +1111,7 @@ namespace AvaloniaRichEditor.Formatters
             if (r.Foreground is ISolidColorBrush fg) styles.Add($"color:{CssColor(fg.Color)}");
             if (r.Background is ISolidColorBrush bg) styles.Add($"background-color:{CssColor(bg.Color)}");
 
-            // `data-are-fg` says the colour on this span is the DOCUMENT'S, not a site's styling. The
-            // reader paints links blue on top of whatever colour the source declared (a deliberate rule:
-            // foreign pages give anchors dark or white button text that would vanish here), and that rule
-            // used to eat the user's own choice of link colour on every save/load. The marker is what
-            // tells the two apart — same idiom as data-are-inline. Emitted only where it can matter.
+            // Mark document-owned link colors so import preserves them instead of applying the current link theme.
             bool markOwnColor = r.Foreground is ISolidColorBrush && !string.IsNullOrEmpty(r.NavigateUri);
             if (styles.Count > 0)
                 t = $"<span{(markOwnColor ? " data-are-fg=\"1\"" : "")} style=\"{string.Join(";", styles)}\">{t}</span>";
@@ -1259,15 +1145,7 @@ namespace AvaloniaRichEditor.Formatters
                 ? $"#{c.R:X2}{c.G:X2}{c.B:X2}"
                 : $"rgba({c.R},{c.G},{c.B},{(c.A / 255.0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)})";
 
-        // HTML collapses a run of whitespace to ONE space, so `a  b` came back as `a b` — the editor's own
-        // double space, gone on the first save/load. Encode every space that FOLLOWS a space as &nbsp;,
-        // which is what Word emits and what every browser renders identically.
-        //
-        // Why alternate instead of making them all non-breaking: a solid run of &nbsp; is unbreakable, so
-        // a line padded with spaces would refuse to wrap and push the layout wide. Keeping the first space
-        // of each run collapsible leaves a legal wrap point exactly where one belongs.
-        //
-        // Only runs of two or more are touched, so ordinary prose exports byte-for-byte as before.
+        // Encode consecutive spaces with nbsp while leaving the first collapsible as a legal wrap point.
         private static string PreserveRunsOfSpaces(string s)
         {
             if (s.Length < 2 || !s.Contains("  ", StringComparison.Ordinal)) return s;
@@ -1280,24 +1158,8 @@ namespace AvaloniaRichEditor.Formatters
             return sb.ToString();
         }
 
-        // Spaces that land where HTML throws whitespace away, made non-breaking so they come back. Three
-        // positions, all found by a fuzz rather than by reading:
-        //
-        // · Before a soft break. `t.Replace("\n", "<br/>")` splits the run's text, so `" \nx"` leaves a
-        //   whitespace-ONLY text node in front of the <br/>; when that node opens the paragraph there is
-        //   no previous inline to hang a separator on and the space is simply gone.
-        // · At the very end of a block, which HTML drops outright. A paragraph ending in a plain `" "` run
-        //   — what MergeCells leaves when it joins a covered cell — lost it on every other round trip.
-        // · A run of NOTHING BUT SPACES, wherever it sits. It goes out as a whitespace-only text node and
-        //   the reader cannot tell that from a pretty-printer's indentation, so its separator logic
-        //   decides the fate of authored content. A run made only of spaces is authored by construction —
-        //   it exists as its own run — so it is written as content and the question never arises.
-        //   Cost, accepted: that one space is non-breaking, so a line cannot wrap at it.
-        //
-        // Deliberately NOT every boundary space: making every run-boundary space non-breaking would weld
-        // words together and stop the line wrapping between them, which is the one thing &nbsp; must not
-        // be used for. Encoding the leading spaces of any opening run was tried in the port and reverted —
-        // it turned one leading space into two on the next cycle in 71 of 3000 fuzz seeds.
+        // Preserve spaces before soft breaks, at block ends, and in whitespace-only runs. Other run-boundary
+        // spaces must remain collapsible so words can still wrap independently.
         private static string PreserveDroppableSpaces(string s, bool atEnd)
         {
             if (s.Length == 0) return s;

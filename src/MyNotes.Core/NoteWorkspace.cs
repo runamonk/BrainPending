@@ -8,7 +8,6 @@ public sealed record WorkspaceEntry(string Path, string Name, bool IsFolder, Dat
 public sealed record NoteSnapshot(string Path, string Rtf, string Revision);
 public sealed record SaveResult(NoteSnapshot Note, bool IsConflict);
 
-/// <summary>Ordinary folders and individual RTF files. No shared mutable database.</summary>
 public sealed class NoteWorkspace
 {
     public const string EmptyRtf = @"{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}\f0\fs24\pard }";
@@ -176,8 +175,7 @@ public sealed class NoteWorkspace
         var path = CheckPath(original.Path, false);
         var bytes = EncodeRtf(rtf);
         Directory.CreateDirectory(System.IO.Path.Combine(MetadataPath, "locks"));
-        // Serializes cooperating instances on the same filesystem. Cloud replicas still need
-        // conflict copies + immutable revisions: a replicated lock is NOT a distributed lock.
+        // This lock coordinates local instances only; cloud replicas still need conflict copies and revisions.
         using var lease = AcquireLock(path);
         var disk = File.Exists(path) ? File.ReadAllBytes(path) : null;
         var revision = Hash(bytes);

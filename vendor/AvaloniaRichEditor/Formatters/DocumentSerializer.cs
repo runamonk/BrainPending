@@ -26,7 +26,6 @@ public static class DocumentSerializer
     /// SHA-256; "1.0" = stable baseline (image pool + font sizes in points + proportional line spacing).</summary>
     public const string CurrentSchemaVersion = "1.0";
 
-    /// <summary>Serializes <paramref name="document"/> to a JSON string.</summary>
     public static string Serialize(FlowDocument document)
     {
         var (dto, images) = BuildDto(document);
@@ -107,8 +106,6 @@ public static class DocumentSerializer
         return (dto, pool);
     }
 
-    // Rebuilds the document from a DTO plus the resolved image pool (bytes already decoded from
-    // base64 or read from package entries).
     internal static FlowDocument FromDto(FlowDocumentDto? dto, Dictionary<string, (byte[] Bytes, string Mime)> pool)
     {
         var doc = new FlowDocument();
@@ -131,7 +128,6 @@ public static class DocumentSerializer
         return doc;
     }
 
-    // ---- model -> dto ----
 
     private static BlockDto BlockToDto(Block block, Dictionary<string, (byte[] Bytes, string Mime)> pool)
     {
@@ -174,19 +170,8 @@ public static class DocumentSerializer
                     var rd = new List<BlockDto>();
                     foreach (var cell in row)
                     {
-                        // Backward-compatible cell encoding: a plain one-paragraph cell stays the legacy
-                        // single block DTO (the cell's paragraph) with the cell background on it, so old
-                        // readers still load it. A cell with multiple blocks or non-paragraph content (P4:
-                        // several paragraphs, a block image, a nested table) is wrapped in a "Cell" DTO
-                        // whose Blocks carry the full list (recursively).
-                        //
-                        // The legacy form has ONE Background field standing for two different fills, so it
-                        // is only usable when the paragraph has no fill of its own: otherwise the
-                        // assignment below overwrites the paragraph's with the cell's, and when the cell
-                        // has none that means writing null — the paragraph's fill is erased outright, in
-                        // this editor's own save format. A paragraph fill inside a cell arrives whenever
-                        // HTML with a styled <p> in a <td> is pasted. The wrapper form keeps the two fills
-                        // on separate DTOs and readers already understand it, so the format is unchanged.
+                        // Use the legacy paragraph DTO only when it can represent the whole cell. Multiple blocks or a
+                        // paragraph background require a Cell wrapper so cell and paragraph fills remain independent.
                         BlockDto cdto;
                         if (cell.Blocks.Count == 1 && cell.Blocks[0] is Paragraph cpara && cpara.Background == null)
                         {
@@ -263,7 +248,6 @@ public static class DocumentSerializer
         return d;
     }
 
-    // ---- dto -> model ----
 
     // Ceiling on a table's declared column count, which pads short rows and so gets allocated. The rows
     // themselves need no cap: they come from the cells present in the file, which the input size bounds.
@@ -293,10 +277,7 @@ public static class DocumentSerializer
                     return ib;
                 }
             case "Table":
-                // 1x1, NOT the declared size: everything the constructor builds is cleared on the next
-                // three lines and rebuilt from the cells that actually exist, so sizing it from
-                // attacker-controlled numbers only ever wasted memory — a file claiming 100000000 rows
-                // exhausted it before a single cell was read.
+                // Start at 1x1: the grid is rebuilt from actual cells, so allocating untrusted declared dimensions wastes memory.
                 var tb = new TableBlock(1, 1);
                 tb.Indent = d.Indent;
                 tb.MarginTop = d.MarginTop ?? 0;
@@ -317,7 +298,6 @@ public static class DocumentSerializer
                             if (cd == null) { row.Add(new TableCell()); continue; } // JSON null cell
                             if (cd.Type == "Cell")
                             {
-                                // Multi-block cell (P4): rebuild every block, recursing for nested tables.
                                 cell = new TableCell { Background = StringToBrush(cd.Background) };
                                 cell.Blocks.Clear();
                                 if (cd.Blocks != null)
@@ -423,7 +403,6 @@ public static class DocumentSerializer
         return p;
     }
 
-    // ---- helpers ----
 
     private static double? NanToNull(double v) => double.IsNaN(v) ? (double?)null : v;
 
@@ -533,7 +512,6 @@ internal class BlockDto
 {
     public string Type { get; set; } = "Paragraph";
 
-    // Paragraph
     public List<InlineDto>? Inlines { get; set; }
     public string? TextAlignment { get; set; }
     public double? LineHeight { get; set; }
@@ -552,14 +530,12 @@ internal class BlockDto
     public bool IsQuote { get; set; }
     public int ListLevel { get; set; }
 
-    // Image block
     public string? ImageRef { get; set; } // v2: key into FlowDocumentDto.Images
     public string? ImageBase64 { get; set; } // v1 legacy: inline base64 (read fallback)
     public string? MimeType { get; set; } // of ImageBase64 bytes; absent in legacy docs => image/png
     public double? Width { get; set; }
     public double? Height { get; set; }
 
-    // Table block
     public int Rows { get; set; }
     public int Columns { get; set; }
     public List<double>? ColumnWidths { get; set; }
@@ -578,7 +554,6 @@ internal class InlineDto
 {
     public string Type { get; set; } = "Run";
 
-    // Run
     public string? Text { get; set; }
     public bool Bold { get; set; }
     public bool Italic { get; set; }
@@ -590,7 +565,6 @@ internal class InlineDto
     public bool Underline { get; set; }
     public bool Strikethrough { get; set; }
 
-    // Inline image
     public string? ImageRef { get; set; } // v2: key into FlowDocumentDto.Images
     public string? ImageBase64 { get; set; } // v1 legacy: inline base64 (read fallback)
     public string? MimeType { get; set; } // of ImageBase64 bytes; absent in legacy docs => image/png

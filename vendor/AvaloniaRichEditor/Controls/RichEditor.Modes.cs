@@ -4,18 +4,12 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Feature flags (roadmap N3.5). Capability is expressed directly through IsReadOnly (the core
-// viewer/editor switch) and the individual Allow* flags — there is no bundled preset. Flags are
-// consulted at the guard sites in the key/paste/drop handlers, the public insert commands, the context
-// menu, and find/replace. ReadOnly additionally disables the caret blink, IME, and undo history (see
-// OnReadOnlyChanged).
 public partial class RichEditor
 {
     /// <inheritdoc cref="AllowImages"/>
     public static readonly StyledProperty<bool> AllowImagesProperty =
         AvaloniaProperty.Register<RichEditor, bool>(nameof(AllowImages), true);
 
-    /// <summary>When false, image insertion (command, paste, drag-drop, context menu) is blocked.</summary>
     public bool AllowImages
     {
         get => GetValue(AllowImagesProperty);
@@ -26,7 +20,6 @@ public partial class RichEditor
     public static readonly StyledProperty<bool> AllowTablesProperty =
         AvaloniaProperty.Register<RichEditor, bool>(nameof(AllowTables), true);
 
-    /// <summary>When false, table insertion (command, tabular paste, context menu) is blocked.</summary>
     public bool AllowTables
     {
         get => GetValue(AllowTablesProperty);
@@ -37,7 +30,6 @@ public partial class RichEditor
     public static readonly StyledProperty<bool> AllowRichPasteProperty =
         AvaloniaProperty.Register<RichEditor, bool>(nameof(AllowRichPaste), true);
 
-    /// <summary>When false, paste falls back to plain text (no internal rich/HTML structure).</summary>
     public bool AllowRichPaste
     {
         get => GetValue(AllowRichPasteProperty);
@@ -48,7 +40,6 @@ public partial class RichEditor
     public static readonly StyledProperty<bool> AllowFindReplaceProperty =
         AvaloniaProperty.Register<RichEditor, bool>(nameof(AllowFindReplace), true);
 
-    /// <summary>When false, the find/replace commands are no-ops.</summary>
     public bool AllowFindReplace
     {
         get => GetValue(AllowFindReplaceProperty);
@@ -107,7 +98,6 @@ public partial class RichEditor
     /// </summary>
     public event EventHandler? RecommendedImageLimitExceeded;
 
-    // True after the limit warning fired; cleared when the count returns to the limit or below.
     private bool _imageLimitNotified;
 
     /// <summary>Counts the document's images: top-level <see cref="ImageBlock"/>s plus
@@ -118,8 +108,8 @@ public partial class RichEditor
         if (doc == null) return 0;
         return Count(doc.Blocks);
 
-        // Recursive: a cell's blocks can hold a nested table (P4-2b) and a paragraph can hold an
-        // inline table (milestone B), both of which carry images of their own. Counting one level
+        // Recursive: a cell's blocks can hold a nested table and a paragraph can hold an
+        // inline table, both of which carry images of their own. Counting one level
         // deep under-reported them, so the soft-limit warning fired late (or never).
         static int Count(System.Collections.Generic.IEnumerable<Block> blocks)
         {
@@ -128,7 +118,7 @@ public partial class RichEditor
             {
                 switch (b)
                 {
-                    case ImageBlock: n++; break; // P4-2a: block images in cells count too
+                    case ImageBlock: n++; break;
                     case Paragraph p:
                         foreach (var i in p.Inlines)
                         {
@@ -146,7 +136,6 @@ public partial class RichEditor
         }
     }
 
-    // Edge-triggered soft-limit check, run after each flushed text change (see RaisePendingChangeEvents).
     internal void CheckImageLimit()
     {
         int limit = MaxRecommendedImages;

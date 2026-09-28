@@ -17,7 +17,6 @@ public class InlineImage : Inline
     /// is decoded from them lazily on first access.</summary>
     public byte[]? RawBytes { get; private set; }
 
-    /// <summary>MIME type of <see cref="RawBytes"/> (e.g. "image/jpeg").</summary>
     public string? MimeType { get; private set; }
 
     /// <summary>Decoded bitmap (render cache). Lazily created from <see cref="RawBytes"/> on first
@@ -34,7 +33,6 @@ public class InlineImage : Inline
                     using var ms = new System.IO.MemoryStream(RawBytes);
                     _cachedBitmap = new Bitmap(ms);
                 }
-                // undecodable now: stop retrying, but keep the bytes
                 catch (System.Exception ex) { RichEditorDiagnostics.Report(ex); _decodeFailed = true; }
             }
             return _cachedBitmap;
@@ -49,7 +47,7 @@ public class InlineImage : Inline
         RawBytes = bytes;
         MimeType = mimeType ?? "image/png";
         _cachedBitmap = decoded;
-        _decodeFailed = false; // new bytes deserve a fresh decode attempt
+        _decodeFailed = false;
     }
 
     /// <summary>Display width in device-independent pixels. Default: 16.</summary>

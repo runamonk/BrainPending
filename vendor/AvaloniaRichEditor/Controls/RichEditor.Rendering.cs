@@ -12,8 +12,6 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Measure + render pass (content height, MeasureOverride, Render) and the automation-peer hook.
-// Part of RichEditor (split out of the main file for readability).
 public partial class RichEditor
 {
     // Render runs per frame (caret blink = 2 Hz minimum): the fixed accent colors and pens are
@@ -30,13 +28,10 @@ public partial class RichEditor
     // Text-caret pen, cached so the 2 Hz blink / scroll / hover repaints don't allocate a Pen each frame
     // (unlike the static pens above it depends on the CaretBrush property). Reset when CaretBrush changes.
     private Pen? _caretPen;
-    // Faint dashed marker at page boundaries when a paper size is set but page chrome is off.
     private static readonly Avalonia.Media.Immutable.ImmutablePen PageBreakPen =
         new(new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromArgb(110, 0x9E, 0x9E, 0x9E)), 1,
             new Avalonia.Media.Immutable.ImmutableDashStyle(new double[] { 4, 4 }, 0));
 
-    // Total rendered height of the document at the given content width (mirrors the render advancement).
-    // Reported via MeasureOverride so the hosting ScrollViewer grows its scrollable extent with content.
     private double MeasureContentHeight(double width)
     {
         if (Document == null) return 0;
@@ -141,7 +136,6 @@ public partial class RichEditor
         // consumes it. A repaint with no pending edit (caret blink, scroll) can't have changed any
         // paragraph, so the layout cache may be trusted without re-hashing every paragraph's text.
         bool contentChanged = _textChangedPending;
-        // Flush change events after the edit/caret move that scheduled this paint (off the render stack).
         RaisePendingChangeEvents();
         // Transparent fill makes the whole control hit-testable (clicks on empty space below the
         // text must still reach OnPointerPressed). Must cover the full bounds, not a fixed height.
@@ -152,7 +146,6 @@ public partial class RichEditor
         try
         {
 
-        // Recomputed every render so resize handles track the current layout.
         _columnBoundaries.Clear();
         _rowBoundaries.Clear();
         _imageHandles.Clear();
@@ -183,7 +176,6 @@ public partial class RichEditor
 
         if (!IsPaged)
         {
-            // Continuous (Free): one walk at the control width.
             (caretPoint, caretHeight, blockCaretRect) = DrawDocumentBlocks(context, Bounds.Width, visTop, visBottom);
         }
         else if (!ShowPageBoundaries)
@@ -218,7 +210,7 @@ public partial class RichEditor
         }
         else
         {
-            // Page view (P-milestone Phase 2): paint the grey desk and each visible paper, then
+            // Page view: paint the grey desk and each visible paper, then
             // replay the (unchanged) block walk once per visible page under a clip + translation —
             // gap injection without per-page reflow. The walk's cull window is the page's document
             // slice, so each replay only issues draw commands for its own page's blocks; a paragraph
@@ -256,8 +248,6 @@ public partial class RichEditor
 
         DrawCaretAndBringIntoView(context, caretPoint, caretHeight, blockCaretRect);
 
-        // "Draw table" rubber-band: a dashed rectangle following the cursor (view space, drawn over all
-        // content). Only present while a drag is in progress in draw mode.
         if (_tableDrawStart is { } ds && _tableDrawCurrent is { } dc)
             context.DrawRectangle(AccentFill50, AccentPen2, new Rect(ds, dc));
         }
@@ -308,8 +298,8 @@ public partial class RichEditor
         // treated as a character) the caret keeps the adjacent text's height down at the baseline,
         // instead of a fixed-height bar floating at the line top far above the text.
         double caretHeight = 20;
-        Rect? blockCaretRect = null; // when a block caret is active, the image/table it sits in front of
-        int orderedIndex = 0; // running counter for consecutive ordered-list paragraphs
+        Rect? blockCaretRect = null;
+        int orderedIndex = 0;
 
         foreach (var block in Document!.Blocks)
         {
@@ -363,7 +353,7 @@ public partial class RichEditor
                     bool cellSelected = inBlock;
 
                     // Draw the cell's block list top-to-bottom via the recursive primitive (handles
-                    // paragraphs, block images, dividers and nested tables — P4-2b). Chrome (highlight,
+                    // paragraphs, block images, dividers and nested tables). Chrome (highlight,
                     // caret, preedit, inline images) is keyed to the paragraph that holds the caret.
                     DrawCellBlockList(context, cell.Blocks, rect.X + 5, rect.Y + 5, innerW, chrome,
                         cellSelected, cellBlock != null, selectedParagraphs, selStart, selEnd,
@@ -391,8 +381,7 @@ public partial class RichEditor
                     context.FillRectangle(AccentFill50, tableRect);
                     context.DrawRectangle(null, AccentPen2, tableRect);
                 }
-                // MarginBottom (default 10) — must match MeasureContentHeight/hit-tests/pagination;
-                // this was a hardcoded 10 left over from before the block-margin milestone.
+                // Block spacing must match measure, hit testing, and pagination.
                 yOffset += tb.MarginBottom;
             }
             else if (block is Paragraph paragraph)
@@ -520,7 +509,6 @@ public partial class RichEditor
                         bool imgSelected = ReferenceEquals(img, _selectedBlock);
                         if (imgSelected)
                         {
-                            // Selection: translucent overlay + bold border.
                             context.FillRectangle(AccentFill60, imgRect);
                             context.DrawRectangle(null, AccentPen2, imgRect);
                         }
@@ -588,7 +576,6 @@ public partial class RichEditor
                     : BuildTextLayout(para, pw);
 
                 if (para.ListType != ListKind.Ordered) orderedIndex = 0;
-                // One marker per hard line, exactly as the top-level walk numbers list items.
                 if (para.ListType != ListKind.None)
                 {
                     string plain = BuildPlain(para);
@@ -651,7 +638,7 @@ public partial class RichEditor
                             context.DrawRectangle(null, AccentPen2, ir);
                         }
                         context.DrawRectangle(null, AccentBorderPen, ir);
-                        if (ReferenceEquals(cimg, _selectedBlock))   // handle on selection only
+                        if (ReferenceEquals(cimg, _selectedBlock))
                         {
                             var handle = new Rect(ox + iw - 6, blkY + ih - 6, 12, 12);
                             context.FillRectangle(AccentHandleFill, handle);
@@ -675,7 +662,7 @@ public partial class RichEditor
             else if (cb2 is TableBlock nt)
             {
                 orderedIndex = 0;
-                // P4-2b: a nested table. Draws the grid + recurses into each nested cell, registering
+                // A nested table. Draws the grid + recurses into each nested cell, registering
                 // row/column resize handles like a top-level table (no selected-table affordance yet).
                 DrawNestedTable(context, nt, ox, blkY, chrome, selectedParagraphs, selStart, selEnd, ref caretPoint, ref caretHeight);
                 by += LayoutTable(nt, ox, blkY).TotalHeight;
@@ -707,7 +694,6 @@ public partial class RichEditor
                 selectedParagraphs, selStart, selEnd, ref caretPoint, ref caretHeight);
     }
 
-    // Draws a nested table's grid at (startX, top) and recurses into each anchor cell via DrawCellBlockList.
     private void DrawNestedTable(
         DrawingContext context, TableBlock tb, double startX, double top, bool chrome,
         HashSet<Paragraph>? selectedParagraphs, TextPointer? selStart, TextPointer? selEnd,
@@ -776,8 +762,6 @@ public partial class RichEditor
         if (_bringCaretIntoView)
         {
             _bringCaretIntoView = false;
-            // Include some margin above/below the caret so scrolling leaves it comfortably inside the
-            // viewport rather than flush against (or just past) an edge.
             const double m = 40;
             Rect target = blockCaretRect is { } br
                 ? MapDocToView(new Rect(br.X, Math.Max(0, br.Y - m), 2, br.Height + 2 * m))

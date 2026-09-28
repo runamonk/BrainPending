@@ -8,23 +8,8 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Formatters;
 
-/// <summary>
-/// Parses a practical subset of RTF — the "Rich Text Format" both Word and the Korean HWP put on
-/// the clipboard — into a <see cref="FlowDocument"/>: paragraphs, bold/italic/underline/strike,
-/// font size, foreground colour, embedded images (<c>\pict</c> PNG/JPEG, bytes carried inline), and
-/// simple tables (<c>\trowd…\cell…\row</c>). Unlike Word's CF_HTML (which references temp files for
-/// images), RTF embeds the image bytes, so nothing is lost. Zero external dependencies beyond a
-/// code-page provider for CJK text (<c>\'hh</c> bytes are decoded with the document's <c>\ansicpg</c>).
-/// <para>Writing covers more than reading, because that is what other applications consume: merged cells
-/// (<c>\clmgf</c>/<c>\clmrg</c>, <c>\clvmgf</c>/<c>\clvmrg</c>), per-cell shading (<c>\clcbpat</c>),
-/// everything a cell holds (several paragraphs, images, dividers, list markers), and tables nested in a
-/// cell (<c>\nestcell</c>/<c>\nestrow</c>, read back as a real nested table). Reading back is still
-/// lossier in places: cell merge flags and shading are ignored, and a nested table's column widths come
-/// out at the default because they live in the ignorable <c>{\*\nesttableprops}</c> group. An
-/// <see cref="InlineTable"/> has no RTF equivalent, so it is written as a
-/// block-level table that splits its host paragraph — the content and its order survive, the in-line
-/// placement does not (use <c>.flow</c>/JSON or HTML to keep that).</para>
-/// </summary>
+/// <summary>RTF import/export with embedded images and nested tables. Foreign readers display inline tables
+/// as blocks; private markers restore their inline placement when this editor reads them back.</summary>
 public static class RtfDocumentFormatter
 {
     // The left gutter a list item at this nesting level gets, in twips. One place, because the writer adds
@@ -71,7 +56,6 @@ public static class RtfDocumentFormatter
         catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
     }
 
-    /// <summary>True if <paramref name="text"/> starts with the RTF signature.</summary>
     public static bool LooksLikeRtf(string? text)
         => text != null && text.TrimStart().StartsWith(@"{\rtf", StringComparison.Ordinal);
 
@@ -104,12 +88,7 @@ public static class RtfDocumentFormatter
         {
             var parser = new RtfParser(rtf);
             var parsed = parser.Run();
-            // Truncation is the common damage — a half-copied file, a cut-short download — and it does
-            // not throw: the reader just runs out of input and finalizes what it has. That looked like a
-            // clean parse of a SHORTER document, so LoadRtf replaced the open one with it and the next
-            // save wrote the shorter version over the original. Unclosed groups are the giveaway, and
-            // until this check the only damage actually detected was input that ABORTS the parse (a
-            // numeric overflow, say) — which is what the fixture in DamagedRtfTests happens to be.
+            // Unclosed groups mean truncation; accepting a partial document could overwrite the intact file on save.
             if (parser.UnclosedGroups > 0)
             {
                 document = new FlowDocument();
@@ -213,17 +192,10 @@ internal sealed class RtfParser
     // \cellx<N> = cumulative right boundary (twips) per column. Captured from the first row so the
     // pasted table keeps the source column widths instead of a uniform default.
     private List<int> _curCellx = new();
-    // Every row's boundaries, not just the first row's. A horizontally merged cell is spelled in RTF by
-    // that row simply having FEWER boundaries — the merged cell's \cellx is the right edge of the whole
-    // span — so the grid is the union of all rows' boundaries and a row's span is read off it. Word
-    // writes merges this way and does not honour \clmgf/\clmrg (measured: it collapses the \clmgf cell
-    // to zero width), so a reader that only understood the flags saw a ragged table.
+    // Horizontal merges omit boundaries, so reconstruct the grid from every row, not just the first.
     private List<List<int>>? _tableCellxRows;
 
-    // Per-cell properties from the row definition. In RTF these precede each \cellx, one group per
-    // column, so they accumulate here and commit when that column's boundary arrives. Merged cells
-    // still occupy a column each (with their own \cellx and \cell), so the imported grid has the same
-    // shape and only the spans have to be reconstructed.
+    // Cell properties accumulate until the next cellx boundary commits them.
     private struct CellProps
     {
         public bool HMergeFirst;  // \clmgf — this cell starts a horizontal merge
@@ -279,12 +251,7 @@ internal sealed class RtfParser
         // though it had been closed properly, which is why a truncated file looks like a clean parse.
         // See TryParse — a truncated file must not be allowed to replace an open document.
         UnclosedGroups = _stack.Count;
-        // The reader closes a run at every group and every control word, so unstyled text arrives split
-        // wherever the writer happened to put a brace — a cell's two paragraphs come back as
-        // "r1c1" + "\n" + "second para in cell" rather than one run. Same text either way, but a run
-        // holding nothing but the break is a shape the layout engine handles badly (see the round-15
-        // note in Project_Roadmap.md), and re-saving welds the pieces back together, so the run list a
-        // file produced depended on how many times it had been through here.
+        // Coalesce runs split by RTF groups/control words so layout and repeated saves do not depend on source grouping.
         TextRange.CoalesceAll(_doc);
         return _doc;
     }
@@ -292,11 +259,10 @@ internal sealed class RtfParser
     /// How many groups were still open when the input ran out. Non-zero means truncated.
     public int UnclosedGroups { get; private set; }
 
-    // ---- control word / symbol ----
 
     private void ReadControl()
     {
-        _i++; // past '\'
+        _i++;
         if (_i >= _s.Length) return;
         char c = _s[_i];
 
@@ -319,10 +285,7 @@ internal sealed class RtfParser
         while (_i < _s.Length && char.IsLetter(_s[_i])) _i++;
         string word = _s.Substring(start, _i - start);
         int? param = null;
-        // A parameter is an optional '-' followed by DIGITS. A '-' with NO digit after it is not a
-        // parameter at all: the control word ends there and the '-' is literal text. Consuming it anyway
-        // ate the character — `{\rtf1\ansi\fs-x hello}` came out as "x hello", losing the sign, where
-        // Word reads `\fs` followed by the text "-x hello". (Ported from the WinUI peer.)
+        // A minus sign without following digits is literal text, not a control-word parameter.
         bool hasParam = _i < _s.Length &&
             (char.IsDigit(_s[_i]) || (_s[_i] == '-' && _i + 1 < _s.Length && char.IsDigit(_s[_i + 1])));
         if (hasParam)
@@ -330,10 +293,7 @@ internal sealed class RtfParser
             int ns = _i;
             if (_s[_i] == '-') _i++;
             while (_i < _s.Length && char.IsDigit(_s[_i])) _i++;
-            // TryParse, not Parse: a damaged file can carry a parameter wider than int (\cellx99999999999
-            // is a real thing in truncated clipboard RTF) and an OverflowException there aborted the whole
-            // document. An unrepresentable parameter is treated as absent, which every keyword already
-            // handles — the spec itself caps parameters at 32 bits, so nothing valid is lost.
+            // An overflowing parameter is treated as absent; malformed clipboard input must not abort the whole parse.
             if (int.TryParse(_s.AsSpan(ns, _i - ns), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
                 param = parsed;
         }
@@ -344,7 +304,7 @@ internal sealed class RtfParser
 
     private void ReadHexChar()
     {
-        _i++; // past '\''
+        _i++;
         if (_i + 1 >= _s.Length) return;
         string hex = _s.Substring(_i, 2);
         _i += 2;
@@ -357,7 +317,6 @@ internal sealed class RtfParser
     {
         switch (w)
         {
-            // document code page for \'hh runs
             case "ansicpg": _codepage = p ?? 1252; _enc = null; break;
 
             // character formatting — flush the run under the OLD state before the change
@@ -383,7 +342,6 @@ internal sealed class RtfParser
                 _st.Dest = Dest.Normal;
                 break;
 
-            // text/paragraph structure
             case "par": case "sect":
                 _skipMarkerText = false;
                 // Inside a header/footer a \par separates lines of a band this model stores as ONE line —
@@ -399,8 +357,8 @@ internal sealed class RtfParser
                 if (_st.Dest == Dest.Normal) _bytes.Add(9);
                 break;
             case "pard":
-                _skipMarkerText = false;   // a marker's text never spans a paragraph reset
-                _paraBottomBorder = false; // a border is paragraph formatting, so the reset clears it
+                _skipMarkerText = false;
+                _paraBottomBorder = false;
                 _para.TextAlignment = TextAlignment.Left;
                 _para.Indent = 0;
                 _para.LineHeight = _para.LineSpacing = double.NaN;
@@ -416,9 +374,7 @@ internal sealed class RtfParser
             case "outlinelevel": if (_st.Dest == Dest.Normal) _para.HeadingLevel = p is >= 0 and <= 5 ? p.Value + 1 : 0; break;
             case "sl": if (_st.Dest == Dest.Normal) { _slTwips = p ?? 0; ApplyLineSpacing(); } break;
             case "slmult": if (_st.Dest == Dest.Normal) { _slMult = p == 1; ApplyLineSpacing(); } break;
-            // A horizontal rule has no control word of its own in RTF; Word — and this writer — spell it
-            // as an empty paragraph carrying a bottom border. Only the writing half existed, so every
-            // divider came back as a blank line and was gone for good after one save/load.
+            // RTF represents a horizontal rule as an empty paragraph with a bottom border.
             case "brdrb": if (_st.Dest == Dest.Normal && _curRow == null) _paraBottomBorder = true; break;
 
             // Ours (see WriteListMarker): the list nesting level, announced before the marker tag. It
@@ -442,7 +398,6 @@ internal sealed class RtfParser
             case "cell": if (_st.Dest == Dest.Normal) EndCell(); break;
             case "row": if (_st.Dest == Dest.Normal) EndRow(); break;
             case "intbl": break;                  // structure is driven by \cell/\row
-            // Column boundary: commits this column's width AND the cell properties collected for it.
             case "cellx":
                 if (_st.Dest == Dest.Normal)
                 {
@@ -452,16 +407,14 @@ internal sealed class RtfParser
                 }
                 break;
 
-            // Cell merge + shading. The writer has always emitted these (Word and HWP honour them), but
-            // reading them back was skipped, so our own export came home with the grid un-merged and the
-            // cell colours gone — a round trip through our own format lost more than Word's did.
+            // Restore merge and shading properties from the row definition.
             case "clmgf": if (_st.Dest == Dest.Normal) _pendingCell.HMergeFirst = true; break;
             case "clmrg": if (_st.Dest == Dest.Normal) _pendingCell.HMergeCont = true; break;
             case "clvmgf": if (_st.Dest == Dest.Normal) _pendingCell.VMergeFirst = true; break;
             case "clvmrg": if (_st.Dest == Dest.Normal) _pendingCell.VMergeCont = true; break;
             case "clcbpat": if (_st.Dest == Dest.Normal) _pendingCell.Shading = p ?? 0; break;
 
-            // A table inside a cell: the model nests (milestone A) and the writer emits these, so they
+            // A table inside a cell: the model nests and the writer emits these, so they
             // come back as a real nested TableBlock in the parent cell rather than flattened text.
             case "itap": SetItap(p ?? 1); break;
             case "nestcell": if (_st.Dest == Dest.Normal) EndNestedCell(); break;
@@ -478,15 +431,11 @@ internal sealed class RtfParser
             case "shptxt": _st.Dest = Dest.Normal; break;
             case "sp": case "sn": case "sv": _st.Dest = Dest.Skip; break;
 
-            // unicode
             case "u": EmitUnicode(p ?? 0); break;
             case "uc": _st.UnicodeSkip = p ?? 1; break;
 
-            // destinations
             case "colortbl": _st.Dest = Dest.ColorTable; _colors.Clear(); _ctR = _ctG = _ctB = 0; _ctHasColor = false; break;
-            // {\header …}/{\footer …} and their left/right/first-page variants. Until this existed they were
-            // UNKNOWN destinations, so their text flowed straight into the body: opening a Word document
-            // with a header put that header in as the document's first paragraph.
+            // Header/footer destinations belong to page setup, never to the document body.
             case "header": case "headerl": case "headerr": case "headerf":
                 StartPageChrome(header: true); break;
             case "footer": case "footerl": case "footerr": case "footerf":
@@ -517,7 +466,6 @@ internal sealed class RtfParser
             case "listoverridetable": case "revtbl":
                 _st.Dest = Dest.Skip; break;
 
-            // color-table component words
             case "red": _ctR = p ?? 0; _ctHasColor = true; break;
             case "green": _ctG = p ?? 0; _ctHasColor = true; break;
             case "blue": _ctB = p ?? 0; _ctHasColor = true; break;
@@ -532,7 +480,7 @@ internal sealed class RtfParser
             case "picwgoal": _pictWTwips = p ?? 0; break;
             case "pichgoal": _pictHTwips = p ?? 0; break;
 
-            default: break; // unknown control word: ignore (its text, if any, still flows)
+            default: break;
         }
     }
 
@@ -589,7 +537,6 @@ internal sealed class RtfParser
         }
     }
 
-    // ---- building ----
 
     // True from a {\*\armkb|armkn} tag until the \tab that closes the list marker's literal text, which
     // this reader must NOT take as content (other readers render it — that is why it is written at all).
@@ -626,9 +573,8 @@ internal sealed class RtfParser
         _bytes.Clear();
     }
 
-    // ---- page chrome ({\header …} / {\footer …}) ----
 
-    private bool _chromeIsHeader;      // which of the two the current group is
+    private bool _chromeIsHeader;
     private int _chromeDepth = -1;     // group depth that opened it, so the matching '}' is identifiable
     private bool _chromeNumbers;       // a \chpgn / page field was seen inside a footer
     private bool _chromeTextClosed;    // past the page-number placeholder: the rest is decoration
@@ -676,7 +622,7 @@ internal sealed class RtfParser
     // single spaces — lossy, and honestly so: this reader has nowhere richer to put it.
     private void FinalizePageChrome()
     {
-        FlushRun(); // banks whatever the last line collected
+        FlushRun();
 
         string text = System.Text.RegularExpressions.Regex.Replace(_chromeText.ToString(), @"\s+", " ").Trim();
         _chromeText.Clear();
@@ -753,13 +699,7 @@ internal sealed class RtfParser
         FlushRun();
         FinalizeTable(); // a normal paragraph ends any table that was being built
 
-        // RTF has no block picture: the writer emits one as `\pard <pict>\par`, so that \par TERMINATES
-        // the image's own paragraph rather than starting a new one. Reading it as content added a blank
-        // paragraph after every image — and another on the next cycle, and the next, so a document saved
-        // and reopened a few times grew a gap under each picture.
-        //
-        // A blank line the author really did put under an image still survives: the writer emits it as
-        // its OWN `\pard\par`, so the first \par is consumed here and the second one lands as usual.
+        // Consume the par terminating a block picture; treating it as content adds a blank line on every round trip.
         bool structural = _imageOwnsNextPar && _para.Inlines.Count == 0;
         _imageOwnsNextPar = false;
         if (structural) return;
@@ -781,12 +721,9 @@ internal sealed class RtfParser
     // (structure, see SetItap) from one that came from \line (content). -1 = no such break pending.
     private int _cellParMark = -1;
 
-    // True immediately after a block picture was added, while its terminating \par is still pending.
     private bool _imageOwnsNextPar;
-    // True while the paragraph being read carries a bottom border (\brdrb) — see EndParagraph.
     private bool _paraBottomBorder;
 
-    // ---- tables ----
 
     private void StartRow()
     {
@@ -795,7 +732,7 @@ internal sealed class RtfParser
         _curCellx = new List<int>(); // \cellx for this row follows \trowd
         _curCellProps = new List<CellProps>();
         _pendingCell = default;
-        _para = new Paragraph();     // first cell's content
+        _para = new Paragraph();
     }
 
     private void EndCell()
@@ -803,7 +740,6 @@ internal sealed class RtfParser
         if (_curRow == null) StartRow();
         int col = _curRow!.Count;
         var cell = TakeCell(childDepth: 2);
-        // The row definition precedes the cells' content, so this column's shading is already known.
         if (col < _curCellProps.Count && _curCellProps[col].Shading is int ci && ci > 0 && ci < _colors.Count)
         {
             var bg = _colors[ci];
@@ -870,19 +806,12 @@ internal sealed class RtfParser
         if (depth == _itap) return;
         if (depth > _itap)
         {
-            // The writer terminates the cell's own paragraph with \par before descending into a nested
-            // table (WriteCellContent.CloseBeforeNested), and this closes that paragraph anyway — so that
-            // break is structure, not content. Kept, it came back as a trailing soft break, which the next
-            // save wrote as \line AND still emitted its own \par: one more blank line inside the cell on
-            // every round trip, without limit. Only the break that \par itself just added is dropped (the
-            // mark is the byte count at that moment), so a soft break the author typed — written as \line
-            // and followed by the structural \par — survives.
+            // Drop only the structural par before a nested table. Preserve user-authored line breaks.
             if (_cellParMark == _bytes.Count && _bytes.Count > 0 && _bytes[^1] == 10)
                 _bytes.RemoveAt(_bytes.Count - 1);
             FlushRun();
             if (_para.Inlines.Count > 0)
             {
-                // The paragraph belongs to the cell being filled at the CURRENT depth, not the deeper one.
                 if (!_cellPending.TryGetValue(_itap, out var pending))
                     _cellPending[_itap] = pending = new List<Block>();
                 pending.Add(_para);
@@ -925,14 +854,13 @@ internal sealed class RtfParser
             var it = new InlineTable { Table = table };
             it.Parent = host;
             host.Inlines.Add(it);
-            // Whatever the current paragraph has collected is the text that followed the table.
             foreach (var inl in new List<Inline>(_para.Inlines))
             {
                 _para.Inlines.Remove(inl);
                 inl.Parent = host;
                 host.Inlines.Add(inl);
             }
-            _para = host; // the caller adds it back
+            _para = host;
             return;
         }
         _doc.Blocks.Add(table);
@@ -1045,7 +973,6 @@ internal sealed class RtfParser
         }
         tb.Rows = rows.Count;
         tb.Columns = cols;
-        // Column widths from the union grid (cumulative right boundaries in twips → px /15).
         if (grid != null)
         {
             tb.ColumnWidths.Clear();
@@ -1071,7 +998,6 @@ internal sealed class RtfParser
         return tb;
     }
 
-    // ---- images ----
 
     // Decodes the accumulated \pict bytes and places the image: small (<64px) inline, larger as its
     // own block. Twips → px is /15 (1440 twips = 96 px/in). Unsupported blips or undecodable bytes drop.
@@ -1089,7 +1015,6 @@ internal sealed class RtfParser
         if (w <= 0 || h <= 0)
         {
             try { bmp = new Avalonia.Media.Imaging.Bitmap(new System.IO.MemoryStream(bytes)); }
-            // not a decodable PNG/JPEG after all
             catch (Exception ex) { RichEditorDiagnostics.Report(ex); return; }
             w = bmp.Size.Width; h = bmp.Size.Height;
         }
@@ -1166,9 +1091,7 @@ internal sealed class RtfWriter
         sb.Append(@"{\colortbl;");
         foreach (var c in _colors) sb.Append($@"\red{c.R}\green{c.G}\blue{c.B};");
         sb.Append('}').Append('\n');
-        // The header/footer destinations belong to the document area, BEFORE the body — that is where Word
-        // puts them and where readers look. Nothing wrote them, so a document with a header exported to
-        // Word or HWP simply lost it while the model and .flow carried it correctly.
+        // Header/footer destinations must precede the body for Word/HWP to recognize them.
         WritePageChrome(sb, doc.PageSetup);
         sb.Append(_body);
         sb.Append('}');
@@ -1187,7 +1110,6 @@ internal sealed class RtfWriter
                 _body.Append(@"\par").Append('\n');
                 break;
             case DividerBlock:
-                // A thin bottom border on an empty paragraph reads as a horizontal rule.
                 _body.Append(@"\pard\brdrb\brdrs\brdrw10\brsp20 \par").Append('\n');
                 break;
         }
@@ -1204,10 +1126,7 @@ internal sealed class RtfWriter
         bool hasHeader = !string.IsNullOrEmpty(ps.Header);
         bool hasFooter = !string.IsNullOrEmpty(ps.Footer) || ps.ShowPageNumbers;
 
-        // Paper size and margins. Round 6 wrote the header/footer half of the page setup and left this
-        // one out, so a document set to A4 arrived on whatever paper the reader defaults to (Letter in a
-        // US install) and came back from our own reader as Continuous. Continuous has no paper to state,
-        // so it says nothing and the reader keeps its default.
+        // Continuous has no paper dimensions to emit; concrete sizes must survive export independently of reader defaults.
         if (ps.PageSize != Controls.RichEditorPageSize.Continuous)
         {
             var (w, h) = PageSetup.PaperDips(ps.PageSize, ps.Orientation);
@@ -1217,10 +1136,7 @@ internal sealed class RtfWriter
             // \landscape is the document-level flag; PaperDips has already swapped the dimensions, so
             // this only tells the reader how to present the page setup it was given.
             if (ps.Orientation == Controls.RichEditorPageOrientation.Landscape) sb.Append(@"\landscape");
-            // The same numbers again at SECTION level. Word reads the document-level ones above
-            // (measured: PaperSize comes back wdPaperA4), but HWP reads only these — an A4 document
-            // opened in HWP as Letter until they were here. Both are the same values by construction,
-            // so there is nothing to keep in sync beyond this line.
+            // Repeat dimensions at section level: Word reads document-level values, while HWP reads section-level ones.
             sb.Append($@"\sectd\pgwsxn{(int)Math.Round(w * 15)}\pghsxn{(int)Math.Round(h * 15)}");
             if (ps.Orientation == Controls.RichEditorPageOrientation.Landscape) sb.Append(@"\lndscpsxn");
             sb.Append('\n');
@@ -1228,7 +1144,6 @@ internal sealed class RtfWriter
 
         if (!hasHeader && !hasFooter) return;
 
-        // The writer emits into _body; borrow it so WriteEscaped can be reused, then move the result.
         int mark = _body.Length;
 
         if (hasHeader)
@@ -1255,17 +1170,13 @@ internal sealed class RtfWriter
         _body.Length = mark;
     }
 
-    // "\pard" + this paragraph's own properties.
     private void WriteParagraphProps(Paragraph p)
     {
         _body.Append(@"\pard");
         WriteParagraphPropsBody(p); // ends with the delimiter space for the last control word
     }
 
-    // The properties themselves, without the \pard. Split out because a CELL paragraph opens with
-    // `\pard\intbl` and never followed it with any of these — so a centred or indented paragraph inside a
-    // table exported as neither, while the identical paragraph at the top level exported correctly. Not a
-    // limitation of RTF: the top-level path has always written them, and the cell path simply never did.
+    // Shared paragraph properties also follow pard/intbl in cells, preserving their alignment and indent.
     private void WriteParagraphPropsBody(Paragraph p)
     {
         if (p.HeadingLevel is >= 1 and <= 6) _body.Append($@"\outlinelevel{p.HeadingLevel - 1}");
@@ -1276,10 +1187,7 @@ internal sealed class RtfWriter
         // Zero spacing is explicit: omitting it would restore the editor's default paragraph gap.
         _body.Append($@"\sb{(int)Math.Round(p.MarginTop * 15)}");
         _body.Append($@"\sa{(int)Math.Round(p.MarginBottom * 15)}");
-        // ALWAYS emit the alignment, including \ql for left. In the spec \pard resets alignment to left,
-        // but HWP treats \pard as "back to the current defaults" and keeps a previously seen \qr — so a
-        // single right-aligned paragraph turned every following one right-aligned on paste. Being explicit
-        // costs 3 bytes per paragraph and removes the reader-dependent behaviour entirely.
+        // Emit even left alignment: HWP can retain the previous alignment after pard.
         switch (p.TextAlignment)
         {
             case TextAlignment.Center: _body.Append(@"\qc"); break;
@@ -1287,10 +1195,7 @@ internal sealed class RtfWriter
             case TextAlignment.Justify: _body.Append(@"\qj"); break;
             default: _body.Append(@"\ql"); break;
         }
-        // A list item needs a real hanging indent, not just a marker followed by \tab. Without one the tab
-        // lands on the reader's next DEFAULT tab stop — in HWP that is far to the right, so the text was
-        // thrown across the line while the marker sat alone at the margin. \fi-360 hangs the marker, \li
-        // puts the text at the gutter, \tx pins the tab there. This is what Word writes for its own lists.
+        // Use a hanging indent and explicit tab stop; default HWP tab stops place list text too far from its marker.
         int indentTwips = (int)(p.Indent * 15);
         if (p.IsListItem)
         {
@@ -1301,21 +1206,8 @@ internal sealed class RtfWriter
         _body.Append(' ');
     }
 
-    // A list item's marker. It used to go out as BARE TEXT followed by \tab — the comment here called that
-    // a deliberate trade-off ("our parser treats it as text"), but the cost was not only cosmetic: the
-    // glyph became part of the document's CONTENT on the way back in. A bulleted item reopened as the
-    // plain text "•\t항목", list gone, bullet now part of what the user typed, and saving again kept it.
-    //
-    // No round-trip test could see it, because the result is PERFECTLY IDEMPOTENT: cycle 2 reads back
-    // exactly what cycle 1 produced, since the marker is only written for a paragraph that still has a
-    // ListType and this one no longer has one.
-    //
-    // The fix keeps the literal text — that is what every other reader renders, and the standard
-    // {\pntext}{\*\pn} pair is NOT a substitute: HWP skips both and then shows no marker at all (measured
-    // on the WinUI peer against a real HWP paste). Instead an ignorable tag in front of it says "the text
-    // up to the next \tab is the marker, not content", which only this reader acts on. The tag's parameter
-    // carries the exact marker style, and {\*\arlvl} carries the nesting level — so ListLevel, which RTF
-    // has no standard place for, survives too.
+    // Emit literal markers for Word/HWP and private ignorable tags for our reader. The tags distinguish
+    // marker text from content and preserve the exact marker style and nesting level.
     private void WriteListMarker(Paragraph p, int ordered)
     {
         _body.Append(@"{\*\arlvl").Append(Math.Clamp(p.ListLevel, 0, 8)).Append('}');
@@ -1402,7 +1294,6 @@ internal sealed class RtfWriter
             var rowDef = new StringBuilder();
             rowDef.Append(@"\trowd");
             if (depth > 1) rowDef.Append($@"\itap{depth}");
-            // Cumulative right cell boundaries in twips (px*15), from the column widths.
             var edge = new int[tb.Columns];
             int running = 0;
             for (int col = 0; col < tb.Columns; col++)
@@ -1411,11 +1302,8 @@ internal sealed class RtfWriter
                 edge[col] = running;
             }
 
-            // A horizontal merge is spelled by GEOMETRY: the merged cell gets one \cellx at the right
-            // edge of the whole span and the columns it covers get no boundary and no \cell of their
-            // own. \clmgf/\clmrg was the other spelling and Word does not honour it — measured against
-            // Word 16, it collapses the \clmgf cell to zero width and leaves the visible cell EMPTY, so
-            // a merged heading disappeared. Vertical merges keep their flags: those Word does honour.
+            // Encode horizontal merges by omitting covered-cell boundaries; Word does not reliably honor clmgf/clmrg.
+            // Vertical merges still use their standard flags.
             var written = new List<int>();
             for (int col = 0; col < tb.Columns; col++)
             {
@@ -1430,7 +1318,6 @@ internal sealed class RtfWriter
                 var (cs, rs) = tb.SpanOf(ar, ac);   // the anchor's spans govern this cell
                 if (rs > 1 && !covered) rowDef.Append(@"\clvmgf");
                 else if (covered && ar != row) rowDef.Append(@"\clvmrg");
-                // Cell shading uses the colour table, like text colour.
                 int bg = ColorIndex(tb.Cells[ar][ac].Background);
                 if (bg > 0) rowDef.Append($@"\clcbpat{bg}");
                 // Cell borders. Without these Word and HWP draw the grid with NO lines at all — the
@@ -1463,9 +1350,7 @@ internal sealed class RtfWriter
             if (depth == 1)
                 _body.Append(@"\row").Append('\n');
             else
-                // \nesttableprops is ignorable: a reader that doesn't do nested tables still sees the
-                // cell text (ours flattens it into the parent cell), which is why this can't corrupt a
-                // document. \nonesttables carries the same fallback for very old readers.
+                // nesttableprops is ignorable for readers without nested-table support; nonesttables carries their fallback.
                 _body.Append(@"{\*\nesttableprops").Append(rowDef).Append(@"\nestrow}{\nonesttables\par}").Append('\n');
         }
         if (depth == 1) _body.Append(@"\pard").Append('\n');
@@ -1505,9 +1390,7 @@ internal sealed class RtfWriter
             {
                 if (!first) _body.Append(@"\par ");
                 first = false;
-                // This paragraph's OWN alignment and indent. The cell prelude opens with `\pard\intbl` and
-                // wrote none of them, so every cell paragraph exported as left-aligned and un-indented no
-                // matter what it was — while the identical paragraph at the top level exported correctly.
+                // Cell paragraphs need their own alignment and indent after pard/intbl.
                 WriteParagraphPropsBody(cpara);
                 if (cpara.ListType != ListKind.None) WriteListMarker(cpara, 1);
                 bool heading = cpara.HeadingLevel is >= 1 and <= 6;
@@ -1570,11 +1453,7 @@ internal sealed class RtfWriter
         if (w > 0) _body.Append($@"\picwgoal{(int)(w * 15)}");
         if (h > 0) _body.Append($@"\pichgoal{(int)(h * 15)}");
         _body.Append(' ');
-        // Byte-at-a-time `b.ToString("x2")` allocated one string PER BYTE — a 5 MB picture put five
-        // million of them through Gen0 for an export that is otherwise allocation-light. Converted a
-        // chunk at a time into a stack buffer instead: no per-byte string, and no single 10 MB char
-        // array either (which is what converting the whole thing at once would cost). Same lowercase
-        // hex, so the bytes written are identical.
+        // Encode hex in chunks to avoid both a string per byte and a full-size temporary character array.
         Span<char> hex = stackalloc char[2 * HexChunk];
         for (int off = 0; off < bytes.Length; off += HexChunk)
         {
@@ -1612,7 +1491,6 @@ internal sealed class RtfWriter
         return i;
     }
 
-    // Heading sizes in points (pt), mirroring RichEditor.HeadingFontSize.
     private static double HeadingSize(int level)
         => level switch { 1 => 20, 2 => 16, 3 => 14, 4 => 12, 5 => 11, 6 => 10, _ => 10 };
 

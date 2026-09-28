@@ -7,10 +7,7 @@ using System.Text;
 
 namespace AvaloniaRichEditor.Formatters;
 
-// Minimal raster PDF writer (P-milestone Phase 4): each page is one full-bleed FlateDecode RGB
-// image. No external dependencies — zlib framing comes from System.IO.Compression.ZLibStream.
-// Vector text output is out of scope (Avalonia exposes no DrawingContext->PDF backend); see the
-// roadmap's P-milestone notes.
+// Raster PDF: one FlateDecode RGB image per page. Avalonia has no DrawingContext-to-PDF backend.
 internal static class PdfWriter
 {
     // getPage(i) returns one rendered page as raw 24-bit RGB, top-down. Pages are pulled lazily so
@@ -52,7 +49,6 @@ internal static class PdfWriter
             WriteAscii($"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {Num(pageWidthPt)} {Num(pageHeightPt)}] " +
                        $"/Resources << /XObject << /Im0 {5 + 3 * i} 0 R >> >> /Contents {4 + 3 * i} 0 R >>\nendobj\n");
 
-            // Content stream: scale the unit-square image to fill the page.
             byte[] content = Encoding.ASCII.GetBytes($"q {Num(pageWidthPt)} 0 0 {Num(pageHeightPt)} 0 0 cm /Im0 Do Q");
             BeginObj(4 + 3 * i);
             WriteAscii($"<< /Length {content.Length} >>\nstream\n");

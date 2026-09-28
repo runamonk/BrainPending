@@ -12,9 +12,7 @@ public class TextRange
     private TextPointer _start;
     private TextPointer _end;
 
-    /// <summary>The start (earlier) position of the range.</summary>
     public TextPointer Start => _start;
-    /// <summary>The end (later) position of the range.</summary>
     public TextPointer End => _end;
 
     /// <summary>Creates a range from two positions (order does not matter; the earlier becomes <see cref="Start"/>).</summary>
@@ -32,7 +30,6 @@ public class TextRange
         }
     }
 
-    /// <summary><see langword="true"/> when Start and End are at the same position (nothing selected).</summary>
     public bool IsEmpty => _start.CompareTo(_end) == 0;
 
     /// <summary>Deletes all content covered by this range (across paragraph boundaries).
@@ -60,11 +57,7 @@ public class TextRange
             var container = ContainerOf(sp);
             if (container != null && ReferenceEquals(container, ContainerOf(ep)))
             {
-                // Both endpoints are siblings in ONE block list — the document's top level, or a single
-                // table cell (cells host sibling paragraphs since milestone A/P3). Remove the blocks
-                // strictly between them (a spanned image/table/divider goes too) and join the two halves.
-                // The old test was "is it a top-level block?", which classified two paragraphs of the SAME
-                // cell as "crosses the grid" and skipped the merge, leaving a stray paragraph break behind.
+                // Sibling endpoints can merge within their shared block list, including a single table cell.
                 int si = container.IndexOf(sp), ei = container.IndexOf(ep);
                 if (si >= 0 && ei > si)
                 {
@@ -244,7 +237,6 @@ public class TextRange
             }
             else if (inline is not Run && segStart >= startOffset && segEnd <= endOffset)
             {
-                // Atomic object inline (image, table): capture it whole when fully inside the range.
                 result.Add((Inline)inline.Clone());
             }
         }
@@ -299,7 +291,6 @@ public class TextRange
         if (startOffset >= fullText.Length) return "";
         int len = Math.Min(endOffset - startOffset, fullText.Length - startOffset);
         if (len <= 0) return "";
-        // Drop image placeholders from copied plain text.
         return fullText.Substring(startOffset, len).Replace(ObjChar.ToString(), "");
     }
 
@@ -317,20 +308,16 @@ public class TextRange
             int len = InlineLen(inline);
             if (len > 0 && currentLeft >= startOffset && currentLeft + len <= endOffset)
             {
-                toRemove.Add(inline); // removes runs and inline images that fall inside the range
+                toRemove.Add(inline);
             }
             currentLeft += len;
         }
         foreach (var item in toRemove) p.Inlines.Remove(item);
-        // A paragraph always holds at least one Run — the whole offset model (BuildPlain, caret placement,
-        // formatting at an empty caret) assumes it. The editor's own delete paths restore it afterwards,
-        // but TextRange.Delete() is public API: called directly on a range covering everything, it left a
-        // paragraph with no inlines at all.
+        // Public range deletion must restore an empty Run; caret placement and formatting require one.
         if (p.Inlines.Count == 0) p.Inlines.Add(new Run { Text = "", Parent = p });
         CoalesceRuns(p); // removing a run can leave its former neighbours adjacent with equal formatting
     }
 
-    // Joins `source` into `target` — both siblings of `container` — and drops it from that list.
     private void MergeParagraphs(Paragraph target, Paragraph source, IList<Block> container)
     {
         foreach (var inline in source.Inlines)
@@ -370,10 +357,7 @@ public class TextRange
         }
     }
 
-    // CoalesceRuns for every paragraph in a document, at any depth. An importer builds one run per source
-    // node, so the same line can arrive as one run or as several depending on how the markup happened to
-    // be split — and re-exporting it welds those nodes together, so a second import produced a DIFFERENT
-    // run list from the same content. Text and offsets are untouched; only the run count changes.
+    // Coalesce imported runs so source-node boundaries do not change the model on each import/export cycle.
     internal static void CoalesceAll(FlowDocument doc)
     {
         var all = new List<Paragraph>();
@@ -414,11 +398,7 @@ public class TextRange
     /// <summary>The top-level <see cref="Block"/> of <paramref name="doc"/> that contains
     /// <paramref name="p"/>: the paragraph itself when it is a document block, otherwise the outermost
     /// block it lives in.</summary>
-    // Walks the Parent chain (Paragraph -> TableCell -> TableBlock -> [InlineTable -> host Paragraph]
-    // -> ... -> FlowDocument), so it resolves paragraphs at ANY depth. The previous one-level scan of
-    // every cell's block list returned null for a paragraph inside a nested or inline table, and the
-    // callers then silently skipped the blocks between the selection endpoints. Shared with the editor
-    // so there is a single walker (like CoalesceRuns).
+    // Follow parents through nested and inline tables; a one-level cell scan misses deeper selections.
     internal static Block? TopLevelBlockOf(FlowDocument doc, Paragraph p)
     {
         object? current = p;

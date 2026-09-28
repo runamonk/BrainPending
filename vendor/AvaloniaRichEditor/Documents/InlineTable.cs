@@ -7,8 +7,6 @@ namespace AvaloniaRichEditor.Documents;
 /// recursive block-table primitives. For a block-level grid use <see cref="TableBlock"/> directly.</summary>
 public class InlineTable : Inline
 {
-    /// <summary>The wrapped grid. Holds the cells/blocks and all structural state; the inline wrapper
-    /// only places it within a paragraph line.</summary>
     public TableBlock Table { get; set; } = new();
 
     /// <inheritdoc/>

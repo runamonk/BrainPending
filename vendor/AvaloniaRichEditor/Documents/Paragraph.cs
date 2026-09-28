@@ -3,14 +3,10 @@ using Avalonia.Media;
 
 namespace AvaloniaRichEditor.Documents;
 
-/// <summary>List style for a <see cref="Paragraph"/>.</summary>
 public enum ListKind
 {
-    /// <summary>Not a list item.</summary>
     None,
-    /// <summary>Unordered bullet list.</summary>
     Bullet,
-    /// <summary>Ordered (numbered) list.</summary>
     Ordered
 }
 
@@ -40,14 +36,9 @@ public enum ListMarkerStyle
     LowerRoman
 }
 
-/// <summary>A block of inline content (<see cref="Run"/>s and <see cref="InlineImage"/>s) with
-/// paragraph-level formatting: alignment, line spacing, indent, list style, heading level, background.
-/// Also serves as the content of a table cell.</summary>
 public class Paragraph : Block
 {
-    /// <summary>The inline elements (runs and inline images) that make up the paragraph.</summary>
     public List<Inline> Inlines { get; set; } = new();
-    /// <summary>Horizontal text alignment. Default: Left.</summary>
     public TextAlignment TextAlignment { get; set; } = TextAlignment.Left;
     /// <summary>Absolute line-box height in device-independent pixels ("exactly" spacing, like Word's
     /// fixed value). <see cref="double.NaN"/> = unset. Overridden by <see cref="LineSpacing"/> when that
@@ -62,30 +53,21 @@ public class Paragraph : Block
     /// nothing flows around images/tables, so a right margin would be invisible there
     /// (the left margin is <see cref="Block.Indent"/>). Default: 0.</summary>
     public double MarginRight { get; set; } = 0;
-    /// <summary>List style for this paragraph. Default: None.</summary>
     public ListKind ListType { get; set; } = ListKind.None;
     /// <summary>The bullet glyph / number format for this list item (refines <see cref="ListType"/>).
     /// Default = the kind's default (• / "1."). Ignored when <see cref="ListType"/> is None.</summary>
     public ListMarkerStyle ListMarker { get; set; } = ListMarkerStyle.Default;
     /// <summary>Heading level: 0 = body text, 1–6 = h1–h6.</summary>
     public int HeadingLevel { get; set; } = 0;
-    /// <summary>Paragraph or table-cell background fill brush.</summary>
     public IBrush? Background { get; set; }
-    /// <summary>Whether this paragraph is a blockquote.</summary>
     public bool IsQuote { get; set; } = false;
     /// <summary>Nested list depth (0 = top level).</summary>
     public int ListLevel { get; set; } = 0;
 
-    /// <summary><see langword="true"/> if this paragraph is a bullet or numbered list item.</summary>
     public bool IsListItem => ListType != ListKind.None;
 
-    /// <summary>Copies every paragraph-level formatting field from <paramref name="source"/> (the
-    /// inlines are not touched). Single source for the edit paths that derive a new paragraph from an
-    /// existing one — Enter's split, the paste tail, list splitting — which each used to copy a
-    /// hand-picked subset and silently dropped the rest (line spacing, quote bar, marker style…).
-    /// <see cref="Clone"/> uses this list too — it used to mirror it by hand, which is a rule only a
-    /// person can keep. A caller that must diverge (Enter resets the heading level to body text)
-    /// overrides the field afterwards.</summary>
+    /// <summary>Copies paragraph formatting without touching inlines. Split and clone paths share this field list;
+    /// callers such as Enter override fields that should not carry forward.</summary>
     public void CopyFormatFrom(Paragraph source)
     {
         MarginTop = source.MarginTop;
@@ -103,11 +85,6 @@ public class Paragraph : Block
         ListLevel = source.ListLevel;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>The format fields come from <see cref="CopyFormatFrom"/> — the ONE list — because this
-    /// used to be a second hand-written copy of it. A paragraph property added without updating both
-    /// lists survives normal editing and then disappears at the first undo, since an undo state is a
-    /// clone; that is the same failure CopyFormatFrom's own note records for the split paths.</remarks>
     public override TextElement Clone()
     {
         var p = new Paragraph();

@@ -17,11 +17,7 @@ namespace AvaloniaRichEditor.Controls;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-/// <summary>A from-scratch rich text editor built on Avalonia's <c>TextLayout</c> engine.
-/// Supports inline formatting, paragraphs, lists, tables (merged cells, nested and inline tables),
-/// images, HTML/JSON/RTF/<c>.flow</c> import-export, PDF and printing, pagination, find/replace,
-/// undo/redo and CJK IME. What the user may do is set by <see cref="IsReadOnly"/> and the
-/// <c>Allow*</c> feature flags.</summary>
+/// <summary>Rich text editing with capability controlled by IsReadOnly and the Allow* flags.</summary>
 public partial class RichEditor : Control
 {
     /// <summary>Adapt dark document ink for a dark canvas without changing stored formatting.</summary>
@@ -71,12 +67,12 @@ public partial class RichEditor : Control
     private TextPointer _selectionEnd = new TextPointer(null, 0);
     private bool _isSelecting = false;
     private Point _lastCaretPoint;
-    private double _lastCaretHeight = 20; // line height at the caret (tall on lines with inline images)
-    private Block? _selectedBlock; // a block (image/table) selected by clicking it (deletable with Del/Backspace)
+    private double _lastCaretHeight = 20;
+    private Block? _selectedBlock;
     // A "block caret" sits before/after an image/table: Space/Tab indent it, Backspace outdents/deletes,
     // arrows step before -> (table cells) -> after -> next text. Set by clicking or arrow navigation.
     private Block? _caretBlock;
-    private bool _caretBlockAfter; // false = caret before the block, true = caret after it
+    private bool _caretBlockAfter;
 
     // Internal rich clipboard: preserves run formatting AND inline images for copy/paste within the app.
     // The plain text put on the system clipboard is mirrored here; on paste we use the rich
@@ -87,7 +83,6 @@ public partial class RichEditor : Control
     // keep cloned block structure so paste can rebuild tables instead of flattening to text.
     private static List<Block>? _internalClipboardBlocks;
 
-    // Resizing state
     private List<(Avalonia.Rect rect, TableBlock tb, int colIndex)> _columnBoundaries = new();
     private bool _isResizingColumn;
     private TableBlock? _resizingTable;
@@ -97,7 +92,6 @@ public partial class RichEditor : Control
     private double _initialNextColumnWidth;
     private bool _resizingLastColumn;
 
-    // Row resize state (mirrors column resize; dragging a row's bottom edge sets its min height).
     private List<(Avalonia.Rect rect, TableBlock tb, int rowIndex, double height)> _rowBoundaries = new();
     private bool _isResizingRow;
     private TableBlock? _resizingRowTable;
@@ -110,13 +104,9 @@ public partial class RichEditor : Control
     private bool _cellSelMode;
     private TableBlock? _cellSelTable;
 
-    // Image resize state. The handle carries the size the image was DRAWN at, not just the block: inside
-    // a table cell a picture is scaled down to fit the cell (CellImageSize), so the declared Width can be
-    // several times the width the handle sits at. Seeding the drag from the declared size made a drag of
-    // a few dozen px land inside the range that still clamps to the same drawn width — the handle looked
-    // dead. The drag is relative to what the user can see.
+    // Resize from the drawn size: images inside cells may be scaled below their declared dimensions.
     private List<(Avalonia.Rect rect, ImageBlock img, double drawnW, double drawnH)> _imageHandles = new();
-    // Rendered rects of block images inside table cells (P4-2b), so a click can select one (top-level
+    // Rendered rects of block images inside table cells, so a click can select one (top-level
     // block images are found via GetBlockAtPoint; cell images need this registry, like inline images).
     private List<(Avalonia.Rect rect, ImageBlock img)> _cellImageRects = new();
     private bool _isResizingImage;
@@ -162,15 +152,11 @@ public partial class RichEditor : Control
     }
 
     /// <inheritdoc cref="SelectionBrush"/>
-    // Immutable, like the static pens in the render file: a plain SolidColorBrush is an AvaloniaObject
-    // and takes the thread affinity of whoever runs this static initializer. As a PROPERTY DEFAULT that
-    // is one object shared by every editor in the process, so a second UI thread painting a selection
-    // hit "the calling thread cannot access this object" — the same rule the document model follows.
+    // Property defaults are shared across UI threads, so brushes must be immutable.
     public static readonly StyledProperty<IBrush> SelectionBrushProperty =
         AvaloniaProperty.Register<RichEditor, IBrush>(
             nameof(SelectionBrush), new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.FromArgb(80, 0, 120, 215)));
 
-    /// <summary>Fill brush for the text/cell selection highlight.</summary>
     public IBrush SelectionBrush
     {
         get => GetValue(SelectionBrushProperty);
@@ -181,7 +167,6 @@ public partial class RichEditor : Control
     public static readonly StyledProperty<IBrush> CaretBrushProperty =
         AvaloniaProperty.Register<RichEditor, IBrush>(nameof(CaretBrush), Brushes.Black);
 
-    /// <summary>Brush for the blinking text caret.</summary>
     public IBrush CaretBrush
     {
         get => GetValue(CaretBrushProperty);
@@ -256,17 +241,13 @@ public partial class RichEditor : Control
     static RichEditor()
     {
         AffectsRender<RichEditor>(DocumentProperty, SelectionBrushProperty, CaretBrushProperty);
-        // ReadOnly drives the caret/IME/undo optimization. See RichEditor.Modes.cs.
         IsReadOnlyProperty.Changed.AddClassHandler<RichEditor>((x, e) => x.OnReadOnlyChanged(e.GetNewValue<bool>()));
     }
 
     private readonly RtbInputMethodClient _imClient;
-    private string? _preeditText; // IME composition text shown inline at the caret while composing.
+    private string? _preeditText;
 
-    // Per-paragraph TextLayout cache. Building a TextLayout shapes/line-breaks text (the most expensive
-    // step), and Render + Measure + every hit-test would otherwise rebuild every paragraph each frame —
-    // crippling for large documents and the 2 Hz caret blink. Keyed by paragraph; reused while the
-    // paragraph's content signature and wrap width are unchanged.
+    // Reuse text layout across measure, render, and hit tests while content and wrap width are unchanged.
     private readonly Dictionary<Paragraph, (long sig, double width, Avalonia.Media.TextFormatting.TextLayout layout)> _layoutCache = new();
 
     // When set, BuildTextLayout trusts a same-width cache entry without recomputing ParagraphSig.
@@ -276,28 +257,17 @@ public partial class RichEditor : Control
     // a stale layout for changed content.
     private bool _trustLayoutCache;
 
-    // Per-table geometry cache (mirrors _layoutCache for tables). LayoutTable allocates several arrays
-    // + a list and measures every cell on each call, and it runs once per table in Measure, Render and
-    // each hit-test. Keyed by table; reused while the table's position (startX/top) and content are
-    // unchanged, gated by _trustLayoutCache like the paragraph cache so a trusted pass (blink/scroll/
-    // hover) skips the recompute entirely. Edits run untrusted and refresh the entry.
-    // `rowH` (the measured per-row heights) is kept alongside so a trusted pass at the SAME startX but a
-    // different `top` — which happens every frame in page view, where pagination measures at continuous
-    // y and render at per-page slice y — can rebuild only the y-positions/anchors instead of re-measuring
-    // every cell (the expensive part, which depends on width/content, not on top).
+    // Cache table geometry for non-mutating passes. When only top changes, reuse row heights and shift cells.
     private readonly Dictionary<TableBlock, (double startX, double top, double[] rowH, TableLayout layout)> _tableLayoutCache = new();
 
-    /// <summary>Initializes a new <see cref="RichEditor"/> with a single empty paragraph and default settings.</summary>
     public RichEditor()
     {
         Focusable = true;
         Cursor = IbeamCursor;
 
-        // Enable IME (Korean/Japanese/Chinese) composition by advertising a text-input client.
         _imClient = new RtbInputMethodClient(this);
         AddHandler(Avalonia.Input.InputElement.TextInputMethodClientRequestedEvent, OnTextInputMethodClientRequested);
 
-        // Drag & drop images onto the editor.
         DragDrop.SetAllowDrop(this, true);
         AddHandler(DragDrop.DragOverEvent, OnDragOver);
         AddHandler(DragDrop.DropEvent, OnDrop);
@@ -327,15 +297,15 @@ public partial class RichEditor : Control
             InvalidateVisual();
         }
         if (change.Property == CaretBrushProperty)
-            _caretPen = null; // rebuild the cached caret pen with the new brush
+            _caretPen = null;
         if (change.Property == DocumentProperty)
         {
             _layoutCache.Clear();
             _tableLayoutCache.Clear();
             ResetInteractionState(); // selections/modes point into the document being replaced
             if (Document != null) UpdateParents(Document);
-            SyncPageSetupOnDocumentChanged(); // apply the loaded doc's page setup to the page properties
-            _textChangedPending = true; // wholesale content swap
+            SyncPageSetupOnDocumentChanged();
+            _textChangedPending = true;
             SetModified(true);          // a raw Document assignment is a change; Load*/Clear reset it below
             DocumentChanged?.Invoke(this, EventArgs.Empty);
             InvalidateMeasure();
@@ -351,7 +321,7 @@ public partial class RichEditor : Control
         if (change.Property == PageSizeProperty || change.Property == ShowPageBoundariesProperty
             || change.Property == PageOrientationProperty)
         {
-            CapturePageSetupToDocument(); // persist the page change into the document model
+            CapturePageSetupToDocument();
             _pageBreaks = null;   // wrap width / paper changes between modes -> stale break positions
             _layoutCache.Clear(); // cached layouts were shaped at the other mode's width
             _tableLayoutCache.Clear();
@@ -361,7 +331,7 @@ public partial class RichEditor : Control
         if (change.Property == PageHeaderProperty || change.Property == PageFooterProperty
             || change.Property == ShowPageNumbersProperty)
         {
-            CapturePageSetupToDocument(); // persist the page change into the document model
+            CapturePageSetupToDocument();
             InvalidateVisual(); // margin-band chrome only — pagination is unaffected
         }
         if (change.Property == IsFocusedProperty)
@@ -471,13 +441,10 @@ public partial class RichEditor : Control
     /// Coarse signal — prefer <see cref="TextChanged"/> or <see cref="SelectionChanged"/> for new code.</summary>
     public event EventHandler? StatusChanged;
 
-    /// <summary>Raised after the document's text, structure, or formatting is modified.</summary>
     public event EventHandler? TextChanged;
 
-    /// <summary>Raised when the caret position or the selected range changes.</summary>
     public event EventHandler? SelectionChanged;
 
-    /// <summary>Raised when the <see cref="Document"/> is replaced with a different instance.</summary>
     public event EventHandler? DocumentChanged;
 
     /// <summary>True when the document has been modified since it was loaded (or since
@@ -485,7 +452,6 @@ public partial class RichEditor : Control
     /// not a content diff against the saved state.</summary>
     public bool IsModified { get; private set; }
 
-    /// <summary>Raised when <see cref="IsModified"/> changes.</summary>
     public event EventHandler? IsModifiedChanged;
 
     /// <summary>Clears the modified flag; call after persisting the document.</summary>
@@ -503,9 +469,7 @@ public partial class RichEditor : Control
     private bool _textChangedPending;
     private void MarkTextChanged() { _textChangedPending = true; SetModified(true); }
 
-    // Kind of edit currently coalescing into one undo checkpoint. A run of same-kind edits shares
-    // a single full-document clone (the first-keystroke clone was measured at 162 ms on a
-    // 100-image document, so per-keypress clones produce a visible hitch when holding a key).
+    // Coalesce consecutive edits to avoid cloning the full document for every keystroke.
     private enum EditRunKind { None, Typing, Backspace, Delete }
     private EditRunKind _editRun;
     // Backspace/Delete handlers re-arm the run through this before their trailing ResetCaretBlink
@@ -524,10 +488,7 @@ public partial class RichEditor : Control
         _editRunRearm = EditRunKind.None;
     }
 
-    // A resize drag (image / inline image / column / row handle) arms this on press and checkpoints
-    // only when the pointer actually moves. Checkpointing on press instead made a bare click on a
-    // handle — which changes nothing — push an undo step and flip IsModified, so a freshly loaded
-    // document reported unsaved changes after a single click.
+    // Checkpoint on the first resize movement, not on press: a click alone must not mark the document modified.
     private bool _dragUndoPending;
     private void PushDragUndoOnce()
     {
@@ -598,8 +559,6 @@ public partial class RichEditor : Control
         StatusChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Snapshot of the formatting at the caret position, for toolbar state reflection.
-    /// Obtain via <see cref="GetCaretFormat"/>.</summary>
     public readonly record struct CaretFormat(bool Bold, bool Italic, bool Underline, bool Strike,
         double FontSize, string? FontFamily, TextAlignment Align, ListKind List, int Heading,
         IBrush? Foreground = null, IBrush? Background = null, bool Quote = false, double LineSpacing = 0,
@@ -614,7 +573,6 @@ public partial class RichEditor : Control
         return false;
     }
 
-    /// <summary>Returns the formatting snapshot at the current caret position for toolbar state display.</summary>
     public CaretFormat GetCaretFormat()
     {
         var p = _caretPosition.Paragraph;
@@ -655,10 +613,7 @@ public partial class RichEditor : Control
     {
         if (Document == null) return (0, 0, 1, 1);
 
-        // Single pass over the same char stream the old code joined into one big string
-        // (paragraphs separated by '\n'): every '\n' breaks a word, isn't counted in chars, and
-        // advances the line; every other char counts (an inline image's U+FFFC placeholder counts
-        // as one). Avoids the whole-document StringBuilder + the string.Split array on each call.
+        // Count directly over the paragraph stream: '\n' ends a word/line but does not count as a character.
         static bool IsSep(char ch) => ch == ' ' || ch == '\n' || ch == '\t' || ch == '\r';
 
         int chars = 0, words = 0;
@@ -674,13 +629,10 @@ public partial class RichEditor : Control
 
         foreach (var p in GetAllParagraphsInOrder())
         {
-            if (!firstPara) Consume('\n'); // the newline that joined consecutive paragraphs
+            if (!firstPara) Consume('\n');
             firstPara = false;
 
-            // Walk the inlines directly (Run text chars + one ObjChar per atomic object inline) instead of
-            // building a BuildPlain string per paragraph — this runs on every caret move, so the
-            // per-paragraph string allocation added up to hundreds of allocations per arrow key on a
-            // large document. `local` is the logical offset within this paragraph (image = 1).
+            // Walk inlines without allocating paragraph strings on every caret move; atomic objects count as one character.
             int caretOff = ReferenceEquals(p, _caretPosition.Paragraph)
                 ? Math.Clamp(_caretPosition.Offset, 0, GetParagraphLength(p)) : -1;
             int local = 0;
@@ -707,12 +659,7 @@ public partial class RichEditor : Control
     // or delete with the keyboard.
     private void NormalizeBlocks(FlowDocument doc) => NormalizeBlockList(doc.Blocks, doc);
 
-    // Keep a paragraph at the very start/end of a block list and between any two adjacent non-paragraph
-    // blocks, so the caret can always reach a position before/after every image/table WITHOUT inserting
-    // extra blank lines around blocks that already sit next to text paragraphs. "Before a table" is then
-    // the end of the preceding text line; "after a table" is the start of the next line. Applied to the
-    // document AND, recursively, every table cell (P4-2b: a cell is a block container too, so a nested
-    // table/image at a cell's edge would otherwise be unreachable).
+    // Keep paragraphs at block-list boundaries and between adjacent non-text blocks so the caret can reach them.
     private static void NormalizeBlockList(System.Collections.Generic.IList<Block> blocks, object parent)
     {
         if (blocks.Count == 0 || blocks[0] is not Paragraph)
@@ -727,7 +674,7 @@ public partial class RichEditor : Control
         foreach (var b in blocks)
         {
             if (b is TableBlock tb) NormalizeTableCells(tb);
-            // An inline table's cells are block containers too (milestone B) but hang off a paragraph's
+            // An inline table's cells are block containers too but hang off a paragraph's
             // inlines, so this walk never reached them: a deserialized inline-table cell holding only an
             // image stayed paragraph-less and the caret could not enter it.
             else if (b is Paragraph par)
@@ -751,8 +698,6 @@ public partial class RichEditor : Control
             WireBlockParents(block, doc);
     }
 
-    // Recursively wires a block's Parent (and its descendants') so the Run->Paragraph->TableCell->
-    // TableBlock chain is correct at any nesting depth (P4-2b: a TableBlock can live in a cell's blocks).
     private static void WireBlockParents(Block block, object parent)
     {
         block.Parent = parent;
@@ -802,7 +747,6 @@ public partial class RichEditor : Control
         if (text.Contains('\r')) text = text.Replace("\r\n", "\n").Replace('\r', '\n');
         if (_selectionStart != _selectionEnd) DeleteSelection();
 
-        // Smart list: typing the space after "-"/"*" or "N." at a paragraph start turns it into a list.
         if (text == " " && TryAutoList()) return;
 
         int preCaret = _caretPosition.Offset;
@@ -824,11 +768,7 @@ public partial class RichEditor : Control
         // Runs after the insertion so the space itself stays outside the linked range.
         if (AutoLinkOnType && (text == " " || text == "\t")) TryAutoLink(_caretPosition.Paragraph, preCaret);
         MarkTextChanged();
-        // Typing has to scroll the caret back into view. Every other edit reaches this through
-        // ResetCaretBlink, but the typing path deliberately avoids that call — it would end the undo
-        // coalescing run and give every keystroke its own checkpoint — so the flag is set directly.
-        // Without it the caret walked off the bottom as text grew, most visibly inside a table cell,
-        // which expands downward as its content wraps.
+        // Typing scrolls directly; ResetCaretBlink would break the current undo group.
         _bringCaretIntoView = true;
         InvalidateVisual();
         NotifyStatus();
@@ -869,8 +809,6 @@ public partial class RichEditor : Control
 
     /// <summary>When true (default), typing whitespace/Enter after an <c>http(s)://</c> or <c>www.</c>
     /// token turns it into a hyperlink. Set false to disable auto-linking.</summary>
-    // A StyledProperty like every other behaviour flag (IsReadOnly, Allow*), so it can be bound and
-    // styled rather than only assigned in code.
     public bool AutoLinkOnType
     {
         get => GetValue(AutoLinkOnTypeProperty);
@@ -898,7 +836,7 @@ public partial class RichEditor : Control
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
             || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
             || !uri.Host.Contains('.')) return;
-        if (RunAtOffset(p, start) is { } r0 && !string.IsNullOrEmpty(r0.NavigateUri)) return; // already linked
+        if (RunAtOffset(p, start) is { } r0 && !string.IsNullOrEmpty(r0.NavigateUri)) return;
 
         new TextRange(new TextPointer(p, start), new TextPointer(p, start + token.Length))
             .ApplyPropertyValue(r => r.NavigateUri = url);
@@ -947,8 +885,6 @@ public partial class RichEditor : Control
             }
             else
             {
-                // An atomic object inline (image, table) whose single position overlaps the range -> remove
-                // it. (len==0 and non-overlap were already handled above, so reaching here means overlap.)
                 p.Inlines.RemoveAt(i);
             }
             pos = segEnd;
@@ -995,7 +931,6 @@ public partial class RichEditor : Control
         p.Inlines.Add(new Run { Text = text, Parent = p });
     }
 
-    // Vertical space a horizontal-rule (DividerBlock) occupies when laid out.
     private const double DividerHeight = 18;
 
     // The object-replacement character represents one inline image in the logical text stream.
@@ -1037,13 +972,10 @@ public partial class RichEditor : Control
         public Avalonia.Media.TextFormatting.TextRunProperties Props;
         public Avalonia.Media.Imaging.Bitmap? Image;
         public Size ImageSize;
-        // Inline table: the measured box and a closure that draws the grid + cell contents at a given
-        // document-space origin (delegates to the recursive DrawNestedTable primitive).
         public Size TableSize;
         public System.Action<DrawingContext, Point>? DrawTable;
     }
 
-    // Draws an inline image inside a text line; occupies one character position (U+FFFC).
     private sealed class ImageTextRun : Avalonia.Media.TextFormatting.DrawableTextRun
     {
         private static readonly ReadOnlyMemory<char> _obj = "￼".AsMemory();
@@ -1092,8 +1024,6 @@ public partial class RichEditor : Control
         public override void Draw(DrawingContext context, Point origin) => _draw(context, origin);
     }
 
-    // Feeds a paragraph's runs/images to Avalonia's text formatter so a single TextLayout drives
-    // rendering, caret geometry, hit-testing and selection rects.
     private sealed class ParagraphTextSource : Avalonia.Media.TextFormatting.ITextSource
     {
         private readonly List<LayoutSeg> _segs;
@@ -1144,7 +1074,6 @@ public partial class RichEditor : Control
     // is unset (<=0) or the 10 pt model default. An explicitly-sized run keeps its own size.
     private static bool RunSizeIsBodyDefault(Run r) => r.FontSize <= 0 || Math.Abs(r.FontSize - BodyFontSizePt) < 0.01;
 
-    // Width reserved to the left of list-item text for its bullet/number marker.
     private const double ListMarkerWidth = 22;
 
     // Left x where a paragraph's text starts: base indent + manual indent + nesting + (list marker gap).
@@ -1152,21 +1081,13 @@ public partial class RichEditor : Control
     private static double ParaLeft(Paragraph p)
         => 10 + p.Indent + p.ListLevel * 20 + (p.ListType != ListKind.None ? ListMarkerWidth : 0);
 
-    // Wrap width of a top-level paragraph: the content width less the document's own margin, the
-    // paragraph's left gutter (indent + list marker) and its right margin. Single source so the measure
-    // walk, BlockExtent and the render walk can never disagree on where a line breaks — the formula was
-    // spelled out separately in each.
+    // Measure, render, and hit testing must use the same wrap width or line boundaries diverge.
     private static double ParagraphWrapWidth(Paragraph p, double maxWidth)
         => Math.Max(10, maxWidth - 20 - ParaLeft(p) - p.MarginRight);
 
-    // The same gutter for a paragraph inside a table cell, measured from the cell's content box: the
-    // document's own 10px left margin is dropped (the cell supplies its padding). Single source for the
-    // cell walks — render, hit-test, link hit-test, caret and measure must all apply it (rule #1), or
-    // the text and the caret/click positions drift apart.
+    // Cells supply their own padding, so omit the document gutter. All cell geometry walks must agree.
     private static double CellParaLeft(Paragraph p) => ParaLeft(p) - 10;
 
-    // The marker text for a list item: a bullet glyph or a formatted number, per the paragraph's
-    // ListMarker style (Default = • for bullets, "N." for numbers).
     internal static string ListMarkerText(ListKind kind, ListMarkerStyle style, int num)
     {
         if (kind == ListKind.Bullet)
@@ -1196,7 +1117,6 @@ public partial class RichEditor : Control
         return sb.ToString();
     }
 
-    // 1->i, 4->iv, 9->ix (lowercase Roman numerals).
     internal static string ToRoman(int n)
     {
         if (n < 1) return n.ToString();
@@ -1236,13 +1156,8 @@ public partial class RichEditor : Control
         context.DrawText(ft, new Point(textLeft - gap - ft.Width, y));
     }
 
-    // A cheap content+formatting fingerprint of a paragraph; when it (and the wrap width) are unchanged
-    // the cached TextLayout can be reused. Iterating inlines to hash is far cheaper than re-shaping, and
-    // it can never go stale silently the way a manual dirty-flag would. Over-invalidation (e.g. a brush
-    // re-instantiated to the same colour) is harmless — it just rebuilds.
-    // Caution: brushes are hashed by GetHashCode (identity for mutable brushes), so MUTATING a brush's
-    // colour in place (same instance) won't change the signature and the layout would render stale.
-    // Formatting commands must assign a NEW brush instead of mutating an existing run's brush.
+    // Cache by content, formatting, and wrap width. Replace mutable brushes rather than changing their color
+    // in place: brush identity participates in the signature, but mutable color does not.
     private static long ParagraphSig(Paragraph p)
     {
         unchecked
@@ -1258,7 +1173,7 @@ public partial class RichEditor : Control
             Mix((long)p.ListType);
             Mix((long)p.ListMarker);
             Mix(p.ListLevel);
-            Mix(p.HeadingLevel); // now drives the layout (heading size/weight applied in BuildTextLayout)
+            Mix(p.HeadingLevel);
             foreach (var inl in p.Inlines)
             {
                 if (inl is Run r)
@@ -1393,9 +1308,7 @@ public partial class RichEditor : Control
             }
             else if (inline is InlineTable itbl)
             {
-                // Measure the wrapped table from its own column widths; the inline run occupies that box
-                // and delegates drawing to the recursive primitive at its document-space origin. P2 draws
-                // with no chrome — caret/selection/handles inside an inline table arrive with P3/P4.
+                // Measure inline tables from their column widths; record their origin for the deferred drawing pass.
                 var box = LayoutTable(itbl.Table, 0, 0);
                 var tableRef = itbl.Table;
                 segs.Add(new LayoutSeg
@@ -1415,11 +1328,7 @@ public partial class RichEditor : Control
 
         if (!string.IsNullOrEmpty(preeditText) && preeditOffset >= 0)
         {
-            // The composition is drawn with the formatting its committed text will get — the run it is
-            // about to join — plus the composition underline. It used to be hardcoded to the body face at
-            // the body size, so composing inside a heading (or in any run with its own size, font or
-            // colour) showed the syllable small and unstyled and then snapped to its real size the moment
-            // the IME committed. An empty paragraph has no run to read, hence the heading-aware fallback.
+            // IME preedit borrows the committed run style (or heading defaults when empty) to avoid a style jump on commit.
             var fallback = heading
                 ? new Avalonia.Media.TextFormatting.GenericTextRunProperties(
                     new Typeface(defaultFamily, FontStyle.Normal, FontWeight.Bold), PtToPx(headingSize), null, DisplayInk(null, p.Background))
@@ -1465,19 +1374,12 @@ public partial class RichEditor : Control
         return layout;
     }
 
-    // The layout a paragraph is actually RENDERED with. While the IME composes, the preedit text is
-    // spliced into the caret's paragraph, so it is taller (or wraps further) than its stored content —
-    // a measure walk that rebuilds it without the composition sizes the box for text that isn't what
-    // gets drawn. Every other paragraph takes the plain cached layout. The preedit build is deliberately
-    // uncached (it is transient), so this costs one extra shaping pass for the paragraph being composed
-    // into, and nothing at all when no composition is active.
+    // Measure with IME preedit included: it may wrap beyond the stored paragraph. Keep this transient layout uncached.
     private Avalonia.Media.TextFormatting.TextLayout PreeditAwareLayout(Paragraph p, double width)
         => !string.IsNullOrEmpty(_preeditText) && ReferenceEquals(_caretPosition.Paragraph, p)
             ? BuildTextLayout(p, width, _caretPosition.Offset, _preeditText)
             : BuildTextLayout(p, width);
 
-    // Drops cache entries for paragraphs/tables no longer in the document (e.g. deleted while editing),
-    // keeping the live ones so nothing reshapes on the next frame.
     private void PruneLayoutCaches()
     {
         if (Document == null) { _layoutCache.Clear(); _tableLayoutCache.Clear(); return; }
@@ -1492,7 +1394,6 @@ public partial class RichEditor : Control
             if (!liveTables.Contains(key)) _tableLayoutCache.Remove(key);
     }
 
-    // Every table in the document at any depth: top level, nested in a cell, or inline in a paragraph.
     private static void CollectTables(System.Collections.Generic.IEnumerable<Block> blocks, HashSet<TableBlock> into)
     {
         foreach (var b in blocks)
@@ -1533,7 +1434,6 @@ public partial class RichEditor : Control
         return fallback;
     }
 
-    // Inserts the IME preedit text at a character offset, splitting a text segment if needed.
     private static void SplicePreedit(List<LayoutSeg> segs, int offset, string preedit,
         Avalonia.Media.TextFormatting.TextRunProperties preeditProps)
     {
@@ -1568,9 +1468,6 @@ public partial class RichEditor : Control
         segs.Add(new LayoutSeg { Text = preedit, Props = preeditProps });
     }
 
-    // The top-level block containing p, at any nesting depth. Delegates to the single parent-chain
-    // walker (this used to be a second, one-level copy that missed nested/inline tables — so a paste
-    // target or a clipboard block capture anchored inside one silently fell back to the document end).
     private Block? FindTopLevelBlock(Paragraph p)
         => Document != null ? TextRange.TopLevelBlockOf(Document, p) : null;
 
@@ -1588,15 +1485,10 @@ public partial class RichEditor : Control
             if (inlines.Count > 0) { InsertInlines(inlines); return; }
         }
 
-        // Otherwise splice the parsed blocks in at the caret (splitting the caret paragraph).
         InsertBlocksAtCaret(parsed.Blocks);
     }
 
-    // Inserts a list of blocks at the caret, splitting the caret paragraph so the paste lands AT the
-    // caret (Word/HWP behaviour): the first pasted paragraph continues the caret line, the last merges
-    // with the text after the caret, and any blocks between become siblings. Works whether the caret is
-    // in a top-level paragraph or a table cell. Falls back to a plain after-block splice when the caret
-    // isn't in a normal paragraph, or when the paste carries a table that can't nest in a cell yet (P4-2b).
+    // Splice paragraph fragments around the caret. Pasting a table inside a cell instead uses the top-level fallback.
     private void InsertBlocksAtCaret(System.Collections.Generic.IReadOnlyList<Block> blocks)
     {
         if (Document == null || blocks.Count == 0) return;
@@ -1622,7 +1514,6 @@ public partial class RichEditor : Control
         foreach (var b in blocks) if (b.Clone() is Block cl) src.Add(cl);
         if (src.Count == 0) return;
 
-        // Split the caret paragraph: p keeps the head; tail takes the inlines after the caret (same props).
         int splitAt = SplitInlinesAt(p, _caretPosition.Offset);
         // The tail continues the same paragraph, so it keeps the source's full format (heading level
         // included — unlike Enter, this is a split of one logical paragraph, not a new one).
@@ -1636,7 +1527,6 @@ public partial class RichEditor : Control
             tail.Inlines.Add(inl);
         }
 
-        // Merge the first pasted paragraph into the head line.
         if (src[0] is Paragraph fp)
         {
             if (GetParagraphLength(p) == 0) p.CopyFormatFrom(fp);
@@ -1681,9 +1571,6 @@ public partial class RichEditor : Control
         _selectionEnd = new TextPointer(tail, caretOff);
     }
 
-    // Plain after-block splice (the fallback): inserts cloned blocks after the caret's block — into the
-    // enclosing cell when the caret is in one, else the document top level. Used when the caret isn't in
-    // a normal paragraph or the paste carries a table that can't nest in a cell.
     private void InsertBlocksAfterCaretBlock(System.Collections.Generic.IReadOnlyList<Block> blocks)
     {
         if (Document == null) return;
@@ -1706,10 +1593,7 @@ public partial class RichEditor : Control
         }
     }
 
-    // The container + index for the after-block splice fallback: the enclosing cell's block list (after
-    // the caret's paragraph) when the caret is in a cell, otherwise the document's top-level list (after
-    // the caret's top-level block). A paste containing a TableBlock can't nest in a cell yet (P4-2b), so
-    // it falls back to top level.
+    // Table-containing pastes fall back to the document; other blocks can splice into the current cell.
     private (System.Collections.Generic.IList<Block> container, int at) BlockInsertTarget(System.Collections.Generic.IEnumerable<Block> blocks)
     {
         if (Document != null && _caretPosition.Paragraph?.Parent is TableCell tc && !blocks.Any(b => b is TableBlock))
@@ -1722,12 +1606,10 @@ public partial class RichEditor : Control
         return (Document!.Blocks, ti >= 0 ? ti + 1 : Document.Blocks.Count);
     }
 
-    // Inserts a top-level block immediately after the caret's current block (or at the end
-    // when the caret isn't in a normal paragraph), instead of always appending to the document.
     private void InsertBlockAtCaret(Block b)
     {
         if (Document == null) return;
-        // A block image / divider / nested table (P4-2b) inserts inside the current cell, after the
+        // A block image / divider / nested table inserts inside the current cell, after the
         // caret's paragraph, when the caret is in a cell.
         if (_caretPosition.Paragraph?.Parent is TableCell tc)
         {
@@ -1738,7 +1620,6 @@ public partial class RichEditor : Control
             if (at + 1 >= tc.Blocks.Count || tc.Blocks[at + 1] is not Paragraph)
                 tc.Blocks.Insert(at + 1, new Paragraph { Inlines = { new Run { Text = "" } } });
             UpdateParents(Document);
-            // Caret into a nested table's first cell (ready to fill), else the paragraph after the block.
             if (b is TableBlock nt && nt.Cells.Count > 0 && nt.Cells[0].Count > 0)
                 _caretPosition = new TextPointer(nt.Cells[0][0].Para, 0);
             else if (tc.Blocks[at + 1] is Paragraph np)
@@ -1759,10 +1640,7 @@ public partial class RichEditor : Control
         Document.Blocks.Insert(insertIndex, b);
         UpdateParents(Document); // NormalizeBlocks guarantees a paragraph exists after b
 
-        // Place the caret so the user can keep going without a click: into a new table's first cell
-        // (ready to fill it), otherwise the paragraph right after the block (you can't type into an
-        // image). ResetCaretBlink re-measures (the new block grows the scroll extent) and scrolls it
-        // into view, instead of leaving only its top edge showing until the next click.
+        // Restore focus and scroll after insertion so typing can continue without another click.
         if (b is TableBlock tbl && tbl.Cells.Count > 0 && tbl.Cells[0].Count > 0)
             _caretPosition = new TextPointer(tbl.Cells[0][0].Para, 0);
         else
@@ -1785,7 +1663,6 @@ public partial class RichEditor : Control
         InvalidateVisual();
     }
 
-    /// <summary>Inserts an empty <paramref name="rows"/>×<paramref name="cols"/> table at the caret.</summary>
     public void InsertTable(int rows, int cols)
     {
         if (Document == null || IsReadOnly || !AllowTables) return;
@@ -1793,7 +1670,7 @@ public partial class RichEditor : Control
         // The (rows, cols) constructor builds Cells, ColumnWidths and the span grids together, all
         // consistent. (An object initializer that rebuilt Cells alone would desync the span grids.)
         var tb = new TableBlock(rows, cols);
-        // Equal columns spanning the available width. Inside a cell (P4-2b nested table) that's the
+        // Equal columns spanning the available width. Inside a cell (nested table) that's the
         // enclosing cell's content width (parent column-span widths minus the cell padding), so the nested
         // table fits the cell instead of the whole document; otherwise it fills the document width.
         double avail, minCol;
@@ -1814,8 +1691,6 @@ public partial class RichEditor : Control
         InvalidateVisual();
     }
 
-    // Splits the caret's (top-level) paragraph at the caret into a new following paragraph, which
-    // inherits list/indent/alignment/background (not heading level). Used by Enter.
     private void SplitParagraphAtCaret()
     {
         var p = _caretPosition.Paragraph;
@@ -1857,9 +1732,7 @@ public partial class RichEditor : Control
     private List<Paragraph> GetAllParagraphsInOrder()
         => Document == null ? new List<Paragraph>() : ParagraphsInBlocks(Document.Blocks).ToList();
 
-    // Document-order enumeration of every paragraph, descending recursively through table cells (and
-    // nested tables — P4-2b) and through inline tables hanging off a paragraph's inlines (milestone B),
-    // so navigation/find/select-all reach paragraphs at any depth.
+    // Navigation, find, and select-all include paragraphs inside nested and inline tables.
     private static System.Collections.Generic.IEnumerable<Paragraph> ParagraphsInBlocks(System.Collections.Generic.IEnumerable<Block> blocks)
     {
         foreach (var block in blocks)
@@ -1882,12 +1755,8 @@ public partial class RichEditor : Control
         }
     }
 
-    // Like ParagraphsInBlocks but does NOT descend into inline tables. Linear caret traversal
-    // (GetNext/PreviousParagraph) must treat an inline table's host paragraph as one unit, because the
-    // host's own text continues after the table: enumerating the cells here would make "→ at the host's
-    // end" jump into the first cell instead of the next block. Inline-table cells are reached by the
-    // explicit entry/exit and inter-cell logic in MoveCaretRight/Left. Block tables are still descended
-    // (their cells are spatially sequential between sibling paragraphs).
+    // Linear traversal skips inline-table cells because the host text continues after the table.
+    // MoveCaretRight/Left handle explicit entry and exit; block-table cells remain sequential.
     private static System.Collections.Generic.IEnumerable<Paragraph> ParagraphsInBlocksNav(System.Collections.Generic.IEnumerable<Block> blocks)
     {
         foreach (var block in blocks)
@@ -1916,9 +1785,6 @@ public partial class RichEditor : Control
         InvalidateVisual();
     }
 
-    // Copies the currently selected image, if any: right-click-selected block image, block caret
-    // sitting on an image, or a selected inline image. Returns false when nothing image-like is
-    // selected (the caller falls back to the text-selection copy).
     private bool TryCopySelectedImage()
     {
         if ((_selectedBlock as ImageBlock ?? _caretBlock as ImageBlock) is { } ib)
@@ -1934,8 +1800,6 @@ public partial class RichEditor : Control
         return false;
     }
 
-    // Pastes an image as an inline (character-like) image at the caret, splitting the run under it
-    // like text insertion. Used when the clipboard meta says the image was inline when copied.
     private void InsertInlineImageAtCaret(byte[] bytes, double w, double h)
     {
         if (Document == null || IsReadOnly || !AllowImages) return;
@@ -1947,7 +1811,6 @@ public partial class RichEditor : Control
         im.SetImageData(bytes, ImageMime.Detect(bytes));
         if (w <= 0 || h <= 0)
         {
-            // No display size in the meta — fall back to the natural size when decodable.
             try
             {
                 using var ms = new System.IO.MemoryStream(bytes);
@@ -1983,11 +1846,7 @@ public partial class RichEditor : Control
         _internalClipboardText = text;
         _internalClipboardBlocks = CaptureBlockStructure(range);
 
-        // Rich HTML for other apps (Word, browsers). When the selection spans a table or block image,
-        // use the captured top-level blocks so the HTML keeps the <table> structure; otherwise a trimmed
-        // sub-document that preserves paragraph properties (lists/headings/alignment/indent) and inline
-        // images — so formatting and pasted-back pictures survive, and an image-only selection still has
-        // content even though its plain text is empty.
+        // Copy whole selected blocks when needed for table structure; otherwise use a trimmed rich fragment.
         FlowDocument? htmlDoc;
         if (_internalClipboardBlocks is { } caps && caps.Exists(b => b is TableBlock || b is ImageBlock))
         {
@@ -1999,9 +1858,7 @@ public partial class RichEditor : Control
         string? rtf = htmlDoc == null ? null : Formatters.RtfDocumentFormatter.Write(htmlDoc);
 
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
-        // Set the clipboard whenever there's anything to put on it — text OR html. Skipping when the
-        // text was empty (e.g. an inline-image-only selection) used to leave a PREVIOUS copy on the
-        // system clipboard while the internal slots said otherwise, so paste pulled in stale content.
+        // An image-only selection still replaces the system clipboard even when its plain text is empty.
         if (clipboard != null && (!string.IsNullOrEmpty(text) || !string.IsNullOrEmpty(html)))
         {
             // Another process can hold the clipboard open; an unhandled throw here would
@@ -2042,7 +1899,7 @@ public partial class RichEditor : Control
         for (int k = si; k <= ei; k++)
             if (!(sourceBlocks[k] is Paragraph)) { hasNonParagraph = true; break; }
 
-        if (!spansMultiple && !hasNonParagraph) return null; // plain inline selection
+        if (!spansMultiple && !hasNonParagraph) return null;
 
         var blocks = new List<Block>();
         for (int k = si; k <= ei; k++)
@@ -2055,13 +1912,8 @@ public partial class RichEditor : Control
         return blocks.Count > 0 ? blocks : null;
     }
 
-    // Inserts cloned blocks (e.g. tables) at the caret, splitting the caret paragraph so the paste lands
-    // at the caret rather than after the current block (shares InsertBlocksAtCaret with HTML/RTF paste).
     private void InsertBlocks(List<Block> blocks) => InsertBlocksAtCaret(blocks);
 
-    // Inserts a list of formatted Runs at the current caret, splitting the run under the caret.
-    // Inserts a list of inlines (formatted Runs and/or InlineImages) at the caret, splitting the run
-    // under it. Carries inline images through in-app paste (the run-only path dropped them).
     private void InsertInlines(List<Inline> inlines)
     {
         if (Document == null || _caretPosition.Paragraph == null || inlines.Count == 0) return;
@@ -2072,7 +1924,7 @@ public partial class RichEditor : Control
         int added = 0;
         foreach (var inl in inlines)
         {
-            if (inl is InlineImage && !AllowImages) continue; // honor the image feature flag on paste
+            if (inl is InlineImage && !AllowImages) continue;
             var clone = (Inline)inl.Clone();
             clone.Parent = p;
             p.Inlines.Insert(insertAt++, clone);
@@ -2084,8 +1936,6 @@ public partial class RichEditor : Control
         InvalidateVisual();
     }
 
-    // Splits the run straddling the given character offset and returns the inline index
-    // at which new content should be inserted.
     private int SplitInlinesAt(Paragraph p, int offset)
     {
         int currentIndex = 0;
@@ -2131,10 +1981,7 @@ public partial class RichEditor : Control
         var cmp = FindHighlightMatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         string text = BuildPlain(p);
 
-        // The CURRENT match is already marked by the selection, so it must not be tinted as well:
-        // amber over the translucent selection blue blends into a muddy low-contrast fill, and the
-        // user loses track of which match the caret is on. Highlight-all marks the OTHER matches
-        // (browser / VS Code behaviour). Same "selection is a match" test as GetFindMatchPosition.
+        // Do not tint the current match twice: it already has the selection highlight.
         int selStart = -1;
         if (_selectionStart.Paragraph != null && ReferenceEquals(_selectionStart.Paragraph, p)
             && ReferenceEquals(_selectionEnd.Paragraph, p))
@@ -2168,7 +2015,7 @@ public partial class RichEditor : Control
     }
 
     // Removes a block from whichever container holds it: the document's top-level list or an enclosing
-    // table cell (searching recursively through nested tables — P4-2b). Returns true if removed.
+    // table cell (searching recursively through nested tables). Returns true if removed.
     private bool RemoveBlockAnywhere(Block b)
     {
         if (Document == null) return false;
@@ -2184,9 +2031,7 @@ public partial class RichEditor : Control
             {
                 if (RemoveBlockFromTable(tb, target)) return true;
             }
-            // An inline table's cells are block containers too (milestone B), but they hang off a
-            // paragraph's inlines rather than a block list — so this walk never reached them and a
-            // block image / divider / nested table inside one could not be deleted.
+            // Inline-table cells hang off paragraph inlines, so block-list traversal alone misses their contents.
             else if (blk is Paragraph p)
             {
                 foreach (var inl in p.Inlines)
@@ -2207,9 +2052,7 @@ public partial class RichEditor : Control
         return false;
     }
 
-    /// <summary>Undoes the last edit. No-op when <see cref="CanUndo"/> is <see langword="false"/>.</summary>
     public void Undo() => DoUndo();
-    /// <summary>Redoes the last undone edit. No-op when <see cref="CanRedo"/> is <see langword="false"/>.</summary>
     public void Redo() => DoRedo();
 
 

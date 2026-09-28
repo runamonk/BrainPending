@@ -9,109 +9,53 @@ namespace AvaloniaRichEditor.Controls;
 /// </summary>
 public enum RichEditorIcon
 {
-    // Toolbar (character formatting)
-    /// <summary>Bold toggle.</summary>
     Bold,
-    /// <summary>Italic toggle.</summary>
     Italic,
-    /// <summary>Underline toggle.</summary>
     Underline,
-    /// <summary>Strikethrough toggle.</summary>
     Strikethrough,
-    /// <summary>Format painter.</summary>
     FormatPainter,
-    /// <summary>Text (foreground) colour picker.</summary>
     TextColor,
-    /// <summary>Highlight (background) colour picker.</summary>
     Highlight,
-    // Toolbar (paragraph / inserts / history)
-    /// <summary>Bulleted list toggle.</summary>
     BulletList,
-    /// <summary>Numbered list toggle.</summary>
     NumberedList,
-    /// <summary>Increase indent.</summary>
     IndentIncrease,
-    /// <summary>Decrease indent.</summary>
     IndentDecrease,
-    /// <summary>Insert table.</summary>
     InsertTable,
-    /// <summary>Insert image.</summary>
     InsertImage,
-    /// <summary>Insert horizontal divider.</summary>
     InsertDivider,
-    /// <summary>Undo.</summary>
     Undo,
-    /// <summary>Redo.</summary>
     Redo,
-    // Context menu (clipboard / selection)
-    /// <summary>Cut.</summary>
     Cut,
-    /// <summary>Copy.</summary>
     Copy,
-    /// <summary>Paste.</summary>
     Paste,
-    /// <summary>Delete selection / object.</summary>
     Delete,
-    /// <summary>Select all.</summary>
     SelectAll,
-    /// <summary>Clear formatting.</summary>
     ClearFormatting,
-    // Context menu (alignment)
-    /// <summary>Align left.</summary>
     AlignLeft,
-    /// <summary>Align center.</summary>
     AlignCenter,
-    /// <summary>Align right.</summary>
     AlignRight,
-    // Context menu (links)
-    /// <summary>Open hyperlink.</summary>
     OpenLink,
-    /// <summary>Edit hyperlink.</summary>
     EditLink,
-    /// <summary>Remove hyperlink.</summary>
     RemoveLink,
-    /// <summary>Copy hyperlink address.</summary>
     CopyLink,
-    /// <summary>Insert hyperlink.</summary>
     InsertLink,
-    // Context menu (image)
-    /// <summary>Replace image.</summary>
     ReplaceImage,
-    /// <summary>Save image to a file.</summary>
     SaveImageAs,
-    // Context menu (table structure)
-    /// <summary>Insert row above.</summary>
     InsertRowAbove,
-    /// <summary>Insert row below.</summary>
     InsertRowBelow,
-    /// <summary>Delete row.</summary>
     DeleteRow,
-    /// <summary>Insert column to the left.</summary>
     InsertColumnLeft,
-    /// <summary>Insert column to the right.</summary>
     InsertColumnRight,
-    /// <summary>Delete column.</summary>
     DeleteColumn,
-    /// <summary>Merge cells.</summary>
     MergeCells,
-    /// <summary>Unmerge cell.</summary>
     UnmergeCells,
-    /// <summary>Delete table.</summary>
     DeleteTable,
-    // View chrome (RichEditorView file actions)
-    /// <summary>Export the document to a file.</summary>
     Export,
-    /// <summary>Import a document from a file.</summary>
     Import,
-    /// <summary>Print the document.</summary>
     Print,
-    // Appended (not grouped) to preserve the shipped ordinal values of the entries above — the
-    // PublicAPI analyzer tracks each enum member by value, so inserting mid-list renumbers them.
-    /// <summary>Line spacing.</summary>
+    // Append enum members to preserve existing numeric values.
     LineSpacing,
-    /// <summary>Increase font size (글자 크게).</summary>
     FontSizeIncrease,
-    /// <summary>Decrease font size (글자 작게).</summary>
     FontSizeDecrease,
 }
 
@@ -136,6 +80,5 @@ public static class RichEditorIcons
     /// return value) keeps the built-in text glyph for that slot.</summary>
     public static Func<RichEditorIcon, Control?>? Provider { get; set; }
 
-    // Single internal lookup so call sites don't repeat the null-provider dance.
     internal static Control? TryCreate(RichEditorIcon icon) => Provider?.Invoke(icon);
 }

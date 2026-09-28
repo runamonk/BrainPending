@@ -7,7 +7,7 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Formatters;
 
-/// <summary>Reads and writes the <c>.flow</c> package format (roadmap N6-7): a ZIP container with
+/// <summary>Reads and writes the <c>.flow</c> package format: a ZIP container with
 /// <c>meta.json</c> (container format marker: <c>{"format":"flow","version":"1.0"}</c>),
 /// <c>document.json</c> (the library's JSON schema, its image pool referencing zip entries instead
 /// of embedding base64) and <c>images/&lt;sha256&gt;</c> entries holding the original encoded bytes
@@ -50,7 +50,7 @@ public static class DocumentPackage
             s.Write(meta, 0, meta.Length);
         }
 
-        var docEntry = zip.CreateEntry("document.json", CompressionLevel.Optimal); // text deflates well
+        var docEntry = zip.CreateEntry("document.json", CompressionLevel.Optimal);
         using (var s = docEntry.Open())
             JsonSerializer.Serialize(s, dto, DocumentJsonContext.Default.FlowDocumentDto);
         foreach (var (key, img) in images)

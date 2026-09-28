@@ -21,7 +21,6 @@ public static class RichEditorLocalization
     {
         ["en"] = new()
         {
-            // Clipboard / editing
             ["Cut"] = "Cut",
             ["Copy"] = "Copy",
             ["Paste"] = "Paste",
@@ -29,7 +28,6 @@ public static class RichEditorLocalization
             ["SelectAll"] = "Select All",
             ["Undo"] = "Undo",
             ["Redo"] = "Redo",
-            // Character formatting
             ["CharacterFormat"] = "Font Style",
             ["ParagraphFormat"] = "Paragraph",
             ["FontSizeIncrease"] = "Larger",
@@ -57,7 +55,6 @@ public static class RichEditorLocalization
             ["Apply"] = "Apply",
             ["FormatPainter"] = "Format Painter",
             ["FormatPainterTip"] = "Format Painter (select source, click, then select target)",
-            // Paragraph formatting
             ["Paragraph"] = "Paragraph",
             ["ParagraphStyle"] = "Paragraph Style",
             ["Alignment"] = "Alignment",
@@ -88,7 +85,6 @@ public static class RichEditorLocalization
             ["MarginLeft"] = "Left Margin",
             ["MarginRight"] = "Right Margin",
             ["LineSpacing"] = "Line Spacing",
-            // Links
             ["Hyperlink"] = "Hyperlink",
             ["LinkText"] = "Text",
             ["LinkUrl"] = "Link",
@@ -97,12 +93,10 @@ public static class RichEditorLocalization
             ["RemoveLink"] = "Remove Link",
             ["InsertLink"] = "Insert Link...",
             ["CopyLink"] = "Copy Link",
-            // Insert
             ["InsertTable"] = "Insert Table",
             ["InsertImage"] = "Insert Image...",
             ["InsertDivider"] = "Insert Divider",
             ["DragToSelectSize"] = "Drag to choose size",
-            // Images
             ["ImageSize"] = "Size",
             ["OriginalSize"] = "Original Size",
             ["HalfSize"] = "1/2 Size",
@@ -113,7 +107,6 @@ public static class RichEditorLocalization
             ["SelectImage"] = "Select Image",
             ["InlineWithText"] = "Inline with Text",
             ["SaveImage"] = "Save Image",
-            // Tables
             ["SelectCell"] = "Select Cell",
             ["InsertRowAbove"] = "Insert Row Above",
             ["InsertRowBelow"] = "Insert Row Below",
@@ -125,10 +118,8 @@ public static class RichEditorLocalization
             ["UnmergeCells"] = "Unmerge Cells",
             ["DeleteTable"] = "Delete Table",
             ["TableOps"] = "Table",
-            // Dialogs
             ["OK"] = "OK",
             ["Cancel"] = "Cancel",
-            // Find / replace + status
             ["Find"] = "Find",
             ["FindNext"] = "Next",
             ["FindPrevious"] = "Previous",
@@ -138,7 +129,6 @@ public static class RichEditorLocalization
             ["NotFound"] = "Not found",
             ["ReplacedFormat"] = "Replaced {0}",
             ["StatusFormat"] = "Chars {0}   Words {1}   Ln {2}, Col {3}",
-            // Page / zoom (RichEditorView chrome)
             ["Fit"] = "Fit",
             ["ZoomTip"] = "View zoom (Ctrl+wheel, Ctrl+0 = fit)",
             ["PaperContinuous"] = "Continuous",
@@ -147,7 +137,6 @@ public static class RichEditorLocalization
             ["OrientPortrait"] = "Portrait",
             ["OrientLandscape"] = "Landscape",
             ["OrientationTip"] = "Page orientation",
-            // File actions (RichEditorView)
             ["Export"] = "Export (JSON / .flow / HTML)",
             ["Import"] = "Import",
             ["Print"] = "Print",
@@ -156,7 +145,6 @@ public static class RichEditorLocalization
         },
         ["ko"] = new()
         {
-            // Clipboard / editing
             ["Cut"] = "잘라내기",
             ["Copy"] = "복사",
             ["Paste"] = "붙여넣기",
@@ -164,7 +152,6 @@ public static class RichEditorLocalization
             ["SelectAll"] = "모두 선택",
             ["Undo"] = "실행 취소",
             ["Redo"] = "다시 실행",
-            // Character formatting
             ["CharacterFormat"] = "글자 모양",
             ["ParagraphFormat"] = "문단 모양",
             ["FontSizeIncrease"] = "글자 크게",
@@ -192,7 +179,6 @@ public static class RichEditorLocalization
             ["Apply"] = "적용",
             ["FormatPainter"] = "서식 복사",
             ["FormatPainterTip"] = "서식 복사 (선택 후 클릭 → 대상 선택)",
-            // Paragraph formatting
             ["Paragraph"] = "문단",
             ["ParagraphStyle"] = "문단 스타일",
             ["Alignment"] = "정렬",
@@ -223,19 +209,16 @@ public static class RichEditorLocalization
             ["MarginLeft"] = "왼쪽 여백",
             ["MarginRight"] = "오른쪽 여백",
             ["LineSpacing"] = "줄 간격",
-            // Links
             ["Hyperlink"] = "하이퍼링크",
             ["OpenLink"] = "링크 열기",
             ["EditLink"] = "링크 편집...",
             ["RemoveLink"] = "링크 제거",
             ["InsertLink"] = "링크 삽입...",
             ["CopyLink"] = "링크 복사",
-            // Insert
             ["InsertTable"] = "표 삽입",
             ["InsertImage"] = "이미지 삽입...",
             ["InsertDivider"] = "구분선 삽입",
             ["DragToSelectSize"] = "끌어서 크기 선택",
-            // Images
             ["ImageSize"] = "크기",
             ["OriginalSize"] = "원본 크기로",
             ["HalfSize"] = "1/2 크기",
@@ -246,7 +229,6 @@ public static class RichEditorLocalization
             ["SelectImage"] = "이미지 선택",
             ["SaveImage"] = "이미지 저장",
             ["InlineWithText"] = "글자처럼 취급",
-            // Tables
             ["SelectCell"] = "셀 선택",
             ["InsertRowAbove"] = "위에 행 삽입",
             ["InsertRowBelow"] = "아래에 행 삽입",
@@ -258,10 +240,8 @@ public static class RichEditorLocalization
             ["UnmergeCells"] = "셀 병합 해제",
             ["DeleteTable"] = "표 삭제",
             ["TableOps"] = "표",
-            // Dialogs
             ["OK"] = "확인",
             ["Cancel"] = "취소",
-            // Find / replace + status
             ["Find"] = "찾기",
             ["FindNext"] = "다음",
             ["FindPrevious"] = "이전",
@@ -271,7 +251,6 @@ public static class RichEditorLocalization
             ["NotFound"] = "찾을 수 없음",
             ["ReplacedFormat"] = "{0}개 바꿈",
             ["StatusFormat"] = "글자 {0}   단어 {1}   줄 {2}, 칸 {3}",
-            // Page / zoom (RichEditorView chrome)
             ["Fit"] = "맞춤",
             ["ZoomTip"] = "보기 배율 (Ctrl+휠, Ctrl+0=맞춤)",
             ["PaperContinuous"] = "연속",
@@ -280,7 +259,6 @@ public static class RichEditorLocalization
             ["OrientPortrait"] = "세로",
             ["OrientLandscape"] = "가로",
             ["OrientationTip"] = "용지 방향",
-            // File actions (RichEditorView)
             ["Export"] = "내보내기 (JSON / .flow / HTML)",
             ["Import"] = "가져오기",
             ["Print"] = "인쇄",

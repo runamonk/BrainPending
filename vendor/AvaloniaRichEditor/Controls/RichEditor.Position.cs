@@ -3,7 +3,6 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-/// <summary>A text position snapshot independent of a loaded document's object instances.</summary>
 public readonly record struct EditorTextPosition(
     int CaretParagraph, int CaretOffset,
     int StartParagraph, int StartOffset,
@@ -11,7 +10,6 @@ public readonly record struct EditorTextPosition(
 
 public partial class RichEditor
 {
-    /// <summary>Captures the caret and text selection for restoring after a reload.</summary>
     public EditorTextPosition CaptureTextPosition()
     {
         var paragraphs = GetAllParagraphsInOrder();

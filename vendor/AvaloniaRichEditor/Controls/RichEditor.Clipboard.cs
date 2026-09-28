@@ -11,11 +11,9 @@ using AvaloniaRichEditor.Formatters;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Clipboard paste + external-content ingestion (HTML/CF_HTML, image, Excel/TSV->table) and drag-drop.
-// Part of RichEditor (split out of the main file for readability).
-public partial class RichEditor  // doc comment lives on the primary declaration in RichEditor.cs
+public partial class RichEditor
 {
-    /// <summary>Pastes from the system clipboard. Priority: internal rich → external HTML → plain text.</summary>
+    /// <summary>Pastes internal rich content, RTF, HTML, images, tabular text, or plain text, in that order.</summary>
     public async Task PasteFromClipboardAsync()
     {
         if (Document == null || IsReadOnly) return;
@@ -57,10 +55,9 @@ public partial class RichEditor  // doc comment lives on the primary declaration
                     return;
                 }
             }
-            catch (Exception ex) { RichEditorDiagnostics.Report(ex); } // fall through to HTML/plain
+            catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
         }
 
-        // 3. External HTML (from browsers, Word, etc.): parse and insert with formatting.
         string? html = AllowRichPaste ? await TryGetHtmlAsync(clipboard) : null;
         if (!string.IsNullOrEmpty(html))
         {
@@ -80,7 +77,7 @@ public partial class RichEditor  // doc comment lives on the primary declaration
                     return;
                 }
             }
-            catch (Exception ex) { RichEditorDiagnostics.Report(ex); } // fall back to plain text
+            catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
         }
 
         // 4. Bitmap image on the clipboard (e.g. a screenshot or copied picture). Images copied
@@ -102,7 +99,6 @@ public partial class RichEditor  // doc comment lives on the primary declaration
             return;
         }
 
-        // 5. Tab-separated text (e.g. Excel/HWP cells copied without HTML) -> rebuild as a table.
         if (AllowTables && !string.IsNullOrEmpty(text) && LooksTabular(text))
         {
             PushUndo();
@@ -111,7 +107,6 @@ public partial class RichEditor  // doc comment lives on the primary declaration
             return;
         }
 
-        // 6. Plain text fallback.
         if (!string.IsNullOrEmpty(text))
         {
             PushUndo();
@@ -237,7 +232,6 @@ public partial class RichEditor  // doc comment lives on the primary declaration
         InvalidateVisual();
     }
 
-    // Scales an image down to fit within maxW x maxH (keeping aspect ratio).
     private static Avalonia.Media.Imaging.Bitmap Downscale(Avalonia.Media.Imaging.Bitmap bmp, int maxW = 1920, int maxH = 1080)
     {
         var ps = bmp.PixelSize;
@@ -280,11 +274,7 @@ public partial class RichEditor  // doc comment lives on the primary declaration
         await clipboard.SetDataAsync(dt);
     }
 
-    // Renders a trimmed selection sub-document (paragraph properties + inline images preserved — see
-    // BuildSelectionDocument) to HTML, wrapped so the editor's base font/size is inherited: ToHtml omits
-    // the default 10pt and an empty font-family, which would otherwise fall back to the consumer's own
-    // defaults (Word → Calibri 11 pt) and look like the font/size was lost. Runs with explicit
-    // font/size still emit overriding spans. Null when there is nothing to emit.
+    // Supply the editor font and size: HTML omits default run styles, so clipboard consumers otherwise substitute their own.
     private string? BuildSelectionHtml(FlowDocument? doc)
     {
         if (doc == null || doc.Blocks.Count == 0) return null;
@@ -299,10 +289,7 @@ public partial class RichEditor  // doc comment lives on the primary declaration
         return $"<div style=\"font-family:'{family}';font-size:10pt\">{inner}</div>";
     }
 
-    // A trimmed FlowDocument for the current selection that, unlike GetRichRuns (runs only), preserves
-    // each paragraph's list/heading/alignment/indent/background AND inline images — so HTML export keeps
-    // bullets/numbers, headings, and pasted-back pictures. Table cells / block images flatten to
-    // paragraphs (same as the plain-text path). Null when the selection is empty.
+    // Preserve paragraph formatting and atomic inlines in the selected fragment; run-only extraction loses both.
     private FlowDocument? BuildSelectionDocument()
     {
         if (_selectionStart.Paragraph == null || _selectionEnd.Paragraph == null) return null;
@@ -326,8 +313,6 @@ public partial class RichEditor  // doc comment lives on the primary declaration
         return doc;
     }
 
-    // Clones paragraph-level formatting plus the inlines (text runs trimmed to [from,to); inline images
-    // whose single position falls inside the range) of one paragraph.
     private static Paragraph CloneParagraphRange(Paragraph p, int from, int to)
     {
         var np = new Paragraph();
@@ -421,7 +406,6 @@ public partial class RichEditor  // doc comment lives on the primary declaration
         catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
     }
 
-    // Parses the meta string written by CopyImageToClipboardAsync. Null on any mismatch.
     private static (bool Inline, double W, double H)? ParseImageMeta(string? meta)
     {
         if (string.IsNullOrEmpty(meta)) return null;

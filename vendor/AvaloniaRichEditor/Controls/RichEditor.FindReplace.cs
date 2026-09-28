@@ -4,13 +4,9 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Find / replace (the Ctrl+F bar): linear search over the paragraph order with wrap-around,
-// anchored at the selection. Part of RichEditor (split out of the main file for readability).
 public partial class RichEditor
 {
-    // ---- highlight-all ------------------------------------------------------
-    // While non-null, the render walk tints EVERY occurrence of this query (browser/VS Code find UX).
-    // Set live by a find UI as the user types, and by FindNext/FindPrev; cleared when the bar closes.
+    // Null disables the highlight-all overlay; the find UI clears it on close.
     internal string? FindHighlightQuery { get; private set; }
     internal bool FindHighlightMatchCase { get; private set; }
 
@@ -27,7 +23,6 @@ public partial class RichEditor
         InvalidateVisual();
     }
 
-    /// <summary>Clears the highlight-all overlay (call when the find UI closes).</summary>
     public void ClearFindHighlight() => SetFindHighlight(null, false);
 
     /// <summary>Position of the current selection among all matches of the highlight query:
@@ -144,7 +139,6 @@ public partial class RichEditor
 
         if (!backwards)
         {
-            // First match at-or-after (fromPi, fromOff), scanning forward; stops at the first hit.
             for (int pi = Math.Max(0, fromPi); pi < paras.Count; pi++)
             {
                 string text = BuildPlain(paras[pi]);
@@ -153,7 +147,7 @@ public partial class RichEditor
                 int idx = text.IndexOf(query, start, cmp);
                 if (idx >= 0) { SelectMatch(paras[pi], idx, query.Length); return true; }
             }
-            if (wrap) // first match overall
+            if (wrap)
                 for (int pi = 0; pi < paras.Count; pi++)
                 {
                     int idx = BuildPlain(paras[pi]).IndexOf(query, cmp);
@@ -162,14 +156,13 @@ public partial class RichEditor
         }
         else
         {
-            // Last match strictly before (fromPi, fromOff), scanning backward; stops at the first hit.
             for (int pi = Math.Min(fromPi, paras.Count - 1); pi >= 0; pi--)
             {
                 string text = BuildPlain(paras[pi]);
                 int idx = LastMatchBefore(text, pi == fromPi ? Math.Min(fromOff, text.Length + 1) : text.Length + 1);
                 if (idx >= 0) { SelectMatch(paras[pi], idx, query.Length); return true; }
             }
-            if (wrap) // last match overall
+            if (wrap)
                 for (int pi = paras.Count - 1; pi >= 0; pi--)
                 {
                     int idx = LastMatchBefore(BuildPlain(paras[pi]), int.MaxValue);

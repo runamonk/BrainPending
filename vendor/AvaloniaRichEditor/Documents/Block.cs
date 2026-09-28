@@ -1,7 +1,5 @@
 namespace AvaloniaRichEditor.Documents;
 
-/// <summary>Abstract base for block-level elements (<see cref="Paragraph"/>, <see cref="TableBlock"/>,
-/// <see cref="ImageBlock"/>, <see cref="DividerBlock"/>).</summary>
 public abstract class Block : TextElement
 {
     /// <summary>Left indent in device-independent pixels. Shifts paragraph text right; shifts

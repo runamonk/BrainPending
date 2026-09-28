@@ -2,21 +2,16 @@ using System.Collections.Generic;
 
 namespace AvaloniaRichEditor.Documents;
 
-/// <summary>A grid of cells (each a <see cref="Paragraph"/>) supporting per-column widths, row heights,
-/// and cell merging via colspan/rowspan. The grid is kept dense/rectangular; merged areas use an anchor
-/// cell plus covered markers (see <see cref="ColSpans"/>/<see cref="RowSpans"/>).</summary>
+/// <summary>Dense rectangular grid. Merged regions retain an anchor cell and covered markers in the span grids.</summary>
 public class TableBlock : Block
 {
-    /// <summary>Number of rows in the table.</summary>
     public int Rows { get; set; } = 2;
-    /// <summary>Number of columns in the table.</summary>
     public int Columns { get; set; } = 2;
     /// <summary>Pixel widths of each column (parallel to column index).</summary>
     public List<double> ColumnWidths { get; set; } = new();
     /// <summary>User-specified minimum row heights in pixels. 0 = auto (content-driven).</summary>
     public List<double> RowHeights { get; set; } = new();
-    /// <summary>The grid of cells ([row][column]). The grid is always dense/rectangular. Each
-    /// <see cref="TableCell"/> holds a list of blocks (one paragraph through phases P1/P2).</summary>
+    /// <summary>Dense grid indexed by row and column; each cell holds its own block list.</summary>
     public List<List<TableCell>> Cells { get; set; } = new();
 
     /// <summary>Column-span values per cell ([row][column]).
@@ -26,13 +21,11 @@ public class TableBlock : Block
     /// Anchor: ≥ 1. Covered by a merge: 0.</summary>
     public List<List<int>> RowSpans { get; set; } = new();
 
-    /// <summary>Creates a 2×2 table.</summary>
     public TableBlock()
     {
         InitializeCells(Rows, Columns);
     }
 
-    /// <summary>Creates a <paramref name="rows"/>×<paramref name="cols"/> table.</summary>
     public TableBlock(int rows, int cols)
     {
         Rows = rows;
@@ -44,7 +37,7 @@ public class TableBlock : Block
     {
         for (int c = 0; c < cols; c++)
         {
-            ColumnWidths.Add(100); // Default width
+            ColumnWidths.Add(100);
         }
         for (int r = 0; r < rows; r++)
         {
@@ -65,7 +58,6 @@ public class TableBlock : Block
 
     private TableCell NewCell() => new TableCell { Parent = this };
 
-    // ---- Span helpers ------------------------------------------------------
 
     private bool InBounds(int r, int c) => r >= 0 && r < Rows && c >= 0 && c < Columns;
 
@@ -105,7 +97,6 @@ public class TableBlock : Block
                     yield return (r, c, Cells[r][c]);
     }
 
-    // Stamps covered markers for an anchor's merged area; (anchorR,anchorC) stays the anchor.
     private void StampCovered(int anchorR, int anchorC, int cs, int rs)
     {
         for (int r = anchorR; r < anchorR + rs && r < Rows; r++)
@@ -117,7 +108,6 @@ public class TableBlock : Block
             }
     }
 
-    // Defensive: clamp every anchor's span to the grid bounds. Cheap safety net after structural edits.
     private void ClampSpans()
     {
         for (int r = 0; r < Rows; r++)
@@ -131,12 +121,10 @@ public class TableBlock : Block
             }
     }
 
-    // ---- Structural edits --------------------------------------------------
     // Each keeps Rows/Columns, Cells, ColumnWidths, (sparse) RowHeights and the span grids consistent.
     // Merge handling: an anchor whose span *crosses* the insert/delete boundary grows/shrinks; cells in
     // the new row/column that fall inside a crossing anchor's area are marked covered.
 
-    /// <summary>Inserts a new empty row before row index <paramref name="at"/>.</summary>
     public void InsertRow(int at)
     {
         at = System.Math.Clamp(at, 0, Rows);
@@ -149,7 +137,6 @@ public class TableBlock : Block
         RowSpans.Insert(at, rsRow);
         if (at < RowHeights.Count) RowHeights.Insert(at, 0);
         Rows++;
-        // Grow rowspan anchors that straddle the inserted row, and cover the new cells they reach.
         for (int r = 0; r < at; r++)
             for (int c = 0; c < Columns; c++)
             {
@@ -177,13 +164,12 @@ public class TableBlock : Block
             var (cs, rs) = SpanOf(at, c);
             if (cs >= 1 && rs >= 1 && rs > 1 && at + 1 < Rows)
             {
-                Cells[at + 1][c] = Cells[at][c];      // keep the content
+                Cells[at + 1][c] = Cells[at][c];
                 Cells[at + 1][c].Parent = this;
                 ColSpans[at + 1][c] = cs;
                 RowSpans[at + 1][c] = rs - 1;
             }
         }
-        // Shrink rowspan anchors above that cross this row.
         for (int r = 0; r < at; r++)
             for (int c = 0; c < Columns; c++)
             {
@@ -198,7 +184,6 @@ public class TableBlock : Block
         ClampSpans();
     }
 
-    /// <summary>Inserts a new empty column before column index <paramref name="at"/>.</summary>
     public void InsertColumn(int at)
     {
         at = System.Math.Clamp(at, 0, Columns);
@@ -213,7 +198,6 @@ public class TableBlock : Block
         while (ColumnWidths.Count < at) ColumnWidths.Add(100);
         ColumnWidths.Insert(at, 100);
         Columns++;
-        // Grow colspan anchors that straddle the inserted column, and cover the new cells they reach.
         for (int c = 0; c < at; c++)
             for (int r = 0; r < Rows; r++)
             {
@@ -247,7 +231,6 @@ public class TableBlock : Block
                 RowSpans[r][at + 1] = rs;
             }
         }
-        // Shrink colspan anchors to the left that cross this column.
         for (int c = 0; c < at; c++)
             for (int r = 0; r < Rows; r++)
             {
@@ -277,7 +260,6 @@ public class TableBlock : Block
         StampCovered(r, c, cs, rs);
     }
 
-    // ---- Merge / unmerge (driven by the editing UI) ------------------------
 
     /// Merges the rectangular block (r0..r1, c0..c1) into a single anchor at (r0,c0).
     /// Non-empty content of covered cells is appended to the anchor. No-op on a degenerate range.
@@ -289,14 +271,7 @@ public class TableBlock : Block
         if (!InBounds(r0, c0) || !InBounds(r1, c1)) return;
         if (r1 < r0 || c1 < c0) return;
 
-        // Expand over every merge the range straddles. Without this the range could cut an existing
-        // merge in half: stamping its anchor as covered leaves the cells THAT anchor owned pointing at
-        // a covered cell, and shrinking the anchor at (r0,c0) leaves the cells it used to own flagged
-        // covered with nothing covering them. Either way those cells are ORPHANS — LogicalCells() skips
-        // them, so their content is unreachable to rendering, selection, every table command and every
-        // formatter, and enough of them leave a table with no logical cells at all. A covered slot
-        // reports (0,0) and is therefore skipped here: its anchor is elsewhere in the grid and pulls
-        // the range over on its own iteration.
+        // Expand across whole existing merges before stamping spans; partial overlap would orphan covered cells.
         bool grew = true;
         while (grew)
         {
@@ -305,17 +280,17 @@ public class TableBlock : Block
                 for (int c = 0; c < Columns; c++)
                 {
                     var (cs, rs) = SpanOf(r, c);
-                    if (cs <= 1 && rs <= 1) continue;          // plain cell or covered slot
+                    if (cs <= 1 && rs <= 1) continue;
                     if (cs < 1 || rs < 1) continue;
                     int endR = r + rs - 1, endC = c + cs - 1;
-                    if (r > r1 || endR < r0 || c > c1 || endC < c0) continue; // disjoint
+                    if (r > r1 || endR < r0 || c > c1 || endC < c0) continue;
                     if (r < r0) { r0 = r; grew = true; }
                     if (c < c0) { c0 = c; grew = true; }
                     if (endR > r1) { r1 = endR; grew = true; }
                     if (endC > c1) { c1 = endC; grew = true; }
                 }
         }
-        if (r0 == r1 && c0 == c1) return; // a single plain cell: nothing to merge
+        if (r0 == r1 && c0 == c1) return;
 
         // Release the whole range to plain cells before re-stamping. Expansion guarantees every anchor
         // that reaches into the range lies entirely inside it, so this cannot orphan anything outside.
@@ -348,10 +323,7 @@ public class TableBlock : Block
                         src.Inlines.Add(new Run { Text = "" });
                     }
                 }
-                // Everything past that leading paragraph (extra paragraphs, block images, dividers,
-                // nested tables — a cell is a block list since milestone A) MOVES to the anchor cell.
-                // Left behind it would sit in a covered cell, which LogicalCells() skips: invisible to
-                // render/navigation/extraction, and destroyed outright by a later UnmergeCell.
+                // Move all remaining blocks into the anchor; covered-cell content is otherwise unreachable and lost on unmerge.
                 var moved = new List<Block>();
                 foreach (var b in srcCell.Blocks)
                     if (!ReferenceEquals(b, src)) moved.Add(b);
@@ -359,7 +331,7 @@ public class TableBlock : Block
                 {
                     srcCell.Blocks.Remove(m);
                     m.Parent = anchorCell;
-                    anchorCell.Blocks.Add(m); // appended in document order
+                    anchorCell.Blocks.Add(m);
                 }
                 // A cell whose blocks all moved out must keep the "never empty" invariant.
                 if (srcCell.Blocks.Count == 0)
@@ -370,7 +342,6 @@ public class TableBlock : Block
         StampCovered(r0, c0, c1 - c0 + 1, r1 - r0 + 1);
     }
 
-    /// Splits a merged anchor back into 1×1 cells (covered cells become empty anchors).
     public void UnmergeCell(int r, int c)
     {
         var (cs, rs) = SpanOf(r, c);

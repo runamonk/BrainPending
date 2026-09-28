@@ -5,8 +5,6 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Image commands (context menu / public insert): resize presets, replace/save, and the HWP-style
-// block<->inline conversion. Part of RichEditor (split out of the main file for readability).
 public partial class RichEditor
 {
     // Caps an inserted image's display width to the editor's content width (keeping aspect ratio),
@@ -25,10 +23,7 @@ public partial class RichEditor
         PushUndo();
         img.Width = img.Image.Size.Width;
         img.Height = img.Image.Size.Height;
-        // A size preset changes the block's height, so the document's total height changed. The presets
-        // reach neither ResetCaretBlink nor any other re-measuring path (the resize DRAG does — see
-        // OnPointerReleased), so the ScrollViewer kept the old extent: a picture reset to natural size
-        // could grow past the bottom of the scrollable range.
+        // Size presets bypass caret reset, so explicitly remeasure the scroll extent.
         InvalidateMeasure();
         InvalidateVisual();
     }
@@ -43,7 +38,7 @@ public partial class RichEditor
         double baseH = img.Height > 0 ? img.Height : img.Image.Size.Height;
         img.Width = Math.Max(1, baseW * factor);
         img.Height = Math.Max(1, baseH * factor);
-        InvalidateMeasure(); // see ResetImageSize
+        InvalidateMeasure();
         InvalidateVisual();
     }
 
@@ -123,10 +118,9 @@ public partial class RichEditor
         if (atEnd) anchor.Inlines.Add(im);
         else anchor.Inlines.Insert(0, im);
         if (_selectedBlock == ib) _selectedBlock = null;
-        _selectedInline = (anchor, im); // show the inline selection chrome right away
+        _selectedInline = (anchor, im);
         UpdateParents(Document);
 
-        // Caret right after the image character so typing continues next to it.
         int off = 0;
         foreach (var inl in anchor.Inlines) { off += InlineLen(inl); if (ReferenceEquals(inl, im)) break; }
         _caretPosition = new TextPointer(anchor, off);
@@ -135,9 +129,7 @@ public partial class RichEditor
         InvalidateVisual();
     }
 
-    // Reverse of ConvertImageBlockToInline: promote an inline image to a sibling ImageBlock after
-    // its paragraph. Top-level paragraphs only — table cells cannot host block siblings, so the
-    // context menu disables this inside cells.
+    // This conversion inserts into Document.Blocks and therefore requires a top-level host paragraph.
     internal void ConvertInlineImageToBlock(Paragraph p, InlineImage im)
     {
         if (Document == null) return;
@@ -186,7 +178,7 @@ public partial class RichEditor
         double baseH = img.Height > 0 ? img.Height : img.Image.Size.Height;
         img.Width = Math.Max(1, baseW * factor);
         img.Height = Math.Max(1, baseH * factor);
-        InvalidateMeasure(); // see ResetImageSize
+        InvalidateMeasure();
         InvalidateVisual();
     }
 
@@ -216,7 +208,6 @@ public partial class RichEditor
         catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
     }
 
-    /// <summary>Opens a file picker and inserts the chosen image at the caret.</summary>
     public async Task InsertImageFromFileAsync()
     {
         if (IsReadOnly || !AllowImages) return;

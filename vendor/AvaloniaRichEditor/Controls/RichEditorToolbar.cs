@@ -15,21 +15,7 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-/// <summary>
-/// Optional formatting toolbar for <see cref="RichEditor"/> (roadmap N3.6). Point <see cref="Target"/>
-/// at an editor and the toolbar drives it through the editor's public commands, reflects the caret's
-/// formatting on its buttons (via <see cref="RichEditor.StatusChanged"/> + <see cref="RichEditor.GetCaretFormat"/>),
-/// and follows the editor's feature flags: <see cref="RichEditor.AllowImages"/>/<see cref="RichEditor.AllowTables"/>
-/// hide the insert buttons and <see cref="RichEditor.IsReadOnly"/> hides the whole toolbar.
-/// Labels/tooltips come from <see cref="RichEditorLocalization"/>. Layout/placement is up to the host —
-/// this control is only the strip itself. App-shell concerns (save/open, zoom, printing) are deliberately
-/// out of scope.
-/// <para>No button in the strip takes focus — including buttons the host adds through
-/// <see cref="LeadingItems"/>/<see cref="TrailingItems"/>, whose <c>Focusable</c> is cleared as well.
-/// The caret is only painted while the editor is focused, so a focus grab would hide it and send the next
-/// keystroke to the button. A picker's popup (colour, table, list markers, line spacing) does take focus
-/// while it is open, and focus returns to <see cref="Target"/> when it closes.</para>
-/// </summary>
+/// <summary>Formatting toolbar driven by Target. Buttons retain editor focus; picker popups restore it on close.</summary>
 public partial class RichEditorToolbar : UserControl
 {
     /// <summary>Show common text, list, and insert controls inline without an overflow menu.</summary>
@@ -60,17 +46,13 @@ public partial class RichEditorToolbar : UserControl
     /// <summary>Host controls shown at the end of the strip, after the formatting buttons (e.g. zoom).</summary>
     public AvaloniaList<Control> TrailingItems { get; } = new();
 
-    // Immutable, like the editor's SelectionBrush default: a plain SolidColorBrush is an AvaloniaObject
-    // and takes the thread affinity of whoever runs this static initializer, so one shared across every
-    // toolbar in the process throws "the calling thread cannot access this object" the moment a second
-    // UI thread paints with it. Nothing here mutates or binds these, so the immutable form is a drop-in.
+    // Shared brushes must be immutable so toolbars on different UI threads can use them.
     private static readonly IBrush ActiveBrush = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.Parse("#506780"));
 
-    // Controls that reflect caret state (assigned in Build).
     private Button? _boldBtn, _italicBtn, _underlineBtn, _strikeBtn, _bulletBtn, _numberBtn, _undoBtn, _redoBtn;
     private ComboBox? _fontCombo, _sizeCombo, _headingCombo, _alignCombo;
-    private TextBox? _spacingBox; // editable line-spacing %, reflects/sets the caret paragraph
-    private TextBlock? _bulletPreview, _numberPreview; // current list marker shown in the list combo boxes
+    private TextBox? _spacingBox;
+    private TextBlock? _bulletPreview, _numberPreview;
     private static readonly int[] SpacingPercents = { 100, 110, 120, 130, 150, 160, 180, 200, 250, 300 };
 
     private static double[] _fontSizes = { 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72 };
@@ -85,9 +67,7 @@ public partial class RichEditorToolbar : UserControl
     public static double[] FontSizes
     {
         get => _fontSizes;
-        // Validated here rather than at the point of use: the array is consumed while the toolbar builds
-        // itself, so a bad value would otherwise surface as a crash inside the build with nothing
-        // pointing back at the assignment that caused it.
+        // Validate before building controls so invalid sizes fail at the assignment that supplied them.
         set
         {
             ArgumentNullException.ThrowIfNull(value);
@@ -100,10 +80,7 @@ public partial class RichEditorToolbar : UserControl
         }
     }
 
-    // The combo matches its selection by ITEM TEXT (SelectByContent), so the item labels and the value
-    // reflected back from the caret must be formatted by the same function — otherwise a size that is
-    // not a whole number can never show as selected. Invariant so the round trip does not depend on the
-    // decimal separator of the current culture.
+    // Use identical invariant labels for items and caret reflection; fractional sizes must round-trip.
     private static string SizeText(double pt)
         => pt.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
     private Control? _tableBtn, _imageBtn, _dividerBtn;
@@ -116,7 +93,6 @@ public partial class RichEditorToolbar : UserControl
     private static readonly IBrush NoColorBrush = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.Parse("#DDDDDD"));
     private static readonly IBrush DimInk = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.Parse("#BFC3C7")); // inactive list marker
 
-    // Shows `brush` as the picker's current colour, whichever face style is in use.
     private void ReflectPickerColor(bool highlight, IBrush brush)
     {
         if (highlight)
@@ -134,7 +110,6 @@ public partial class RichEditorToolbar : UserControl
 
     private static string Loc(string key) => RichEditorLocalization.GetString(key);
 
-    /// <summary>Creates the toolbar. Assign <see cref="Target"/> to connect it to an editor.</summary>
     public RichEditorToolbar()
     {
         // Disabled buttons (undo/redo) dim via opacity instead of the theme's grey fill, which
@@ -147,7 +122,6 @@ public partial class RichEditorToolbar : UserControl
         {
             Setters = { new Setter(ContentPresenter.BackgroundProperty, Brushes.Transparent) },
         });
-        // Host item slots: changing them rebuilds the strip so they sit inline with the formatting buttons.
         LeadingItems.CollectionChanged += (_, _) => { Build(); Sync(); };
         TrailingItems.CollectionChanged += (_, _) => { Build(); Sync(); };
         Build();
@@ -170,10 +144,7 @@ public partial class RichEditorToolbar : UserControl
 
     private void OnLanguageChanged(object? sender, EventArgs e)
     {
-        // The event is raised on whatever thread set the language, and rebuilding the strip creates
-        // Avalonia controls — thread-affine objects. A host that switches language from a background
-        // thread (or any worker) would otherwise take down the app on "the calling thread cannot access
-        // this object"; hop to the UI thread instead.
+        // LanguageChanged can arrive on a worker thread; rebuilding Avalonia controls requires the UI thread.
         if (!Dispatcher.UIThread.CheckAccess())
         {
             Dispatcher.UIThread.Post(() => OnLanguageChanged(sender, e));
@@ -218,9 +189,7 @@ public partial class RichEditorToolbar : UserControl
               || e.Property == RichEditor.ShowPageBoundariesProperty) SyncPage();
     }
 
-    // A picker's popup takes focus while it is open, so the caret stops being painted and the next
-    // keystroke would go to whatever the popup left focused. Hand focus back to the editor on close —
-    // the same guarantee the strip's buttons give by refusing focus outright.
+    // Pickers take focus while open; restore it so typing resumes in the editor after dismissal.
     private Flyout PickerFlyout(Flyout f)
     {
         f.Closed += (_, _) => Target?.Focus();
@@ -236,7 +205,6 @@ public partial class RichEditorToolbar : UserControl
             if (child is Control cc) DisableButtonFocus(cc);
     }
 
-    // ---------------- UI construction ----------------
 
     private void Build()
     {
@@ -246,8 +214,6 @@ public partial class RichEditorToolbar : UserControl
 
         Button Btn(object content, string tip, Action click, RichEditorIcon? icon = null)
         {
-            // Icon precedence: host override (RichEditorIcons.Provider) > built-in vector glyph
-            // (ToolbarIcons) > styled-text fallback (`content`, for letter-conventional buttons).
             var resolved = (icon is { } k ? RichEditorIcons.TryCreate(k) : null)
                           ?? (icon is { } vk ? ToolbarIcons.Create(vk) : null);
             var b = new Button
@@ -277,7 +243,6 @@ public partial class RichEditorToolbar : UserControl
                 MinWidth = minWidth,
                 VerticalAlignment = VerticalAlignment.Center,
                 FontSize = 12,
-                // Keep outlines synchronized with the active theme.
                 [!ComboBox.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"),
                 BorderThickness = Compact ? new Thickness(0) : new Thickness(1),
                 Background = Brushes.Transparent,
@@ -297,7 +262,6 @@ public partial class RichEditorToolbar : UserControl
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        // Reset reflected controls to null so Sync() null-guards whatever subset this level builds.
         _undoBtn = _redoBtn = _boldBtn = _italicBtn = _underlineBtn = _strikeBtn = _bulletBtn = _numberBtn = null;
         _fontCombo = _sizeCombo = _headingCombo = _alignCombo = null;
         _spacingBox = null; _bulletPreview = _numberPreview = null;
@@ -313,30 +277,24 @@ public partial class RichEditorToolbar : UserControl
 
         if (ro)
         {
-            // Read-only = view toolbar: page/zoom + Export/Print only (no editing controls; Import hidden).
             if (ShowPageControls) BuildPageControls(items);
             if (ShowFileActions) { if (items.Count > 0) Add(Div()); BuildFileActions(items); }
         }
         else
         {
 
-        // Undo/redo lead the strip (quick-access convention), so they keep a stable spot regardless
-        // of how the rest wraps.
         _undoBtn = Btn("↶", Loc("Undo") + " (Ctrl+Z)", () => Target?.Undo(), RichEditorIcon.Undo);
         _redoBtn = Btn("↷", Loc("Redo") + " (Ctrl+Y)", () => Target?.Redo(), RichEditorIcon.Redo);
         Add(_undoBtn); Add(_redoBtn);
         Add(Div());
 
-        // Character toggles
         _boldBtn = Btn(new TextBlock { Text = "B", FontWeight = FontWeight.Bold }, Loc("Bold") + " (Ctrl+B)", () => Target?.ToggleBold(), RichEditorIcon.Bold);
         _italicBtn = Btn(new TextBlock { Text = "I", FontStyle = FontStyle.Italic }, Loc("Italic") + " (Ctrl+I)", () => Target?.ToggleItalic(), RichEditorIcon.Italic);
         _underlineBtn = Btn(new TextBlock { Text = "U", TextDecorations = TextDecorations.Underline }, Loc("Underline") + " (Ctrl+U)", () => Target?.ToggleUnderline(), RichEditorIcon.Underline);
         _strikeBtn = Btn(new TextBlock { Text = "S", TextDecorations = TextDecorations.Strikethrough }, Loc("Strikethrough"), () => Target?.ToggleStrikethrough(), RichEditorIcon.Strikethrough);
-        // Format painter is available via StartFormatPainter()/the API; no toolbar button (rarely used).
         Add(_boldBtn); Add(_italicBtn); Add(_underlineBtn); Add(_strikeBtn);
         Add(Div());
 
-        // Color pickers (Normal+)
         if (normal)
         {
             Add(colorButton = BuildColorButton(highlight: false));
@@ -344,18 +302,11 @@ public partial class RichEditorToolbar : UserControl
             Add(Div());
         }
 
-        // Font family (Normal+, from the target's host-overridable list) + size (Minimal). Plain string items + an
-        // ItemTemplate that renders each name in its own font: Avalonia applies the same template to
-        // the closed selection box, so the chosen font shows in its own typeface there too. Crucially
-        // the FontFamily lives on each item's TextBlock — scoped to the combo, so it never leaks to the
-        // rest of the toolbar (which is what made the whole strip change font with ComboBoxItem faces).
+        // Scope each font preview to its item TextBlock so it cannot change the rest of the toolbar.
         if (normal)
         {
         _fontCombo = Combo(Loc("FontFamily"), 120);
-        // The closed selection box drives this template with a null value when nothing is selected,
-        // so guard the empty case (new FontFamily(null) throws). Recycling must stay OFF: the template
-        // derives FontFamily from the data at build time (not via a binding), so a recycled TextBlock
-        // would keep the previously built font when the selected name changes.
+        // The closed selection may supply null. Disable recycling because FontFamily is set at build time.
         _fontCombo.ItemTemplate = new FuncDataTemplate<string>(
             (name, _) => new TextBlock
             {
@@ -373,7 +324,6 @@ public partial class RichEditorToolbar : UserControl
         }
 
         _sizeCombo = Combo(Loc("FontSize"), 60);
-        // Font sizes are points (pt). Body default is 10pt; range ~6–72.
         foreach (var s in FontSizes)
             _sizeCombo.Items.Add(new ComboBoxItem { Content = SizeText(s) });
         _sizeCombo.SelectionChanged += (_, _) =>
@@ -388,7 +338,6 @@ public partial class RichEditorToolbar : UserControl
 
         if (normal)
         {
-        // Paragraph style / alignment
         _headingCombo = Combo(Loc("ParagraphStyle"));
         foreach (var key in new[] { "BodyText", "Heading1", "Heading2", "Heading3", "Heading4", "Heading5", "Heading6" })
             _headingCombo.Items.Add(new ComboBoxItem { Content = Loc(key) });
@@ -416,8 +365,6 @@ public partial class RichEditorToolbar : UserControl
         Add(_alignCombo);
         Add(Div());
 
-        // Lists / indent. Each is a combo-style box: [icon (toggles the list) | current marker | ▾ (picks
-        // a specific bullet glyph •/◦/▪/– or number format 1./1)/a)/A)/i))], matching the line-spacing box.
         var bullet = BuildListBox(RichEditorIcon.BulletList, Loc("BulletList"), () => Target?.ToggleBullet(), ListKind.Bullet,
             (ListMarkerStyle.Disc, "•"), (ListMarkerStyle.Circle, "◦"),
             (ListMarkerStyle.Square, "▪"), (ListMarkerStyle.Dash, "–"));
@@ -429,7 +376,6 @@ public partial class RichEditorToolbar : UserControl
             (ListMarkerStyle.LowerRoman, "i)"));
         _numberBtn = number.Icon; _numberPreview = number.Preview;
         Add(numberBox = number.Box);
-        // Quote (blockquote) is available via the right-click List menu and ToggleQuote(); no toolbar button.
         Add(Btn("→|", Loc("IndentIncrease"), () => Target?.Indent(20), RichEditorIcon.IndentIncrease));
         Add(Btn("|←", Loc("IndentDecrease"), () => Target?.Indent(-20), RichEditorIcon.IndentDecrease));
         Add(Div());
@@ -439,7 +385,6 @@ public partial class RichEditorToolbar : UserControl
         Add(BuildLineSpacingControl());
         Add(Div());
 
-        // Block inserts (gated by the target's feature flags in ApplyFlags)
         _tableBtn = BuildTableButton();
         _imageBtn = Btn("🖼", Loc("InsertImage"), () => { _ = Target?.InsertImageFromFileAsync(); }, RichEditorIcon.InsertImage);
         _dividerBtn = Btn("―", Loc("InsertDivider"), () => Target?.InsertDivider(), RichEditorIcon.InsertDivider);
@@ -448,13 +393,12 @@ public partial class RichEditorToolbar : UserControl
         Add(Btn("Clear", "Clear formatting", () => Target?.ClearFormatting()));
         }
 
-        // Maximum adds the built-in page/zoom controls and file actions at the end.
         if (maximum)
         {
             if (ShowPageControls) { Add(Div()); BuildPageControls(items); }
             if (ShowFileActions) { Add(Div()); BuildFileActions(items); }
         }
-        } // end editable
+        }
 
         if (Compact && !ro)
         {
@@ -466,21 +410,14 @@ public partial class RichEditorToolbar : UserControl
             items = primary;
         }
 
-        // When the host is narrower than the strip, items wrap to additional rows instead of
-        // clipping or scrolling. WrapPanel never mutates the visual tree during layout, so it is
-        // immune to the layout-reentrancy crash that a reparenting overflow dropdown hit during an
-        // interactive window resize.
+        // WrapPanel avoids changing the visual tree during layout, which can cause resize re-entrancy.
         var wrap = new WrapPanel { Orientation = Orientation.Horizontal };
         // Host items detach from the previous build's panel before re-adding (a control has one parent).
         void AddHost(Control c) { (c.Parent as Panel)?.Children.Remove(c); wrap.Children.Add(c); }
         foreach (var c in LeadingItems) AddHost(c);
         if (LeadingItems.Count > 0) wrap.Children.Add(Div());
         foreach (var c in items) wrap.Children.Add(c);
-        // No toolbar button may take focus. The caret is only painted while the editor is focused, so a
-        // click hid it and sent the next keystroke to the button — the command still ran against the
-        // remembered caret position, which is why the buttons looked like they worked while typing had
-        // stopped. Done as one pass over the assembled strip rather than a flag in each factory, because
-        // several pickers (colour, lists, spacing, table insert) build their buttons inline.
+        // Include host-supplied buttons: any button taking focus would hide the caret and interrupt typing.
         foreach (var c in wrap.Children) DisableButtonFocus(c);
         if (TrailingItems.Count > 0) wrap.Children.Add(Div());
         foreach (var c in TrailingItems) AddHost(c);
@@ -505,9 +442,7 @@ public partial class RichEditorToolbar : UserControl
     public static string[] Palette
     {
         get => _palette;
-        // Entry FORMAT is deliberately not validated — the swatch grid is cosmetic and an unparseable
-        // entry already degrades gracefully. Null/empty is different: it produces an empty colour
-        // picker, which reads as a broken toolbar rather than a wrong colour.
+        // Invalid swatch text falls back to black; only null/empty palettes prevent a usable picker.
         set
         {
             ArgumentNullException.ThrowIfNull(value);
@@ -517,9 +452,7 @@ public partial class RichEditorToolbar : UserControl
         }
     }
 
-    // Color.Parse throws on anything it does not recognise, which would take down the whole toolbar
-    // build over one bad entry. Palette is host-supplied, so a typo degrades to black instead — the
-    // swatch grid is cosmetic, and a wrong colour is a far better failure than a crash.
+    // A malformed host-supplied swatch must not abort the toolbar build.
     private static Color ParseSwatch(string hex)
     {
         try { return Color.Parse(hex); }
@@ -535,15 +468,9 @@ public partial class RichEditorToolbar : UserControl
         "#FFCDD2","#FFE0B2","#FFF9C4","#C8E6C9","#B2DFDB","#BBDEFB","#E1BEE7","#F8BBD0",
     };
 
-    // A palette + hex-input flyout button. `highlight` selects whether the chosen colour is applied
-    // as text foreground or as a highlight (background) brush.
     private Button BuildColorButton(bool highlight)
     {
-        // Button face. With a host-provided icon the icon is the whole face: the current colour is
-        // pushed through the host wrapper's Foreground, which icon layers without an explicit
-        // Foreground inherit — so a layered icon (mono letter over an accent bar) shows the colour
-        // in its own bar, with no separate swatch. Without a provider the face is the built-in
-        // glyph over a swatch bar.
+        // Host icons inherit the current color through Foreground; built-in icons use a separate swatch bar.
         var initial = new SolidColorBrush(highlight ? Color.Parse("#FFF176") : Colors.Black);
         Control face;
         if (RichEditorIcons.TryCreate(highlight ? RichEditorIcon.Highlight : RichEditorIcon.TextColor) is { } icon)
@@ -564,7 +491,6 @@ public partial class RichEditorToolbar : UserControl
             };
             if (highlight) { _highlightSwatch = swatch; _highlightIconHost = null; }
             else { _colorSwatch = swatch; _colorIconHost = null; }
-            // Highlight uses the built-in marker vector; text color keeps the conventional "A".
             Control glyph = highlight
                 ? (ToolbarIcons.Create(RichEditorIcon.Highlight) ?? (Control)new TextBlock { Text = "🖍", FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center })
                 : new TextBlock { Text = "A", FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center };
@@ -595,7 +521,6 @@ public partial class RichEditorToolbar : UserControl
             IBrush? brush = c.HasValue ? new SolidColorBrush(c.Value) : null;
             if (highlight) Target.SetHighlight(brush);
             else Target.SetForeground(brush ?? Brushes.Black);
-            // Reflect the chosen colour on the button (cleared highlight -> light grey).
             ReflectPickerColor(highlight, c.HasValue ? new SolidColorBrush(c.Value) : NoColorBrush);
             (btn.Flyout as FlyoutBase)?.Hide();
         }
@@ -637,10 +562,8 @@ public partial class RichEditorToolbar : UserControl
         return btn;
     }
 
-    // A drag-to-size table picker (hover the grid to choose rows×columns, click to insert).
     private Button BuildTableButton()
     {
-        // Grid glyph + dropdown chevron. Host icon wins, else the built-in vector grid, else text.
         object tableFace = "▦ ▾";
         var tableGlyph = RichEditorIcons.TryCreate(RichEditorIcon.InsertTable) ?? ToolbarIcons.Create(RichEditorIcon.InsertTable);
         if (tableGlyph != null)
@@ -709,7 +632,7 @@ public partial class RichEditorToolbar : UserControl
     // tight ▲▼ steppers and a ▾ presets dropdown. Each maps to Paragraph.LineSpacing = %/100.
     private Control BuildLineSpacingControl()
     {
-        var ink = new SolidColorBrush(Color.Parse("#80868B")); // soft grey for the steppers (not stark black)
+        var ink = new SolidColorBrush(Color.Parse("#80868B"));
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
 
         var glyph = RichEditorIcons.TryCreate(RichEditorIcon.LineSpacing) ?? ToolbarIcons.Create(RichEditorIcon.LineSpacing);
@@ -722,7 +645,7 @@ public partial class RichEditorToolbar : UserControl
             FontSize = 12,
             MinHeight = 0,
             Padding = new Thickness(0, 1),
-            BorderThickness = new Thickness(0),     // blends into the outer border
+            BorderThickness = new Thickness(0),
             Background = Brushes.Transparent,
             TextAlignment = Avalonia.Media.TextAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
@@ -734,7 +657,6 @@ public partial class RichEditorToolbar : UserControl
         ToolTip.SetTip(_spacingBox, Loc("LineSpacing"));
         row.Children.Add(_spacingBox);
 
-        // Tight ▲▼ steppers (±10%): crisp vector chevrons (not stretched glyphs), stacked close together.
         Button Step(bool up, int delta)
         {
             var chevron = new Avalonia.Controls.Shapes.Path
@@ -761,7 +683,7 @@ public partial class RichEditorToolbar : UserControl
 
         var presets = new Button
         {
-            Content = ToolbarIcons.ChevronDown(), // same thin chevron as the combos / list dropdowns
+            Content = ToolbarIcons.ChevronDown(),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(3),
@@ -787,10 +709,9 @@ public partial class RichEditorToolbar : UserControl
             panel.Children.Add(item);
         }
         flyout.Content = panel;
-        row.Children.Add(presets);   // dropdown before the spinner
+        row.Children.Add(presets);
         row.Children.Add(steppers);
 
-        // Unify with the toolbar combos: same border colour, height and vertical centring.
         var box = new Border
         {
             Child = row,
@@ -809,7 +730,6 @@ public partial class RichEditorToolbar : UserControl
         return box;
     }
 
-    // The percentage currently shown in the spacing box (digits only); 100 when empty/unparsable.
     private int CurrentSpacingPercent()
     {
         var sb = new System.Text.StringBuilder();
@@ -817,7 +737,6 @@ public partial class RichEditorToolbar : UserControl
         return int.TryParse(sb.ToString(), out int p) && p > 0 ? p : 100;
     }
 
-    // Clamps a line-spacing %, reflects it in the box, and applies it to the caret paragraph.
     private void ApplySpacingPercent(int pct)
     {
         pct = System.Math.Clamp(pct, 100, 1000);
@@ -825,9 +744,6 @@ public partial class RichEditorToolbar : UserControl
         Target?.SetLineSpacing(pct / 100.0);
     }
 
-    // A combo-style list control: [icon (toggles the list) | current marker | ▾ (style
-    // menu)]. Returns the box plus the icon button and preview label so
-    // Sync can highlight the active state and show the caret paragraph's current marker.
     private (Control Box, Button Icon, TextBlock Preview) BuildListBox(
         RichEditorIcon iconKind, string tip, Action toggle, ListKind kind,
         params (ListMarkerStyle Style, string Glyph)[] options)
@@ -897,10 +813,7 @@ public partial class RichEditorToolbar : UserControl
         return (box, icon, preview);
     }
 
-    // ---------------- Target state -> toolbar ----------------
 
-    // Feature flags: insert buttons follow AllowTables/AllowImages. The strip is hidden only when there is
-    // no target — a read-only target now shows the view toolbar (page/zoom + Export/Print) instead of hiding.
     private void ApplyFlags()
     {
         IsVisible = Target != null;
@@ -910,7 +823,6 @@ public partial class RichEditorToolbar : UserControl
         if (_dividerBtn != null) _dividerBtn.IsVisible = Target.AllowTables || Target.AllowImages;
     }
 
-    // Reflects the caret's formatting on the toolbar: active B/I/U/S, list, font, alignment, undo/redo.
     private void Sync()
     {
         var rt = Target;
@@ -929,8 +841,6 @@ public partial class RichEditorToolbar : UserControl
         SetActive(_strikeBtn, f.Strike);
         SetActive(_bulletBtn, f.List == ListKind.Bullet);
         SetActive(_numberBtn, f.List == ListKind.Ordered);
-        // List combo previews show the caret paragraph's current marker; dimmed (inactive) when the
-        // caret isn't in that list kind, full-ink (active) when it is.
         if (_bulletPreview != null)
         {
             bool on = f.List == ListKind.Bullet;
@@ -954,8 +864,6 @@ public partial class RichEditorToolbar : UserControl
             _spacingBox.Text = pct + "%";
         }
 
-        // Picker colours follow the caret's run: explicit colours show as-is, defaults fall back to
-        // black text / "no highlight" grey (same brush Apply() uses for a cleared highlight).
         ReflectPickerColor(highlight: false, f.Foreground ?? Brushes.Black);
         ReflectPickerColor(highlight: true, f.Background ?? NoColorBrush);
 
@@ -974,11 +882,7 @@ public partial class RichEditorToolbar : UserControl
             }
             else
             {
-                // No explicit font (falls back to the editor default) or a font not in the curated
-                // list (e.g. from a loaded document): show the effective name as placeholder rather
-                // than faking a selection. The placeholder uses the combo's OWN font (not the item
-                // template), so set that to the named font — otherwise "맑은 고딕" renders in the theme
-                // font (Inter) and looks nothing like the actual face. Scoped to the combo.
+                // Unknown or implicit fonts use a placeholder in the effective font; selecting an item would imply explicit formatting.
                 _fontCombo.SelectedItem = null;
                 string eff = f.FontFamily ?? EffectiveDefaultFamilyName(rt);
                 _fontCombo.PlaceholderText = eff;
@@ -993,8 +897,8 @@ public partial class RichEditorToolbar : UserControl
             TextAlignment.Justify => 3,
             _ => 0,
         };
-        SyncPage();         // reflect paper/orientation/zoom onto the built-in page controls (if present)
-        SyncFileActions();  // hide Import in the read-only view toolbar; Print until a host handles it
+        SyncPage();
+        SyncFileActions();
         _suppress = false;
     }
 

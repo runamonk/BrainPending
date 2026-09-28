@@ -3,11 +3,8 @@ using Avalonia.Collections;
 
 namespace AvaloniaRichEditor.Documents;
 
-/// <summary>The root document model: an ordered list of block-level elements
-/// (<see cref="Paragraph"/>, <see cref="TableBlock"/>, <see cref="ImageBlock"/>, <see cref="DividerBlock"/>).</summary>
 public class FlowDocument : AvaloniaObject
 {
-    /// <summary>The ordered list of top-level block elements.</summary>
     public AvaloniaList<Block> Blocks { get; } = new AvaloniaList<Block>();
 
     /// <summary>Optional per-document page setup (paper size, orientation, header/footer, page numbers).

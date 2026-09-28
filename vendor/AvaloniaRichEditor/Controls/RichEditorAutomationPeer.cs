@@ -18,7 +18,6 @@ internal sealed class RichEditorAutomationPeer : ControlAutomationPeer, IValuePr
 
     protected override string GetClassNameCore() => nameof(RichEditor);
 
-    // Falls back to a sensible default when the host hasn't set AutomationProperties.Name.
     protected override string? GetNameCore()
     {
         var name = base.GetNameCore();
@@ -28,7 +27,6 @@ internal sealed class RichEditorAutomationPeer : ControlAutomationPeer, IValuePr
     protected override bool IsContentElementCore() => true;
     protected override bool IsControlElementCore() => true;
 
-    // IValueProvider
     public bool IsReadOnly => _owner.IsReadOnly;
 
     public string? Value => _owner.GetPlainText();

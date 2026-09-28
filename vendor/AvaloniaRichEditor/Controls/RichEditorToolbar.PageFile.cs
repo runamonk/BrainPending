@@ -34,7 +34,6 @@ public enum ToolbarLevel
 // default on and are appended by Build() at ToolbarLevel.Maximum (and in the read-only view toolbar).
 public partial class RichEditorToolbar
 {
-    // ---- toolbar density level --------------------------------------------
     private ToolbarLevel _level = ToolbarLevel.Auto;
 
     /// <summary>Toolbar density. <see cref="ToolbarLevel.Auto"/> (default) resolves to
@@ -46,10 +45,8 @@ public partial class RichEditorToolbar
         set { if (_level == value) return; _level = value; Build(); Sync(); }
     }
 
-    // The concrete level to build (Auto → Normal). Read-only is handled separately in Build().
     private ToolbarLevel EffectiveLevel() => _level == ToolbarLevel.Auto ? ToolbarLevel.Normal : _level;
 
-    // ---- zoom hooks (host-wired; zoom is view-level in this port) ----------
     /// <summary>Returns the current zoom factor (1.0 = 100%). Wired by <see cref="RichEditorView"/>.</summary>
     public Func<double>? ZoomGetter { get; set; }
     /// <summary>Sets an explicit zoom factor (cancels fit-to-width). Wired by <see cref="RichEditorView"/>.</summary>
@@ -59,7 +56,6 @@ public partial class RichEditorToolbar
     /// <summary>Returns whether fit-to-width is currently active. Wired by <see cref="RichEditorView"/>.</summary>
     public Func<bool>? IsFitWidthGetter { get; set; }
 
-    // ---- page / zoom ------------------------------------------------------
     private ComboBox? _zoomCombo, _paperCombo, _orientCombo;
 
     private static readonly (RichEditorPageSize size, string label)[] PaperSizes =
@@ -94,7 +90,6 @@ public partial class RichEditorToolbar
 
     private void BuildPageControls(System.Collections.Generic.List<Control> items)
     {
-        // Zoom: "Fit" (index 0) + percent presets. Driven through the host zoom hooks (view-level zoom).
         _zoomCombo = PageCombo(88, Loc("ZoomTip"));
         _zoomCombo.Items.Add(new ComboBoxItem { Content = Loc("Fit") });
         foreach (var p in new[] { "50%", "75%", "100%", "125%", "150%", "200%" })
@@ -109,14 +104,12 @@ public partial class RichEditorToolbar
         };
         items.Add(_zoomCombo);
 
-        // Paper size — "Continuous" reflows to width; a concrete size fixes the column and shows the outline.
         _paperCombo = PageCombo(100, Loc("PaperTip"));
         foreach (var (size, label) in PaperSizes)
             _paperCombo.Items.Add(new ComboBoxItem { Content = label == "PaperContinuous" ? Loc(label) : label, Tag = size });
         _paperCombo.SelectionChanged += (_, _) => OnPaperChanged();
         items.Add(_paperCombo);
 
-        // Orientation (meaningful only for a concrete paper).
         _orientCombo = PageCombo(84, Loc("OrientationTip"));
         _orientCombo.Items.Add(new ComboBoxItem { Content = Loc("OrientPortrait"), Tag = RichEditorPageOrientation.Portrait });
         _orientCombo.Items.Add(new ComboBoxItem { Content = Loc("OrientLandscape"), Tag = RichEditorPageOrientation.Landscape });
@@ -141,12 +134,10 @@ public partial class RichEditorToolbar
     {
         if (_suppress || Target == null || _paperCombo?.SelectedItem is not ComboBoxItem { Tag: RichEditorPageSize size }) return;
         Target.PageSize = size;
-        // A concrete paper size shows the page outline (page view); Continuous reflows with no chrome.
         Target.ShowPageBoundaries = size != RichEditorPageSize.Continuous;
         SyncPage();
     }
 
-    // Reflect the editor's page/zoom state onto the built-in controls (called from Sync()).
     private void SyncPage()
     {
         if (Target == null) return;
@@ -174,7 +165,6 @@ public partial class RichEditorToolbar
         }
     }
 
-    // ---- file actions -----------------------------------------------------
     private Button? _exportBtn, _importBtn, _printBtn;
 
     private bool _showFileActions = true;
@@ -225,8 +215,6 @@ public partial class RichEditorToolbar
         items.Add(_printBtn);
     }
 
-    // Import edits, so it's hidden in the read-only view toolbar; Print stays hidden until a host handles
-    // PrintRequested. (Called from Sync().)
     private void SyncFileActions()
     {
         bool ro = Target?.IsReadOnly == true;
@@ -234,11 +222,7 @@ public partial class RichEditorToolbar
         if (_printBtn != null) _printBtn.IsVisible = _printRequested != null;
     }
 
-    // Both file actions are invoked fire-and-forget from their button (`() => _ = ExportAsync()`), so an
-    // exception that escapes becomes an UNOBSERVED task exception and disappears without a trace — no
-    // dialog, no error, nothing on screen. The picker calls themselves are the likeliest throwers (a
-    // storage provider that refuses, an unreadable file), which is exactly why the guard has to wrap the
-    // WHOLE body including the picker, not just the parsing that follows it.
+    // These fire-and-forget actions must report failures from the picker as well as parsing.
     private async Task ExportAsync()
     {
         try { await ExportCoreAsync(); }
@@ -267,7 +251,6 @@ public partial class RichEditorToolbar
         });
         if (file == null) return;
 
-        // Format follows the chosen extension: .flow = ZIP package, .html/.htm = HTML, .rtf = RTF, else JSON.
         var name = file.Name;
         if (name.EndsWith(".flow", StringComparison.OrdinalIgnoreCase))
         {
@@ -291,12 +274,12 @@ public partial class RichEditorToolbar
         }
         else
         {
-            string json = await Target.ToJsonAsync(); // serialize off the UI thread
+            string json = await Target.ToJsonAsync();
             using var stream = await file.OpenWriteAsync();
             using var writer = new StreamWriter(stream);
             await writer.WriteAsync(json);
         }
-        Target.MarkSaved(); // persisted → clear the modified flag (all export formats here are reloadable)
+        Target.MarkSaved();
     }
 
     private async Task ImportAsync()
@@ -324,11 +307,7 @@ public partial class RichEditorToolbar
         using var ms = new MemoryStream();
         await stream.CopyToAsync(ms);
         ms.Position = 0;
-        // Sniff the content: ZIP magic ("PK") = .flow package, "{\rtf" = RTF, "<" = HTML, else JSON.
-        // Faults land in ImportAsync's guard; the RTF branch reports through TryParse before that.
-        // Every sniff reads the BUFFER: deciding the format used to decode the whole file BOTH ways
-        // first (and copy it out twice to do so), so importing a 20 MB document built two 20 MB strings
-        // and threw one away. The format is known from the first few bytes.
+        // Sniff bytes before decoding to avoid allocating both UTF-8 and Latin-1 copies of a large file.
         byte[] buf = ms.GetBuffer();
         int len = (int)ms.Length;
         if (len >= 2 && buf[0] == (byte)'P' && buf[1] == (byte)'K')

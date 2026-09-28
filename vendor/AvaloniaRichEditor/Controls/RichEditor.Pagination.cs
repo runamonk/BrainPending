@@ -6,19 +6,10 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// P-milestone Phase 1: pagination core. Computes where pages begin in the editor's continuous
-// layout space. Pages never cut through an indivisible atom: one text line of a paragraph
-// (paragraphs split at line boundaries via the cached TextLayout's line metrics), or a whole
-// image/table/divider block. The walk mirrors MeasureContentHeight's advancement exactly (same
-// widths, same per-block heights) so downstream consumers (page-view gap injection, page render
-// for print/PDF) slice the very same geometry the editor renders — keeping core invariant 1
-// (the single TextLayout is the source of truth) intact.
+// Page breaks must follow the same geometry as measure/render and never split a text line or atomic block.
 public partial class RichEditor
 {
-    // ---- page setup <-> document model ------------------------------------
-    // Page setup (paper/orientation/header/footer/page numbers) is a DOCUMENT property persisted in
-    // JSON/.flow, but the live source of truth is the control's page properties. These keep the two in
-    // sync, guarded against the apply -> property-change -> capture feedback loop.
+    // Guard page setup synchronization against property-change feedback between the control and document.
     private bool _syncingPageSetup;
 
     // On Document change: a document that specifies a PageSetup drives the control's page properties
@@ -70,19 +61,13 @@ public partial class RichEditor
     internal const double A4PageWidth = 794;
     internal const double A4PageHeight = 1123;
 
-    // Paper margins (content box inset) and the grey-desk gap between consecutive pages — uniform
-    // across paper sizes.
-    // Aliases of the shared page geometry (Documents.PageSetup): the RTF writer needs the same numbers
-    // for its footer tab stop and cannot read them off a control type without dragging the control in.
+    // Shared with the RTF writer, which needs identical margins for header/footer tab stops.
     internal const double PagePadX = Documents.PageSetup.MarginX;
     internal const double PagePadY = Documents.PageSetup.MarginY;
-    // Grey-desk gap above the first page and between consecutive pages in page-outline view. Kept thin
-    // (~2 pt) so pages sit close together with just a sliver of desk between them, rather than a wide
-    // grey band. The whole page-stack layout (MeasureOverride height, PageRectView, MapViewToDoc) is
-    // derived from this one constant, so changing it stays consistent.
+    // Page-stack measure, drawing, and hit testing all derive their inter-page spacing from this value.
     internal const double PageGap = 3;
-    internal const double A4ContentWidth = A4PageWidth - 2 * PagePadX;    // 698
-    internal const double A4ContentHeight = A4PageHeight - 2 * PagePadY;  // 1043
+    internal const double A4ContentWidth = A4PageWidth - 2 * PagePadX;
+    internal const double A4ContentHeight = A4PageHeight - 2 * PagePadY;
 
     /// <summary>Paper size for the document. <see cref="RichEditorPageSize.Continuous"/> (the default, no
     /// fixed paper) reflows the text column to the control width; any concrete size fixes the column to that
@@ -90,7 +75,6 @@ public partial class RichEditor
     public static readonly StyledProperty<RichEditorPageSize> PageSizeProperty =
         AvaloniaProperty.Register<RichEditor, RichEditorPageSize>(nameof(PageSize), RichEditorPageSize.Continuous);
 
-    /// <summary>Gets or sets the paper size. Default <see cref="RichEditorPageSize.Continuous"/>.</summary>
     public RichEditorPageSize PageSize
     {
         get => GetValue(PageSizeProperty);
@@ -103,8 +87,6 @@ public partial class RichEditor
     public static readonly StyledProperty<bool> ShowPageBoundariesProperty =
         AvaloniaProperty.Register<RichEditor, bool>(nameof(ShowPageBoundaries), true);
 
-    /// <summary>Gets or sets whether page boundaries (desk, paper, inter-page gaps) are drawn for a
-    /// concrete <see cref="PageSize"/>. Default true.</summary>
     public bool ShowPageBoundaries
     {
         get => GetValue(ShowPageBoundariesProperty);
@@ -118,7 +100,6 @@ public partial class RichEditor
     public static readonly StyledProperty<RichEditorPageOrientation> PageOrientationProperty =
         AvaloniaProperty.Register<RichEditor, RichEditorPageOrientation>(nameof(PageOrientation));
 
-    /// <summary>Gets or sets the page orientation. Default <see cref="RichEditorPageOrientation.Portrait"/>.</summary>
     public RichEditorPageOrientation PageOrientation
     {
         get => GetValue(PageOrientationProperty);
@@ -152,7 +133,6 @@ public partial class RichEditor
     public static readonly StyledProperty<string?> PageHeaderProperty =
         AvaloniaProperty.Register<RichEditor, string?>(nameof(PageHeader));
 
-    /// <summary>Gets or sets the page header text (top margin, page view and print).</summary>
     public string? PageHeader
     {
         get => GetValue(PageHeaderProperty);
@@ -164,7 +144,6 @@ public partial class RichEditor
     public static readonly StyledProperty<string?> PageFooterProperty =
         AvaloniaProperty.Register<RichEditor, string?>(nameof(PageFooter));
 
-    /// <summary>Gets or sets the page footer text (bottom margin, page view and print).</summary>
     public string? PageFooter
     {
         get => GetValue(PageFooterProperty);
@@ -176,7 +155,6 @@ public partial class RichEditor
     public static readonly StyledProperty<bool> ShowPageNumbersProperty =
         AvaloniaProperty.Register<RichEditor, bool>(nameof(ShowPageNumbers));
 
-    /// <summary>Gets or sets whether page numbers are drawn (bottom margin, page view and print).</summary>
     public bool ShowPageNumbers
     {
         get => GetValue(ShowPageNumbersProperty);
@@ -214,7 +192,6 @@ public partial class RichEditor
     // width (with or without page chrome); Continuous reflows to the control width.
     internal double ContentLayoutWidth => IsPaged ? PaperContentWidth : Bounds.Width;
 
-    // Left edge of the fixed-width text column when paged without page chrome: centered in the control.
     private double NoChromeColX => Math.Max(0, (Bounds.Width - PaperContentWidth) / 2);
 
     private double PageDeskX => Math.Max(0, (Bounds.Width - PaperWidth) / 2);
@@ -226,7 +203,6 @@ public partial class RichEditor
     // separator centered in it — so consecutive pages read as separate without the full page chrome.
     internal const double NoChromePageGap = 40;
 
-    // Per-page content origin in view space, for both paged modes (chrome page-stack and bare column).
     private double PagedContentLeftView => PagedChrome ? PageContentOffsetX : NoChromeColX;
     private double PagedContentTopView(int i) => PagedChrome
         ? ContentTopView(i)                              // desk gap + paper stack + top margin
@@ -240,7 +216,6 @@ public partial class RichEditor
         return i;
     }
 
-    // --- Print rendering (P-milestone Phase 3). ---
 
     /// <summary>Number of pages the document occupies when paginated for print, at the current
     /// <see cref="PageSize"/> (Continuous falls back to A4). Independent of <see cref="ShowPageBoundaries"/> —
@@ -323,11 +298,8 @@ public partial class RichEditor
         return (ps.Width, ps.Height, rgb);
     }
 
-    // --- The single doc<->view coordinate choke point (P-milestone Phase 2). ---
-    // Document space = the continuous layout every walker computes in. View space = control
-    // coordinates with page chrome (desk centering, paper margins, inter-page gaps) injected.
-    // Render, caret/IME geometry and BringIntoView map doc->view; pointer input maps view->doc
-    // once at entry. Both are identity when page view is off.
+    // Document space is continuous layout; view space includes page margins and gaps. Convert pointer
+    // input once at entry and caret/IME/scroll positions on output. Continuous mode uses identity mapping.
 
     internal Point MapDocToView(Point doc)
     {
@@ -362,10 +334,8 @@ public partial class RichEditor
         return new Point(view.X - NoChromeColX, br[p] + loc);
     }
 
-    // Document-space y positions where each page's content starts; [0] is always 0. An atom taller
-    // than pageContentHeight (huge image/table) gets a page of its own and overflows it (v1 contract:
-    // no intra-row table splits, no image scaling). The image branch must never touch img.Image —
-    // the getter lazily decodes RawBytes (N6-2) and pagination has to stay decode-free.
+    // Page starts are in document space, beginning at zero. Oversized indivisible atoms overflow their
+    // page. Never access Image here: pagination must not trigger lazy image decoding.
     internal List<double> ComputePageBreaks(double contentWidth, double pageContentHeight)
     {
         var breaks = new List<double> { 0 };
@@ -388,9 +358,7 @@ public partial class RichEditor
         foreach (var block in Document.Blocks)
         {
             y += block.MarginTop;
-            // Block height + layout objects come from the single source (G1 BlockExtent), so the
-            // vertical advance here can never drift from MeasureContentHeight / the hit-tests. Only the
-            // *within-block* atom split (table rows, paragraph lines) is pagination-specific and stays.
+            // Use shared block extents; only splitting into rows or text lines is specific to pagination.
             double height = BlockExtent(block, contentWidth, y, out var paraLayout, out var tableLayout);
             if (tableLayout is { } tl)
             {
@@ -427,7 +395,6 @@ public partial class RichEditor
             }
             else
             {
-                // Indivisible single-atom block: image, divider, or an empty paragraph.
                 PlaceAtom(height);
             }
             y += block.MarginBottom;

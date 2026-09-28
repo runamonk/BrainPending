@@ -7,12 +7,10 @@ namespace AvaloniaRichEditor.Documents;
 /// plus a character offset. Inline images count as one logical character (the U+FFFC placeholder).</summary>
 public class TextPointer : IComparable<TextPointer>
 {
-    /// <summary>The paragraph that contains this position.</summary>
     public Paragraph? Paragraph { get; set; }
     /// <summary>The character offset within <see cref="Paragraph"/>. Inline images count as 1.</summary>
     public int Offset { get; set; }
 
-    /// <summary>Creates a new pointer at <paramref name="offset"/> inside <paramref name="paragraph"/>.</summary>
     public TextPointer(Paragraph? paragraph, int offset)
     {
         Paragraph = paragraph;
@@ -23,9 +21,7 @@ public class TextPointer : IComparable<TextPointer>
     public override bool Equals(object? obj) => obj is TextPointer t && t.Paragraph == Paragraph && t.Offset == Offset;
     /// <inheritdoc/>
     public override int GetHashCode() => (Paragraph?.GetHashCode() ?? 0) ^ Offset.GetHashCode();
-    /// <summary>Equality comparison.</summary>
     public static bool operator ==(TextPointer? a, TextPointer? b) => ReferenceEquals(a, null) ? ReferenceEquals(b, null) : a.Equals(b);
-    /// <summary>Inequality comparison.</summary>
     public static bool operator !=(TextPointer? a, TextPointer? b) => !(a == b);
 
     /// <inheritdoc/>
@@ -37,12 +33,9 @@ public class TextPointer : IComparable<TextPointer>
             return Offset.CompareTo(other.Offset);
         }
 
-        // Different paragraphs: order by position in the document. A single ordered walk records both
-        // paragraphs' global indices (it used to run two full traversals, one per pointer) and exits as
-        // soon as both are located — their relative order can't change after that. A paragraph not found
-        // keeps index -1, so it sorts before any present one (unchanged from the prior behaviour).
+        // Locate both paragraphs in one traversal; absent paragraphs retain index -1 and sort before present ones.
         var doc = GetFlowDocument(this.Paragraph);
-        if (doc == null) return 0; // cannot compare without document
+        if (doc == null) return 0;
 
         int index = 0, thisIdx = -1, otherIdx = -1;
         void Locate(Paragraph cell)
@@ -52,16 +45,12 @@ public class TextPointer : IComparable<TextPointer>
             index++;
         }
 
-        // The walk must reach EVERY paragraph the editor's own document order does — anchor cells of
-        // block tables, recursively through nested tables, and through inline tables hanging off a
-        // paragraph's inlines (milestones A/B). A flat one-level walk left those pointers at index -1,
-        // which sorts before everything, so a selection anchored inside a nested/inline table compared
-        // backwards. Mirrors RichEditor.ParagraphsInBlocks / TextRange.CollectParagraphs.
+        // Match editor paragraph order through nested and inline tables, skipping covered cells.
         void Walk(IEnumerable<Block> blocks)
         {
             foreach (var block in blocks)
             {
-                if (thisIdx >= 0 && otherIdx >= 0) return; // both located: their order is now fixed
+                if (thisIdx >= 0 && otherIdx >= 0) return;
                 if (block is Paragraph p)
                 {
                     Locate(p);

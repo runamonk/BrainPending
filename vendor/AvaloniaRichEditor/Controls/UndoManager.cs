@@ -30,26 +30,15 @@ internal class UndoManager
     public bool CanUndo => _undoStack.Count > 0;
     public bool CanRedo => _redoStack.Count > 0;
 
-    // Drops all history (e.g. when switching into ReadOnly mode, where no edits can occur).
     public void Clear()
     {
         _undoStack.Clear();
         _redoStack.Clear();
     }
 
-    // History is bounded by BOTH a step count and a memory budget. Every step is a full deep clone, so
-    // a count alone bounds nothing that matters: measured here, a 20000-paragraph document retained
-    // 12.1 MB per checkpoint, and fifty of those is 592 MB of history behind an editor showing one
-    // document. Large documents are trimmed sooner, while always keeping at least MinSteps so undo
-    // stays useful.
-    //
-    // The budget counts ELEMENTS, not characters. Clone shares the strings, so the text costs a
-    // snapshot nothing: the same document at 2 and at 60 characters per paragraph retained byte-for-
-    // byte the same. What it costs is the object graph, and that came out at a stable ~310 bytes per
-    // block/inline across every shape measured (274 when inlines dominate). UndoBudgetProbeTests is
-    // that measurement; re-run it if the model classes or the runtime change, because the constant is
-    // an observation rather than a rule. (The WinUI peer measures ~155 on its own model — same law,
-    // different platform, and it had the same character-counting mistake until this was measured.)
+    // Bound history by steps and estimated memory, keeping at least MinSteps. Snapshots share strings and
+    // image bytes, so charge for cloned elements rather than character count. The measured cost is about
+    // 310 bytes per element; remeasure if the document model or runtime changes.
     private const int MaxStackSize = 50;
     private const long DefaultMaxBytes = 64L * 1024 * 1024;
     private const int MinSteps = 3;
@@ -57,12 +46,9 @@ internal class UndoManager
 
     private readonly long _maxBytes;
 
-    /// <summary>Creates a history bounded by the default memory budget.</summary>
     public UndoManager() : this(DefaultMaxBytes) { }
 
-    /// <summary>Creates a history with an explicit byte budget. The parameter exists for tests: the real
-    /// budget needs a document of roughly 200,000 elements to fill, which is not something to build in
-    /// a unit test — without the seam the trimming policy could not be tested at all.</summary>
+    /// <summary>Creates history with an explicit byte budget, allowing small documents to exercise trimming.</summary>
     public UndoManager(long maxBytes) => _maxBytes = maxBytes > 0 ? maxBytes : DefaultMaxBytes;
 
     // Blocks and inlines at any depth. A cell counts as an element itself, and an inline table's cells
@@ -98,10 +84,9 @@ internal class UndoManager
         return n;
     }
 
-    internal static int EstimateBytes(FlowDocument doc) // internal: covered directly by the test suite
+    internal static int EstimateBytes(FlowDocument doc)
         => (int)System.Math.Min((long)ElementCount(doc) * BytesPerElement, int.MaxValue);
 
-    // Keeps the newest states within both budgets (but never fewer than MinSteps).
     private void Trim(Stack<UndoState> stack)
     {
         if (stack.Count <= MinSteps) return;
@@ -115,7 +100,7 @@ internal class UndoManager
             if (!withinBudget) break;
             keep++;
         }
-        if (keep >= arr.Length) return; // nothing to drop
+        if (keep >= arr.Length) return;
         stack.Clear();
         for (int i = keep - 1; i >= 0; i--) stack.Push(arr[i]); // re-push oldest-kept first
     }
@@ -159,13 +144,7 @@ internal class UndoManager
         return _redoStack.Pop();
     }
 
-    // The caret's index in document-paragraph order, and its inverse. Both walks must number the
-    // SAME positions, and must reach every paragraph the rest of the engine does: a cell's 2nd+ block
-    // (P3), a nested table's cells (P4-2b) and an inline table's cells (milestone B). The old flat walk
-    // stopped at each cell's first paragraph, so a caret anywhere deeper was never numbered — undo then
-    // fell back to index 0 and dropped the caret at the start of the document. Mirrors
-    // TextPointer.CompareTo / RichEditor.ParagraphsInBlocks (anchor cells only; each table and each
-    // non-paragraph block consumes one index of its own).
+    // Forward and reverse caret indexing must traverse identical positions, including nested and inline-table cells.
     public TextPointer GetPointerFromGlobalIndex(FlowDocument doc, int index)
     {
         if (doc.Blocks.Count == 0) return new TextPointer(null, 0);
@@ -184,7 +163,6 @@ internal class UndoManager
                     lastPara = p;
                     if (currentIndex == index) { hit = p; return; }
                     currentIndex++;
-                    // An inline table's cells are numbered right after their host paragraph.
                     foreach (var inl in p.Inlines)
                         if (inl is InlineTable it)
                             foreach (var (_, _, cell) in it.Table.LogicalCells())
@@ -210,7 +188,6 @@ internal class UndoManager
         }
 
         TraverseBlocks(doc.Blocks);
-        // Found: that paragraph. Not found (index past the end): the last one seen, as before.
         return new TextPointer(hit ?? lastPara, 0);
     }
 

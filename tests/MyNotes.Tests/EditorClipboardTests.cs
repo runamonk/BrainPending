@@ -217,7 +217,6 @@ public sealed class EditorClipboardTests
         try
         {
             editor.Focus();
-            // Omit the prefix and suffix, preserving the picture between them.
             int endParagraph = blockImage ? 1 : 0;
             int endOffset = blockImage ? 5 : 12;
             editor.RestoreTextPosition(reversed

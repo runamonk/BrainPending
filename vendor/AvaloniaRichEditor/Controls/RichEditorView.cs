@@ -10,20 +10,11 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 
 namespace AvaloniaRichEditor.Controls;
 
-/// <summary>
-/// One-line drop-in editor view (roadmap N3.6 layer ③): a <see cref="RichEditor"/> with a
-/// <see cref="RichEditorToolbar"/> docked on top and a vertical scroller around the document.
-/// The toolbar is pre-wired (<see cref="RichEditorToolbar.Target"/> = <see cref="Editor"/>), so
-/// feature flags and ReadOnly behave consistently out of the box. Reach <see cref="Editor"/> for
-/// documents/commands/flags and <see cref="Toolbar"/> for toolbar tweaks; hosts that want their
-/// own layout or scrolling should compose the lower layers (①/②) directly instead.
-/// </summary>
+/// <summary>Editor with a connected toolbar and scrolling viewport. Use the separate controls for custom layouts.</summary>
 public class RichEditorView : UserControl
 {
-    /// <summary>The editor. Load/save documents and set feature flags here.</summary>
     public RichEditor Editor { get; } = new();
 
-    /// <summary>The formatting toolbar, already targeting <see cref="Editor"/>.</summary>
     public RichEditorToolbar Toolbar { get; }
 
     /// <inheritdoc cref="ZoomFactor"/>
@@ -87,8 +78,6 @@ public class RichEditorView : UserControl
         set => SetValue(ShowFileActionsProperty, value);
     }
 
-    // Status-bar widgets (built once in the ctor). The page/zoom chrome and Export/Import/Print file
-    // actions now live natively in the toolbar (RichEditorToolbar.PageFile); this view just wires them.
     private TextBlock _statusInfo = null!, _pageInfo = null!, _limitInfo = null!;
     private Border _statusBar = null!;
 
@@ -103,7 +92,7 @@ public class RichEditorView : UserControl
         {
             bool had = _printRequested != null;
             _printRequested += value;
-            if (!had && _printRequested != null) Toolbar.PrintRequested += ForwardPrint; // reveal the toolbar's Print button
+            if (!had && _printRequested != null) Toolbar.PrintRequested += ForwardPrint;
         }
         remove
         {
@@ -114,14 +103,10 @@ public class RichEditorView : UserControl
 
     private void ForwardPrint(object? sender, EventArgs e) => _printRequested?.Invoke(this, e);
 
-    // The editor lives inside this; its LayoutTransform carries the zoom. LayoutTransform (not
-    // RenderTransform) so the scroller's extent and the editor's reflow width both follow the zoom.
-    // Top-aligned so a short document anchors at the top of the scroller instead of centering
-    // vertically (LayoutTransformControl centers its child in any slack it's given).
+    // LayoutTransform keeps scroll extent and reflow in sync with zoom. Top-align to prevent short notes from centering.
     private readonly LayoutTransformControl _zoomHost;
     private readonly ScrollViewer _scroller;
 
-    /// <summary>Resets the document viewport to its top-left corner.</summary>
     public void ScrollToTop() => _scroller.Offset = new Vector(0, 0);
 
     /// <summary>The document viewport offset, in scaled pixels.</summary>
@@ -131,10 +116,8 @@ public class RichEditorView : UserControl
         set => _scroller.Offset = value;
     }
 
-    /// <summary>Creates the bundled toolbar + scrolling editor view.</summary>
     public RichEditorView()
     {
-        // The View is the full host, so its toolbar carries everything: page/zoom + file actions.
         Toolbar = new RichEditorToolbar { Target = Editor, ToolbarLevel = ToolbarLevel.Maximum };
         // Zoom is view-level here (a LayoutTransform around the editor), so the toolbar's zoom combo is
         // driven through these hooks rather than the editor directly.
@@ -143,14 +126,9 @@ public class RichEditorView : UserControl
         Toolbar.ZoomSetter = ZoomToPercent;
         Toolbar.FitWidthAction = () => SetCurrentValue(FitToWidthProperty, true);
 
-        // View defaults: the editor's own default (Continuous, reflow to width) with no page outline/desk
-        // chrome. A host can still switch to a concrete paper size on Editor / via the toolbar.
         Editor.ShowPageBoundaries = false;
 
-        // Margin (not ScrollViewer padding) gives the editor its breathing room: the content sits
-        // inside the LayoutTransformControl's bounds, so it's neither clipped at the edge nor bled
-        // over the padding. The right gutter = 12 + the idle scrollbar's ~6px, so content/resize
-        // handles clear the resting scrollbar (its hover-expanded state just overlays the gutter).
+        // Use editor margins rather than scroller padding to avoid clipping; the right gutter clears the idle scrollbar.
         Editor.Margin = new Thickness(12, 12, 18, 12);
 
         _zoomHost = new LayoutTransformControl
@@ -161,7 +139,6 @@ public class RichEditorView : UserControl
             VerticalAlignment = VerticalAlignment.Top,
         };
 
-        // The bundle owns the scroller (layers ① and ② deliberately don't scroll themselves).
         _scroller = new ScrollViewer
         {
             Content = _zoomHost,
@@ -190,10 +167,8 @@ public class RichEditorView : UserControl
             {
                 UpdateHorizontalScroll();
                 ApplyFitWidth(); // paper/orientation/outline change the fit target
-                // The toolbar syncs its own paper/orientation combos off the editor's property change.
             }
         };
-        // Re-fit whenever the viewport width changes.
         SizeChanged += (_, _) => ApplyFitWidth();
 
         BuildStatusBar();
@@ -203,7 +178,7 @@ public class RichEditorView : UserControl
         dock.Children.Add(Toolbar);
         DockPanel.SetDock(_statusBar, Dock.Bottom);
         dock.Children.Add(_statusBar);
-        dock.Children.Add(_scroller); // fills the remaining space between toolbar and status bar
+        dock.Children.Add(_scroller);
         Content = dock;
 
         Toolbar.ShowFileActions = ShowFileActions;
@@ -224,9 +199,7 @@ public class RichEditorView : UserControl
             ? ScrollBarVisibility.Auto
             : ScrollBarVisibility.Disabled;
 
-    // Floor the editor's height at the viewport (in pre-zoom px) so short documents still fill the visible
-    // area. Capped at the viewport so this can never push content past the viewport and spawn a scrollbar
-    // (which would shrink the viewport and loop): when content is taller it already exceeds this floor.
+    // Fill the viewport for short notes. Cap the minimum height to avoid scrollbar/viewport feedback loops.
     private void UpdateEditorFillHeight()
     {
         double vh = _scroller.Viewport.Height;
@@ -243,15 +216,14 @@ public class RichEditorView : UserControl
         double vw = Bounds.Width;
         if (vw < 50) return; // not laid out yet
         const double pad = 40;
-        // Reference the actual desk gap so the fit target leaves the same thin grey margin each side as
-        // the top/inter-page gap (was hardcoded 24, leaving a wide grey band even after PageGap shrank).
+        // Fit width must use the same desk gap as page rendering.
         const double deskGap = RichEditor.PageGap;
         double target;
         if (Editor.PageSize == RichEditorPageSize.Continuous)
             target = 0;
         else
         {
-            double paperW = Editor.GetPaperPixelSize().Width; // accounts for size + orientation
+            double paperW = Editor.GetPaperPixelSize().Width;
             target = Editor.ShowPageBoundaries ? paperW + 2 * deskGap : paperW - 96;
         }
         double z = target > 0 ? Math.Clamp((vw - pad) / target, 0.2, 5.0) : 1.0;
@@ -317,7 +289,6 @@ public class RichEditorView : UserControl
         base.OnKeyDown(e);
     }
 
-    // ---------------- Built-in status bar ----------------
 
     private void BuildStatusBar()
     {
@@ -356,7 +327,7 @@ public class RichEditorView : UserControl
         UpdateCounts();
         _pageInfo.Text = string.Format(Loc("PageCountFormat"), Editor.GetPrintPageCount());
         if (!string.IsNullOrEmpty(_limitInfo.Text) && Editor.GetImageCount() <= Editor.MaxRecommendedImages)
-            _limitInfo.Text = ""; // cleared once back within bounds
+            _limitInfo.Text = "";
     }
 
     private void UpdateCounts()

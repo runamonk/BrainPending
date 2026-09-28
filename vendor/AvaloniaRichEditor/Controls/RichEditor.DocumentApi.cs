@@ -4,12 +4,8 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Document-level I/O API: HTML/JSON/.flow load-save (sync + async snapshot variants), Clear,
-// plain-text extraction and undo availability. Part of RichEditor (split out of the main file
-// for readability).
 public partial class RichEditor
 {
-    /// <summary>Serializes the document to HTML.</summary>
     public string ToHtml() => Document != null ? Formatters.HtmlDocumentFormatter.ToHtml(Document) : "";
 
     /// <summary>Replaces the document with one parsed from HTML (empty document if null/empty).</summary>
@@ -50,7 +46,6 @@ public partial class RichEditor
         else if (Document == null) LoadDocument(new FlowDocument());
     }
 
-    /// <summary>Serializes the document to the library's JSON format.</summary>
     public string ToJson() => Document != null ? Formatters.DocumentSerializer.Serialize(Document) : "";
 
     /// <summary>Replaces the document with one loaded from the library's JSON format.</summary>
@@ -107,7 +102,6 @@ public partial class RichEditor
         LoadDocument(Formatters.DocumentSerializer.FromDto(dto, pool));
     }
 
-    /// <summary>Clears the document to a single empty paragraph.</summary>
     public void Clear() => LoadDocument(new FlowDocument());
 
     /// <summary>The document's text content as plain text (paragraphs/cells separated by the platform
@@ -136,10 +130,8 @@ public partial class RichEditor
         return sb.ToString().ReplaceLineEndings();
     }
 
-    /// <summary>True if there is an edit to undo.</summary>
     public bool CanUndo => _undoManager.CanUndo;
 
-    /// <summary>True if there is an undone edit to redo.</summary>
     public bool CanRedo => _undoManager.CanRedo;
 
     // Swaps in a new document and resets caret/selection/undo to a clean state. Shared by Load*/Clear.
@@ -158,7 +150,6 @@ public partial class RichEditor
         InvalidateVisual();
     }
 
-    /// <summary>Parses an HTML fragment and inserts the resulting blocks at the caret position.</summary>
     public void InsertHtml(string html)
     {
         if (Document == null || IsReadOnly || string.IsNullOrEmpty(html)) return;

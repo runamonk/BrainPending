@@ -13,11 +13,8 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Right-click context menus (per-object: text / link / inline-image / image / table) and the
-// shared menu-item builders. Part of RichEditor (split out of the main file for readability).
 public partial class RichEditor
 {
-    // ---------------- Context menu (right-click) ----------------
 
     /// <summary>When <see langword="true"/>, the right-click menu includes the full character/paragraph/
     /// list/heading formatting groups. Default <see langword="false"/> (slim): the menu shows only clipboard,
@@ -26,7 +23,6 @@ public partial class RichEditor
     public static readonly StyledProperty<bool> ShowFormattingMenuProperty =
         AvaloniaProperty.Register<RichEditor, bool>(nameof(ShowFormattingMenu));
 
-    /// <summary>Gets or sets whether the right-click menu carries the full formatting groups. Default false.</summary>
     public bool ShowFormattingMenu
     {
         get => GetValue(ShowFormattingMenuProperty);
@@ -54,7 +50,6 @@ public partial class RichEditor
         return mi;
     }
 
-    // A checkable toggle item (checkbox) reflecting a current on/off state — e.g. a bold toggle or a list state.
     private static MenuItem CheckItem(string header, bool isChecked, Action action, bool enabled = true, KeyGesture? gesture = null)
     {
         var mi = new MenuItem { Header = header, IsEnabled = enabled, ToggleType = MenuItemToggleType.CheckBox, IsChecked = isChecked };
@@ -63,7 +58,6 @@ public partial class RichEditor
         return mi;
     }
 
-    // A radio item within a named group, checked when it matches the current value.
     private static MenuItem RadioItem(string header, string group, bool isChecked, Action action, KeyGesture? gesture = null)
     {
         var mi = new MenuItem { Header = header, ToggleType = MenuItemToggleType.Radio, GroupName = group, IsChecked = isChecked };
@@ -79,8 +73,6 @@ public partial class RichEditor
         return mi;
     }
 
-    // "Insert table" submenu carrying an 8×10 grid picker (hover to choose rows×columns, click to
-    // insert) — the same affordance as the toolbar button, replacing the old fixed 2×2 item.
     private MenuItem BuildInsertTableMenu()
     {
         const int rows = 8, cols = 10;
@@ -162,8 +154,6 @@ public partial class RichEditor
         return Sub(Loc("Margin"), sides.ToArray());
     }
 
-    // A context menu with a compact look: smaller font and tight row height/padding so long menus don't
-    // dominate the screen. The MenuItem style applies to nested submenu items too.
     private ContextMenu NewContextMenu()
     {
         // Pin the menu's font to the editor's UI font. A ContextMenu opened on this control otherwise
@@ -199,10 +189,7 @@ public partial class RichEditor
 
         if (IsReadOnly)
         {
-            // An image under the pointer wins even in a viewer, matching the WinUI peer. The generic menu
-            // below offers a Copy that acts on the TEXT SELECTION — usually empty when you have just
-            // right-clicked a picture — so a reader who wants the image got nothing that could give it to
-            // them. The image menu returns after its Copy while read-only, so no editing verb appears.
+            // In read-only mode, right-clicking an image must copy the image rather than the unrelated text selection.
             var roImage = GetBlockAtPoint(point) as ImageBlock ?? CellImageAtPoint(point);
             if (roImage != null)
             {
@@ -234,7 +221,7 @@ public partial class RichEditor
         }
         else if (CellImageAtPoint(point) is { } cellImg)
         {
-            // A block image inside a table cell (P4-2b): GetBlockAtPoint returns the enclosing table, so
+            // A block image inside a table cell: GetBlockAtPoint returns the enclosing table, so
             // detect the image via its rendered rect and give it the same image menu as a top-level one.
             _selectedBlock = cellImg;
             CollapseSelectionToCaret();
@@ -257,7 +244,7 @@ public partial class RichEditor
                 BuildTableMenu(items, tbk, tp.Paragraph, hasSelection);
             else
                 // Editing inside a cell: same caret menu as a top-level paragraph, with the table ops in a
-                // submenu. Target the INNERMOST table the caret is in (a nested table — P4-2b), not the
+                // submenu. Target the INNERMOST table the caret is in (a nested table), not the
                 // top-level one GetBlockAtPoint returned, so row/column/merge act on the right table.
                 BuildCaretMenu(items, point, hasSelection, ContextMenuTargetTable(point) ?? tbk);
         }
@@ -281,12 +268,7 @@ public partial class RichEditor
         menu.Open(this);
     }
 
-    // The block image inside a table cell whose rendered rect contains p (P4-2b), or null. Mirrors the
-    // click-selection lookup; populated each render in _cellImageRects.
-    // The table the right-click menu's table operations should act on: the innermost table enclosing the
-    // clicked position, at any depth. Derived from the hit position rather than from GetBlockAtPoint,
-    // which only sees top-level blocks — that is what makes it resolve an inline table, whose grid lives
-    // in a paragraph's inlines and is never a block of the document.
+    // Resolve the innermost table from the hit position; top-level block lookup cannot find inline tables.
     private TableBlock? ContextMenuTargetTable(Point point)
         => GetPositionFromPoint(point).Paragraph is { } p ? FindCell(p)?.tb : null;
 
@@ -303,7 +285,6 @@ public partial class RichEditor
     private void BuildCaretMenu(List<Control> items, Point point, bool hasSelection, TableBlock? cellTable)
     {
         var tp = GetPositionFromPoint(point);
-        // Right-clicking exactly on an inline image (and not over a selection) gets its own menu.
         var inlineImg = !hasSelection && tp.Paragraph != null ? InlineImageAt(tp.Paragraph, tp.Offset) : null;
         if (!hasSelection)
         {
@@ -312,7 +293,7 @@ public partial class RichEditor
         }
         if (inlineImg != null && tp.Paragraph != null)
         {
-            _selectedInline = (tp.Paragraph, inlineImg); // show selection chrome for the menu target
+            _selectedInline = (tp.Paragraph, inlineImg);
             BuildInlineImageMenu(items, tp.Paragraph, inlineImg);
         }
         else
@@ -345,8 +326,6 @@ public partial class RichEditor
         }, hasSelection, RichEditorIcon.Delete));
     }
 
-    // ── 글자 모양 (character shape) ── quick toggles (checked) + font larger/smaller + clear. The precise
-    // pickers (specific size, text color, highlight, font family) are toolbar-only, HWP-style.
     private MenuItem CharacterFormatSub(CaretFormat fmt, bool hasSelection) => Sub(Loc("CharacterFormat"),
         CheckItem(Loc("Bold"), fmt.Bold, ToggleBold, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Bold)),
         CheckItem(Loc("Italic"), fmt.Italic, ToggleItalic, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Italic)),
@@ -358,8 +337,6 @@ public partial class RichEditor
         new Separator(),
         Mi(Loc("ClearFormatting"), ClearFormatting, hasSelection, RichEditorIcon.ClearFormatting));
 
-    // 문단 모양 (paragraph shape): alignment as a radio group (current value checked) + indent + margin,
-    // flattened into one level (HWP-style — no nested 정렬/여백 submenus).
     private MenuItem BuildParagraphFormatSub(CaretFormat fmt)
     {
         var children = new List<Control>
@@ -381,7 +358,6 @@ public partial class RichEditor
         return Sub(Loc("ParagraphFormat"), children.ToArray());
     }
 
-    // ── 목록 (list) — promoted to top level; bullet/number/quote states are checked to reflect the caret.
     private MenuItem ListSub(CaretFormat fmt) => Sub(Loc("List"),
         CheckItem(Loc("BulletList"), fmt.List == ListKind.Bullet, ToggleBullet, gesture: RichEditorShortcuts.Gesture(ShortcutId.BulletList)),
         Sub(Loc("BulletStyle"),
@@ -399,7 +375,6 @@ public partial class RichEditor
         new Separator(),
         CheckItem(Loc("Quote"), fmt.Quote, ToggleQuote));
 
-    // ── 제목 (heading / style) — promoted to top level, radio-checked at the current level.
     private MenuItem HeadingSub(CaretFormat fmt) => Sub(Loc("Heading"),
         HeadingRadio(Loc("Heading1"), 1, fmt.Heading), HeadingRadio(Loc("Heading2"), 2, fmt.Heading),
         HeadingRadio(Loc("Heading3"), 3, fmt.Heading), HeadingRadio(Loc("Heading4"), 4, fmt.Heading),
@@ -407,7 +382,6 @@ public partial class RichEditor
         new Separator(),
         HeadingRadio(Loc("BodyText"), 0, fmt.Heading));
 
-    // A heading level as a radio item within the 제목 group (current level checked); carries its Ctrl+Alt+n hint.
     private MenuItem HeadingRadio(string header, int level, int current)
     {
         // Heading1..6 are consecutive enum values; level 0 = body text.
@@ -415,7 +389,6 @@ public partial class RichEditor
         return RadioItem(header, "ctxHeading", current == level, () => SetHeading(level), RichEditorShortcuts.Gesture(sc));
     }
 
-    /// <summary>Inserts a horizontal rule (<see cref="DividerBlock"/>) at the caret position.</summary>
     public void InsertDivider()
     {
         if (Document == null) return;
@@ -424,19 +397,15 @@ public partial class RichEditor
         InvalidateVisual();
     }
 
-    // The caret-position text menu. `cellTable` non-null means the caret is inside that table's cell:
-    // the menu is identical to a top-level paragraph's, except the table-insert picker is dropped (no
-    // nested tables yet) and the table-structure operations are appended as a "Table" submenu.
+    // Cell text uses the normal text menu plus operations on its enclosing table.
     private void BuildTextMenu(List<Control> items, bool hasSelection, Run? link, TableBlock? cellTable = null)
     {
-        var fmt = GetCaretFormat(); // current caret state → radio/check reflection
+        var fmt = GetCaretFormat();
         AddClipboardItems(items, hasSelection);
         items.Add(new Separator());
 
         if (ShowFormattingMenu)
         {
-            // HWP-style: 글자 모양 / 문단 모양 / 목록 / 제목 grouping submenus (flattened — alignment and
-            // margin under 문단 모양, list/heading promoted to top level). Full formatting opt-in.
             items.Add(CharacterFormatSub(fmt, hasSelection));
             items.Add(BuildParagraphFormatSub(fmt));
             items.Add(ListSub(fmt));
@@ -466,13 +435,10 @@ public partial class RichEditor
         items.Add(Mi(Loc("SelectAll"), SelectAll, icon: RichEditorIcon.SelectAll, gesture: RichEditorShortcuts.Gesture(ShortcutId.SelectAll)));
         items.Add(Mi(Loc("Undo"), DoUndo, CanUndo, RichEditorIcon.Undo, RichEditorShortcuts.Gesture(ShortcutId.Undo)));
         items.Add(Mi(Loc("Redo"), DoRedo, CanRedo, RichEditorIcon.Redo, RichEditorShortcuts.Gesture(ShortcutId.Redo)));
-        // Block-insert items appear only when the corresponding feature flag is enabled (N3.5). Inside a
-        // cell, image/divider/table all insert into the cell (P4-2a/P4-2b nested tables).
         if (AllowTables || AllowImages) items.Add(new Separator());
         if (AllowTables) items.Add(BuildInsertTableMenu());
         if (AllowImages) items.Add(Mi(Loc("InsertImage"), () => { _ = InsertImageFromFileAsync(); }, icon: RichEditorIcon.InsertImage));
         if (AllowTables || AllowImages) items.Add(Mi(Loc("InsertDivider"), InsertDivider, icon: RichEditorIcon.InsertDivider));
-        // Inside a cell: row/column/merge/delete-table operations live in a "Table" submenu.
         if (cellTable != null)
         {
             var tableItems = new List<Control>();
@@ -484,14 +450,9 @@ public partial class RichEditor
 
     private void BuildImageMenu(List<Control> items, ImageBlock img)
     {
-        // Edit
         items.Add(Mi(Loc("Copy"), () => { _ = CopyImageToClipboardAsync(img.RawBytes, img.Image, inline: false, img.Width, img.Height); }, img.RawBytes != null || img.Image != null, RichEditorIcon.Copy, RichEditorShortcuts.Gesture(ShortcutId.Copy)));
-        // A viewer gets the copy and nothing else. Everything below MUTATES the image — resize, promote
-        // to a character, margins, replace, save, delete — so a read-only editor must not offer any of
-        // it. Copy is the whole point of reaching this menu in a viewer: it copies the IMAGE, which the
-        // generic read-only menu's Copy cannot do (that one acts on the text selection).
+        // A read-only image menu exposes Copy only; the generic text menu cannot copy the selected image.
         if (IsReadOnly) return;
-        // 개체 모양 (object shape): size preset, 글자처럼 취급, margin.
         items.Add(new Separator());
         // Size presets in a submenu. "Original" resets to natural size; the fractions scale the
         // current display size (so they compound). Width/Height only — encoded bytes untouched.
@@ -505,16 +466,13 @@ public partial class RichEditor
         // cell image doesn't have (mirrors the inline-image menu's guard inside cells).
         items.Add(CheckItem(Loc("InlineWithText"), false, () => ConvertImageBlockToInline(img), img.Parent is FlowDocument));
         items.Add(MarginMenu(img));
-        // File ops: replace / save.
         items.Add(new Separator());
         items.Add(Mi(Loc("ReplaceImage"), () => { _ = ReplaceImageAsync(img); }, icon: RichEditorIcon.ReplaceImage));
         items.Add(Mi(Loc("SaveImageAs"), () => { _ = SaveImageAsync(img); }, img.Image != null, RichEditorIcon.SaveImageAs));
-        // Delete
         items.Add(new Separator());
         items.Add(Mi(Loc("Delete"), () => DeleteBlock(img), icon: RichEditorIcon.Delete));
     }
 
-    // Concise menu shown when right-clicking a hyperlink: link actions + copy, no formatting clutter.
     private void BuildLinkMenu(List<Control> items, bool hasSelection, Run link)
     {
         items.Add(Mi(Loc("OpenLink"), () => OpenUrl(link.NavigateUri!), icon: RichEditorIcon.OpenLink));
@@ -528,29 +486,22 @@ public partial class RichEditor
         items.Add(Mi(Loc("Copy"), CopySelectionToClipboard, hasSelection, RichEditorIcon.Copy));
     }
 
-    // Menu for an inline image (small in-paragraph icon): mirrors the block-image menu but operates on
-    // the InlineImage in place.
     private void BuildInlineImageMenu(List<Control> items, Paragraph p, InlineImage img)
     {
-        // Edit
         items.Add(Mi(Loc("Copy"), () => { _ = CopyImageToClipboardAsync(img.RawBytes, img.Image, inline: true, img.Width, img.Height); }, img.RawBytes != null || img.Image != null, RichEditorIcon.Copy, RichEditorShortcuts.Gesture(ShortcutId.Copy)));
-        if (IsReadOnly) return; // see BuildImageMenu: everything below mutates the image
-        // 개체 모양 (object shape): size preset + 글자처럼 취급.
+        if (IsReadOnly) return;
         items.Add(new Separator());
         items.Add(Sub(Loc("ImageSize"),
             Mi(Loc("OriginalSize"), () => ResetInlineImageSize(img), img.Image != null),
             Mi(Loc("HalfSize"), () => ScaleInlineImageSize(img, 1.0 / 2), img.Image != null),
             Mi(Loc("ThirdSize"), () => ScaleInlineImageSize(img, 1.0 / 3), img.Image != null),
             Mi(Loc("QuarterSize"), () => ScaleInlineImageSize(img, 1.0 / 4), img.Image != null)));
-        // Checked here (inline = treated as a character). Unchecking promotes back to a block image;
-        // disabled inside table cells, which cannot host block siblings.
+        // Block/inline conversion requires a top-level host paragraph; disable it inside cells.
         bool canBlock = Document != null && Document.Blocks.IndexOf(p) >= 0;
         items.Add(CheckItem(Loc("InlineWithText"), true, () => ConvertInlineImageToBlock(p, img), canBlock));
-        // File ops: replace / save.
         items.Add(new Separator());
         items.Add(Mi(Loc("ReplaceImage"), () => { _ = ReplaceInlineImageAsync(img); }, icon: RichEditorIcon.ReplaceImage));
         items.Add(Mi(Loc("SaveImageAs"), () => { _ = SaveBitmapAsync(img.Image); }, img.Image != null, RichEditorIcon.SaveImageAs));
-        // Delete
         items.Add(new Separator());
         items.Add(Mi(Loc("Delete"), () => DeleteInlineImage(p, img), icon: RichEditorIcon.Delete));
     }
@@ -562,9 +513,6 @@ public partial class RichEditor
         AddTableStructureItems(items, tb, cell, hasSelection);
     }
 
-    // The table-structure operations (row/column insert-delete, cell merge, margin, delete table).
-    // Used both as the body of the table-selection menu and as a "Table" submenu inside the cell-text
-    // menu (right-clicking while editing inside a cell).
     private void AddTableStructureItems(List<Control> items, TableBlock tb, Paragraph? cell, bool hasSelection)
     {
         var loc = cell != null ? FindCell(cell) : null;

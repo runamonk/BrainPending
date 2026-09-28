@@ -5,8 +5,6 @@ using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Table interaction: cell lookup, Tab navigation, cell-range selection (merge geometry) and the
-// row/column structure commands. Part of RichEditor (split out of the main file for readability).
 public partial class RichEditor
 {
     // The innermost table + cell holding paragraph p, resolved through the parent chain
@@ -57,7 +55,6 @@ public partial class RichEditor
         }
     }
 
-    // ---- staged Ctrl+A (HWP/Excel) ----------------------------------------
 
     // One stage of Ctrl+A while the caret is inside a table: the cell's contents -> the whole table
     // -> the enclosing table (one level per press). Returns false when there's no table stage left,
@@ -110,7 +107,6 @@ public partial class RichEditor
     private bool WholeTableSelected(TableBlock tb)
         => TableEnds(tb) is { } e && SelectionSpans(e.first, e.last);
 
-    // First/last paragraph of a whole table, taking the first and last LOGICAL (anchor) cells.
     private static (Paragraph first, Paragraph last)? TableEnds(TableBlock tb)
     {
         TableCell? first = null, last = null;
@@ -203,7 +199,6 @@ public partial class RichEditor
         return cells.Count > 0 ? cells : null;
     }
 
-    // Every paragraph inside the active cell block, at any depth (nested and inline tables included).
     private List<Paragraph> CellBlockParagraphs(List<TableCell> cells)
     {
         var result = new List<Paragraph>();
@@ -276,7 +271,7 @@ public partial class RichEditor
         var (tb, r, c) = loc.Value;
         var (ar, ac) = tb.AnchorOf(r, c);
         var current = tb.Cells[ar][ac];
-        // Document-order anchor cells across ALL tables, descending into nested tables (P4-2b) so Tab/
+        // Document-order anchor cells across ALL tables, descending into nested tables so Tab/
         // Shift+Tab traverse the whole structure — entering a nested table and stepping back out at its
         // edges. Covered (merged) cells are excluded (LogicalCells yields anchors only).
         var all = AllCellsInOrder();
@@ -285,7 +280,7 @@ public partial class RichEditor
 
         if (shift)
         {
-            if (idx > 0) FocusCell(all[idx - 1].Para); // else: first cell of the document -> no-op
+            if (idx > 0) FocusCell(all[idx - 1].Para);
         }
         else if (idx + 1 < all.Count)
         {
@@ -353,7 +348,7 @@ public partial class RichEditor
                     outList.Add(cell);
                     CollectCells(cell.Blocks, outList);
                 }
-            // Inline-table cells join the Tab order right after their host paragraph (milestone B).
+            // Inline-table cells join the Tab order right after their host paragraph.
             else if (b is Paragraph para)
                 foreach (var inl in para.Inlines)
                     if (inl is InlineTable it)
@@ -365,7 +360,6 @@ public partial class RichEditor
         }
     }
 
-    // ---- Milestone B P4: insert / treat-as-character ----------------------
 
     /// <summary>Inserts a <paramref name="rows"/>×<paramref name="cols"/> table inline at the caret,
     /// treated as a single character (HWP-style "treat as character"). The caret lands just after it.
@@ -461,7 +455,6 @@ public partial class RichEditor
 
     private void FocusCell(Paragraph cell)
     {
-        // If handed a covered cell, redirect the caret to its merge anchor.
         if (FindCell(cell) is { } loc && loc.tb.IsCovered(loc.r, loc.c))
         {
             var (ar, ac) = loc.tb.AnchorOf(loc.r, loc.c);
@@ -516,7 +509,7 @@ public partial class RichEditor
         int nr = Math.Clamp(at, 0, tb.Rows - 1);
         _caretPosition = new TextPointer(CellCaretTarget(tb, nr, 0), 0);
         CollapseSelectionToCaret();
-        InvalidateMeasure(); // see TableInsertRow
+        InvalidateMeasure();
         InvalidateVisual();
     }
 
@@ -545,7 +538,7 @@ public partial class RichEditor
         int nc = Math.Clamp(at, 0, tb.Columns - 1);
         _caretPosition = new TextPointer(CellCaretTarget(tb, 0, nc), 0);
         CollapseSelectionToCaret();
-        InvalidateMeasure(); // see TableInsertRow
+        InvalidateMeasure();
         InvalidateVisual();
     }
 }

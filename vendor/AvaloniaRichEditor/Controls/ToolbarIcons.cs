@@ -7,14 +7,9 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Built-in vector glyphs for RichEditorToolbar's default look — hand-drawn stroke icons on a 24x24
-// canvas, scaled into the requested box size. Keeps the library icon-dependency-free (a host can still
-// override any slot via RichEditorIcons.Provider, which wins over these). Only the symbol buttons are
-// vectorized; letter-conventional ones (B/I/U/S, color "A") stay as styled text and Create returns
-// null for them so the caller falls back to the glyph.
+// Built-in vector icons are the fallback for host overrides; letter buttons use styled text.
 internal static class ToolbarIcons
 {
-    // A layer is one path: stroke (outline) or fill (solid shapes like arrowheads/dots).
     private static Control Build(double box, params (string Data, bool Fill)[] layers)
     {
         var canvas = new Canvas { Width = 24, Height = 24 };
@@ -58,7 +53,6 @@ internal static class ToolbarIcons
             ("M3 5.6 L4.3 5 V9 M2.6 16 H4.6 M2.6 19 H4.6", false),
             ("M2.7 11 Q3 10.2 3.9 10.2 Q4.9 10.2 4.9 11.1 Q4.9 12 2.7 13.8 H4.9", false)),
 
-        // Up/down double arrow beside stacked text lines — the universal line-spacing glyph.
         RichEditorIcon.LineSpacing => Build(20,
             ("M5 7 V17 M11 6 H21 M11 12 H21 M11 18 H21", false),
             ("M5 3 L8 7 L2 7 Z M5 21 L8 17 L2 17 Z", true)),
@@ -91,17 +85,14 @@ internal static class ToolbarIcons
         RichEditorIcon.Highlight => Build(20,
             ("M13 4 L20 11 L12 19 H6 L4 17 Z M6 19 L11 14", false)),
 
-        // Export: a tray with text leaving it (up-and-out arrow).
         RichEditorIcon.Export => Build(20,
             ("M5 14 V19 H19 V14", false),
             ("M12 16 V5", false),
             ("M12 3 L8 8 H16 Z", true)),
-        // Import: a tray taking text in (down-and-in arrow).
         RichEditorIcon.Import => Build(20,
             ("M5 14 V19 H19 V14", false),
             ("M12 4 V13", false),
             ("M12 16 L8 11 H16 Z", true)),
-        // Print: printer body with a top feed sheet and an output sheet.
         RichEditorIcon.Print => Build(20,
             ("M7 8 V4 H17 V8", false),
             ("M5 8 H19 V16 H17", false),

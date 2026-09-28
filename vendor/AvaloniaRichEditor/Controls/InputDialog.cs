@@ -7,7 +7,6 @@ using Avalonia.Interactivity;
 
 namespace AvaloniaRichEditor.Controls;
 
-// Minimal modal text-input dialog (OK/Cancel). Returns the link text and URL, or null on cancel.
 internal static class InputDialog
 {
     public static async Task<(string Text, string Url)?> ShowAsync(Window owner, string title, string initialText, string initial)

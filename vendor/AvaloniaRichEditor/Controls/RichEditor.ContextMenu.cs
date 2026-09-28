@@ -190,6 +190,8 @@ public partial class RichEditor
 
     private void ShowContextMenu(Point point)
     {
+        ToolTip.SetIsOpen(this, false);
+        ToolTip.SetTip(this, null);
         if (Document == null) return;
 
         bool hasSelection = _selectionStart.Paragraph != null && _selectionEnd.Paragraph != null

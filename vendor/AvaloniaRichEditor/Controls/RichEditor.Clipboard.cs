@@ -261,16 +261,20 @@ public partial class RichEditor  // doc comment lives on the primary declaration
     // other apps (Word, browsers) receive the copied selection as rich text, not just plain text. A
     // bytes format is used so we control the exact UTF-8 payload (the CF_HTML byte offsets must match).
     private static readonly DataFormat<byte[]> CfHtmlFormat = DataFormat.CreateBytesPlatformFormat("HTML Format");
+    private static readonly DataFormat<byte[]> RtfClipboardFormat = DataFormat.CreateBytesPlatformFormat("Rich Text Format");
 
     // Puts the selection on the system clipboard as plain text and (on Windows) CF_HTML rich text, in one
     // DataTransfer item. Either may be empty (e.g. an inline-image-only selection has HTML but no text);
     // the item carries whichever formats are present. Mirrors the read side, which understands HTML.
-    private static async Task SetClipboardTextAndHtmlAsync(IClipboard clipboard, string text, string? html)
+    private static async Task SetClipboardTextAndHtmlAsync(IClipboard clipboard, string text, string? html, string? rtf)
     {
         var item = new DataTransferItem();
         if (!string.IsNullOrEmpty(text)) item.SetText(text);
         if (!string.IsNullOrEmpty(html) && OperatingSystem.IsWindows())
             item.Set(CfHtmlFormat, System.Text.Encoding.UTF8.GetBytes(BuildCfHtml(html!)));
+        // RTF embeds image bytes; consumers such as Word need this when they cannot use HTML data URLs.
+        if (!string.IsNullOrEmpty(rtf) && OperatingSystem.IsWindows())
+            item.Set(RtfClipboardFormat, System.Text.Encoding.ASCII.GetBytes(rtf));
         var dt = new DataTransfer();
         dt.Add(item);
         await clipboard.SetDataAsync(dt);
@@ -326,12 +330,8 @@ public partial class RichEditor  // doc comment lives on the primary declaration
     // whose single position falls inside the range) of one paragraph.
     private static Paragraph CloneParagraphRange(Paragraph p, int from, int to)
     {
-        var np = new Paragraph
-        {
-            ListType = p.ListType, ListMarker = p.ListMarker, ListLevel = p.ListLevel, HeadingLevel = p.HeadingLevel,
-            TextAlignment = p.TextAlignment, Indent = p.Indent, MarginRight = p.MarginRight,
-            IsQuote = p.IsQuote, Background = p.Background, LineHeight = p.LineHeight, LineSpacing = p.LineSpacing
-        };
+        var np = new Paragraph();
+        np.CopyFormatFrom(p);
         int idx = 0;
         foreach (var inl in p.Inlines)
         {

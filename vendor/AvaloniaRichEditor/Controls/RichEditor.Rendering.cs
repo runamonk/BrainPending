@@ -516,6 +516,7 @@ public partial class RichEditor
 
                     if (chrome)
                     {
+                        if (IsBlockInTextSelection(img)) DrawImageTextSelection(context, imgRect);
                         bool imgSelected = ReferenceEquals(img, _selectedBlock);
                         if (imgSelected)
                         {
@@ -643,6 +644,7 @@ public partial class RichEditor
                     context.DrawImage(bmp, ir);
                     if (chrome)
                     {
+                        if (IsBlockInTextSelection(cimg)) DrawImageTextSelection(context, ir);
                         if (ReferenceEquals(cimg, _selectedBlock))
                         {
                             context.FillRectangle(AccentFill60, ir);
@@ -793,6 +795,21 @@ public partial class RichEditor
     // Registers the on-screen rect of each inline image in `p` (click hit-testing for selection)
     // and, for the selected one, draws the selection border + corner resize handle. The image is
     // baseline-aligned in its line, so its rect hangs from the bottom of the hit-test box.
+    private void DrawImageTextSelection(DrawingContext context, Rect rect)
+    {
+        using (context.PushOpacity(0.45)) context.FillRectangle(SelectionBrush, rect);
+        context.DrawRectangle(null, new Pen(SelectionBrush, 1), rect);
+    }
+
+    private bool IsBlockInTextSelection(ImageBlock block)
+    {
+        if (Document == null || _selectionStart.Paragraph == null || _selectionEnd.Paragraph == null
+            || _selectionStart == _selectionEnd) return false;
+        var range = new TextRange(_selectionStart, _selectionEnd);
+        return ImageSelectionEdges(block) is { } edges
+            && range.Start.CompareTo(edges.before) <= 0 && range.End.CompareTo(edges.after) >= 0;
+    }
+
     private void RegisterInlineImages(DrawingContext context, Paragraph p, TextLayout layout, double ox, double oy)
     {
         int off = 0;
@@ -806,6 +823,14 @@ public partial class RichEditor
                     double h = Math.Max(8, ii.Height > 0 ? ii.Height : 16);
                     var ir = new Rect(ox + r.X, oy + r.Bottom - h, w, h);
                     _inlineImageRects.Add((ir, p, ii));
+                    if (_selectionStart.Paragraph != null && _selectionEnd.Paragraph != null
+                        && _selectionStart != _selectionEnd)
+                    {
+                        var range = new TextRange(_selectionStart, _selectionEnd);
+                        if (range.Start.CompareTo(new TextPointer(p, off)) <= 0
+                            && range.End.CompareTo(new TextPointer(p, off + 1)) >= 0)
+                            DrawImageTextSelection(context, ir);
+                    }
                     if (_selectedInline is { } sel && ReferenceEquals(sel.img, ii))
                     {
                         context.DrawRectangle(null, AccentPen2, ir);

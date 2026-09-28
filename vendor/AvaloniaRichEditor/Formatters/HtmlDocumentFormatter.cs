@@ -291,7 +291,7 @@ namespace AvaloniaRichEditor.Formatters
                         {
                             Text = CollapseWhitespace(t),
                             NavigateUri = linkUri,
-                            Foreground = hasLink ? Brushes.Blue : null
+                            Foreground = null
                         });
                     }
                     else if (current is { Inlines.Count: > 0 })
@@ -710,11 +710,9 @@ namespace AvaloniaRichEditor.Formatters
 
                 ApplyInlineStyle(child.GetAttributeValue("style", ""), ref cw, ref cs, ref cc, ref sz, ref cbg, ref cfam, ref cunder, ref cstrike);
 
-                // Links stay visually distinct (blue) regardless of the SITE'S own inline color (e.g.
-                // dark anchors or white button text), and get underlined via NavigateUri. A colour this
-                // library wrote is not a site's styling, though, and overriding it lost the user's own
-                // choice of link colour on every HTML save/load; `data-are-fg` marks that case.
-                if (childInLink && !childOwnColor) cc = Brushes.Blue;
+                // Let the editor's LinkForeground style pasted links. Preserve colours explicitly
+                // saved by this editor, identified by data-are-fg.
+                if (childInLink && !childOwnColor) cc = null;
 
                 if (name == "#text")
                 {

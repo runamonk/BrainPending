@@ -1376,7 +1376,8 @@ public partial class RichEditor : Control
                     PtToPx(size),
                     decos,
                     !string.IsNullOrEmpty(r.NavigateUri) && (r.Foreground == null
-                        || r.Foreground is ISolidColorBrush { Color: var color } && color == Colors.Black)
+                        || r.Foreground is ISolidColorBrush { Color: var color }
+                        && (color == Colors.Black || UseThemeColors && (color == Colors.Blue || color == Colors.RoyalBlue)))
                         ? LinkForeground : DisplayInk(r.Foreground, r.Background ?? p.Background),
                     r.Background);
                 segs.Add(new LayoutSeg { Text = r.Text, Props = props });
@@ -1638,14 +1639,27 @@ public partial class RichEditor : Control
         // Merge the first pasted paragraph into the head line.
         if (src[0] is Paragraph fp)
         {
+            if (GetParagraphLength(p) == 0) p.CopyFormatFrom(fp);
             foreach (var inl in fp.Inlines.ToList()) { fp.Inlines.Remove(inl); inl.Parent = p; p.Inlines.Add(inl); }
             src.RemoveAt(0);
+            if (src.Count == 0)
+            {
+                // A one-paragraph fragment stays on the same line, including the original tail.
+                int endOfPaste = GetParagraphLength(p);
+                foreach (var inl in tail.Inlines) { inl.Parent = p; p.Inlines.Add(inl); }
+                UpdateParents(Document);
+                _caretPosition = new TextPointer(p, endOfPaste);
+                CollapseSelectionToCaret();
+                InvalidateMeasure();
+                return;
+            }
         }
         // Merge the last pasted paragraph into the tail (prepended before the original tail text). The
         // caret lands right after that pasted text; otherwise at the start of the tail.
         int caretOff = 0;
         if (src.Count > 0 && src[^1] is Paragraph lp)
         {
+            tail.CopyFormatFrom(lp);
             var moved = lp.Inlines.ToList();
             int pos = 0;
             foreach (var inl in moved) { lp.Inlines.Remove(inl); inl.Parent = tail; tail.Inlines.Insert(pos++, inl); }
@@ -1982,6 +1996,7 @@ public partial class RichEditor : Control
         }
         else htmlDoc = BuildSelectionDocument();
         string? html = BuildSelectionHtml(htmlDoc);
+        string? rtf = htmlDoc == null ? null : Formatters.RtfDocumentFormatter.Write(htmlDoc);
 
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         // Set the clipboard whenever there's anything to put on it — text OR html. Skipping when the
@@ -1991,7 +2006,7 @@ public partial class RichEditor : Control
         {
             // Another process can hold the clipboard open; an unhandled throw here would
             // crash the process (async void). The internal rich slots above are already set.
-            try { await SetClipboardTextAndHtmlAsync(clipboard, text, html); }
+            try { await SetClipboardTextAndHtmlAsync(clipboard, text, html, rtf); }
             catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
         }
     }
@@ -2006,28 +2021,37 @@ public partial class RichEditor : Control
         var endTop = range.End.Paragraph != null ? FindTopLevelBlock(range.End.Paragraph) : null;
         if (startTop == null || endTop == null) return null;
 
-        // A selection entirely within a single table cell is intra-cell text, not a table copy. Both
-        // endpoints resolve to the same enclosing TableBlock (hasNonParagraph below would otherwise clone
-        // the WHOLE table), so fall to the run/inline clipboard and capture only the cell content.
+        // A selection inside one cell must capture that cell's selected blocks (including images),
+        // without copying the enclosing table.
+        IList<Block> sourceBlocks = Document.Blocks;
         if (ReferenceEquals(startTop, endTop) && startTop is TableBlock
             && FindCell(range.Start.Paragraph!) is { } sc && FindCell(range.End.Paragraph!) is { } ec
             && sc.tb == ec.tb && sc.r == ec.r && sc.c == ec.c)
-            return null;
+        {
+            sourceBlocks = sc.tb.Cells[sc.r][sc.c].Blocks;
+            startTop = range.Start.Paragraph!;
+            endTop = range.End.Paragraph!;
+        }
 
-        int si = Document.Blocks.IndexOf(startTop);
-        int ei = Document.Blocks.IndexOf(endTop);
+        int si = sourceBlocks.IndexOf(startTop);
+        int ei = sourceBlocks.IndexOf(endTop);
         if (si < 0 || ei < 0 || si > ei) return null;
 
         bool spansMultiple = si != ei;
         bool hasNonParagraph = false;
         for (int k = si; k <= ei; k++)
-            if (!(Document.Blocks[k] is Paragraph)) { hasNonParagraph = true; break; }
+            if (!(sourceBlocks[k] is Paragraph)) { hasNonParagraph = true; break; }
 
         if (!spansMultiple && !hasNonParagraph) return null; // plain inline selection
 
         var blocks = new List<Block>();
         for (int k = si; k <= ei; k++)
-            if (Document.Blocks[k].Clone() is Block cl) blocks.Add(cl);
+        {
+            if (sourceBlocks[k] is Paragraph p)
+                blocks.Add(CloneParagraphRange(p, p == range.Start.Paragraph ? range.Start.Offset : 0,
+                    p == range.End.Paragraph ? range.End.Offset : GetParagraphLength(p)));
+            else if (sourceBlocks[k].Clone() is Block cl) blocks.Add(cl);
+        }
         return blocks.Count > 0 ? blocks : null;
     }
 

@@ -30,3 +30,14 @@ patches before updating upstream; do not replace this project with the unpatched
 NuGet package without passing the persistence tests.
 
 - Toolbar dividers, control outlines, and popup borders use dynamic theme brushes instead of fixed gray colors.
+- Link tooltips prefer above the hovered text, flip below at screen edges, and stay hidden
+  while the editor context menu is open.
+- Tooltip anchors use window coordinates so editor offsets do not displace them into the sidebar.
+- Clipboard paragraph fragments retain all spacing properties; pasted boundary paragraphs use
+  source formatting when appropriate, and single-paragraph pastes do not add a trailing line.
+  RTF explicitly writes zero paragraph spacing so it survives clipboard and save/reopen round trips.
+- HTML paste leaves default link ink unset so it follows LinkForeground; themed rendering also
+  recognizes legacy blue link ink. Explicit custom link colours remain supported.
+- Images show text-selection overlays and allow drag selection from/through the image.
+  Mixed clipboard selections include HTML and RTF with embedded pictures, and trim boundary
+  paragraphs instead of copying unselected text. Selections within a cell retain block images.

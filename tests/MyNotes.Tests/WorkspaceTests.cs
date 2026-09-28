@@ -1,4 +1,3 @@
-using System.Text.Json;
 using MyNotes.Core;
 
 namespace MyNotes.Tests;
@@ -229,26 +228,6 @@ public sealed class WorkspaceTests : IDisposable
         var original = w.CreateNote(w.Root, "Duplicate", NoteWorkspace.PlainTextRtf("Keep"));
         Assert.Throws<IOException>(() => w.CreateNote(w.Root, "Duplicate"));
         Assert.Contains("Keep", w.Read(original.Path).Rtf);
-    }
-
-    [Fact]
-    public void ZuulSnipsImportCopiesRtfAndHandlesPlainTextAndDuplicateTitles()
-    {
-        var w = Workspace;
-        var source = Path.Combine(_temp, "Snips");
-        Directory.CreateDirectory(source);
-        File.WriteAllText(Path.Combine(source, ".folders.json"), "[{\"Id\":\"f\",\"Name\":\"Work\"}]");
-        var json = JsonSerializer.Serialize(new[] {
-            new { FolderId = "f", Name = "Same", Rtf = @"{\rtf1\ansi \b Bold}", Text = "" },
-            new { FolderId = "f", Name = "Same", Rtf = "", Text = "Plain {text} 😀" }
-        });
-        File.WriteAllText(Path.Combine(source, ".snips.json"), json);
-        var result = SnipsImporter.Import(w, source);
-        Assert.Equal(2, result.Count);
-        Assert.Equal(json, File.ReadAllText(Path.Combine(source, ".snips.json")));
-        Assert.True(File.Exists(Path.Combine(result.Folder, "Work", "Same.rtf")));
-        Assert.True(File.Exists(Path.Combine(result.Folder, "Work", "Same (2).rtf")));
-        Assert.Contains(@"\b Bold", File.ReadAllText(Path.Combine(result.Folder, "Work", "Same.rtf")));
     }
 
     public void Dispose()

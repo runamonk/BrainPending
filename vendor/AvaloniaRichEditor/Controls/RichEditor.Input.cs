@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives.PopupPositioning;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Media.Imaging;
@@ -200,9 +201,12 @@ public partial class RichEditor
             {
                 _selectedBlock = ci.img;
                 _caretBlock = null;
+                if (ImageSelectionEdges(ci.img) is { } edges) _caretPosition = edges.before;
                 CollapseSelectionToCaret();
                 ResetCaretBlink();
                 InvalidateVisual();
+                e.Pointer.Capture(this);
+                _isSelecting = true;
                 return;
             }
 
@@ -224,9 +228,12 @@ public partial class RichEditor
             // can be deleted with Del/Backspace. Keyboard arrows still place a block caret around it.
             _selectedBlock = clickedImage;
             _caretBlock = null;
+            if (ImageSelectionEdges(clickedImage) is { } edges) _caretPosition = edges.before;
             CollapseSelectionToCaret();
             ResetCaretBlink();
             InvalidateVisual();
+            e.Pointer.Capture(this);
+            _isSelecting = true;
             return;
         }
         if (clickedBlock is TableBlock table)
@@ -290,7 +297,10 @@ public partial class RichEditor
                     _selectedInline = (ir.p, ir.img);
                     ResetCaretBlink();
                     InvalidateVisual();
-                    return; // no drag-selection from this press
+                    // Keep click-to-select/resize, but allow dragging from the image into text.
+                    e.Pointer.Capture(this);
+                    _isSelecting = true;
+                    return;
                 }
 
         // Double-click selects the word under the caret; triple-click selects the whole paragraph.
@@ -321,8 +331,23 @@ public partial class RichEditor
         _isSelecting = true;
     }
 
-    // Word span [start,end) around `offset` in plain text. A "word" is a run of letters/digits/_
-    // (Hangul syllables count as letters). On whitespace/punctuation, selects that single character.
+    // Normalization guarantees paragraph positions before and after every block image.
+    private (TextPointer before, TextPointer after)? ImageSelectionEdges(ImageBlock image)
+    {
+        IList<Block>? blocks = image.Parent switch
+        {
+            FlowDocument doc => doc.Blocks,
+            TableCell cell => cell.Blocks,
+            _ => null
+        };
+        if (blocks == null) return null;
+        int index = blocks.IndexOf(image);
+        if (index <= 0 || index + 1 >= blocks.Count
+            || blocks[index - 1] is not Paragraph before || blocks[index + 1] is not Paragraph after) return null;
+        return (new TextPointer(before, GetParagraphLength(before)), new TextPointer(after, 0));
+    }
+
+    // Word span [start,end) around `offset`, including Hangul syllables as letters.
     private static (int start, int end) WordBoundsAt(string text, int offset)
     {
         if (text.Length == 0) return (0, 0);
@@ -487,13 +512,27 @@ public partial class RichEditor
     {
         base.OnPointerMoved(e);
         UpdatePointer(e, out var hoverUrl);
+        if (_openContextMenu?.IsOpen == true) hoverUrl = null;
         if (!Equals(ToolTip.GetTip(this), hoverUrl))
         {
             ToolTip.SetIsOpen(this, false);
             ToolTip.SetTip(this, hoverUrl);
         }
         // Links are drawn inside one control, so moving onto a link does not raise PointerEntered.
-        ToolTip.SetPlacement(this, PlacementMode.Pointer);
+        // Anchor above the hovered text, rather than below the pointer where menus open.
+        // Custom popup anchors use the containing window's coordinates, not editor-local ones.
+        // This includes sidebar/toolbar offsets, scrolling, and transforms around the editor.
+        var hoverPoint = e.GetPosition(TopLevel.GetTopLevel(this) ?? (Visual)this);
+        ToolTip.SetPlacement(this, PlacementMode.Custom);
+        ToolTip.SetCustomPopupPlacementCallback(this, placement =>
+        {
+            placement.AnchorRectangle = new Rect(hoverPoint.X, hoverPoint.Y, 1, 16);
+            placement.Anchor = PopupAnchor.TopLeft;
+            placement.Gravity = PopupGravity.TopRight;
+            placement.Offset = new Point(-8, -6);
+            // Flip below at the screen edge instead of sliding the tooltip onto the link.
+            placement.ConstraintAdjustment = PopupPositionerConstraintAdjustment.SlideX | PopupPositionerConstraintAdjustment.FlipY;
+        });
         ToolTip.SetIsOpen(this, !string.IsNullOrEmpty(hoverUrl));
     }
 
@@ -609,7 +648,29 @@ public partial class RichEditor
             _trustLayoutCache = true;
             try { _selectionEnd = GetPositionFromPoint(point); }
             finally { _trustLayoutCache = false; }
+            var hitImage = GetBlockAtPoint(point) as ImageBlock
+                ?? _cellImageRects.FirstOrDefault(i => i.rect.Contains(point)).img;
+            if (hitImage != null && ImageSelectionEdges(hitImage) is { } hitEdges)
+                _selectionEnd = _selectionStart.CompareTo(hitEdges.before) <= 0 ? hitEdges.after : hitEdges.before;
+            if (_selectedBlock is ImageBlock dragBlock && ImageSelectionEdges(dragBlock) is { } dragEdges
+                && _selectionStart != _selectionEnd)
+            {
+                _selectionStart = _selectionEnd.CompareTo(dragEdges.before) > 0 ? dragEdges.before : dragEdges.after;
+                _selectedBlock = null;
+            }
             _caretPosition = new TextPointer(_selectionEnd.Paragraph, _selectionEnd.Offset);
+            if (_selectedInline is { } dragImage && _selectionStart != _selectionEnd)
+            {
+                int imageOffset = 0;
+                foreach (var inline in dragImage.p.Inlines)
+                {
+                    if (ReferenceEquals(inline, dragImage.img)) break;
+                    imageOffset += InlineLen(inline);
+                }
+                var before = new TextPointer(dragImage.p, imageOffset);
+                _selectionStart = _selectionEnd.CompareTo(before) > 0 ? before : new TextPointer(dragImage.p, imageOffset + 1);
+                _selectedInline = null;
+            }
             // A drag spanning two different cells of one table is a cell-block selection: enter cell mode
             // so subsequent single clicks select whole cells (HWP behaviour).
             var sc = _selectionStart.Paragraph != null ? FindCell(_selectionStart.Paragraph) : null;

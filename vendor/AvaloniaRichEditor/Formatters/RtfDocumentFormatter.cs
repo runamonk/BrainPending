@@ -1273,8 +1273,9 @@ internal sealed class RtfWriter
             _body.Append($@"\sl{(int)Math.Round(p.LineSpacing * 200)}\slmult1");
         else if (double.IsFinite(p.LineHeight) && p.LineHeight > 0)
             _body.Append($@"\sl-{(int)Math.Round(p.LineHeight * 15)}\slmult0");
-        if (p.MarginTop > 0) _body.Append($@"\sb{(int)Math.Round(p.MarginTop * 15)}");
-        if (p.MarginBottom > 0) _body.Append($@"\sa{(int)Math.Round(p.MarginBottom * 15)}");
+        // Zero spacing is explicit: omitting it would restore the editor's default paragraph gap.
+        _body.Append($@"\sb{(int)Math.Round(p.MarginTop * 15)}");
+        _body.Append($@"\sa{(int)Math.Round(p.MarginBottom * 15)}");
         // ALWAYS emit the alignment, including \ql for left. In the spec \pard resets alignment to left,
         // but HWP treats \pard as "back to the current defaults" and keeps a previously seen \qr — so a
         // single right-aligned paragraph turned every following one right-aligned on paste. Being explicit

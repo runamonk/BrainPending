@@ -47,6 +47,11 @@
                     ChromeWhite="#F8F8F2" ChromeDisabledHigh="#6272A4" ChromeDisabledLow="#44475A" />
             </FluentTheme.Palettes>
         </FluentTheme>
+         <Style Selector=":is(Control)">
+            <Setter Property="ToolTip.Placement" Value="Top" />
+            <Setter Property="ToolTip.VerticalOffset" Value="5" />
+            <Setter Property="ToolTip.HorizontalOffset" Value="5" />
+        </Style>
         <Style Selector="Window">
             <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />

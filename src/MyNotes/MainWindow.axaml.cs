@@ -746,6 +746,19 @@ public partial class MainWindow : Window
         return true;
     }
 
+    private async void ImportNotes_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
+    {
+        if (_workspace == null || !SaveCurrent()) return;
+        var destination = _workspace.IsInTrash(_folder) ? _workspace.Root : _folder;
+        var dialog = new ImportDialog(_workspace, destination);
+        _inDialog = true;
+        try { await dialog.ShowDialog(this); }
+        finally { _inDialog = false; }
+        RefreshBrowser(true);
+        if (dialog.Result is { } result)
+            ShowNotice($"Imported {result.Pages.Count} OneNote pages into {result.Folder}. See Import report for details.");
+    });
+
     private async void OpenNotebook_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
     {
         if (!SaveCurrent()) return;

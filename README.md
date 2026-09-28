@@ -112,7 +112,7 @@ dotnet test MyNotes.slnx
 ```
 
 Tests cover persistence, competing instances, external changes in an open window,
-save-on-close, import, and RTF round-trips for links, images, Unicode, fonts,
+save-on-close and RTF round-trips for links, images, Unicode, fonts,
 highlighting, lists and alignment. A headless Skia-rendered screenshot is written
 to `artifacts/screenshots/editor.png` by the visual-review test.
 
@@ -129,7 +129,7 @@ are kept. Windows is the validated target; macOS/Linux have not been validated.
 ## Source layout
 
 - `src/MyNotes`: Avalonia application and UI.
-- `src/MyNotes.Core`: storage, conflict preservation, and ZuulSnips import.
+- `src/MyNotes.Core`: storage and conflict preservation.
 - `tests/MyNotes.Tests`: persistence, editor, and window integration tests.
 - `vendor/AvaloniaRichEditor`: pinned MIT editor source with documented RTF fixes.
 
@@ -155,3 +155,33 @@ bundled defaults if loading fails. **Reset built-in themes** restores all suppli
 themes, preserves custom entries, and saves a uniquely named `.bak` beside the
 file. Correct invalid JSON before resetting so custom entries can be preserved.
 The bundled defaults are maintained in `src/MyNotes/DefaultThemes.json`.
+
+## Import from Microsoft OneNote
+
+Choose **Import notes** in the sidebar, then **Load notebooks**. This first
+import source requires the Windows desktop version of OneNote, with first-run
+setup completed and the notebooks open and synced. **Open .one / .onetoc2…** asks
+OneNote to open an existing section (`.one`) or notebook (`.onetoc2`). Selecting
+`.onetoc2` loads pages from the notebook’s sections and section groups; keep the
+accompanying `.one` files and subfolders in place. MyNotes reads through OneNote,
+rather than parsing these binary files directly.
+
+Filter by notebook, section, or page name. Use **Select all shown**, or Ctrl/Shift
+selection, and review a page preview. Choose a destination inside the current
+MyNotes notebook and click **Import selected**. Each run creates a separate
+folder, preserving notebook/section-group/section structure and giving duplicate
+titles unique filenames. Existing notes and source OneNote pages are not changed.
+
+Text, basic formatting, links, lists, tables, and embedded supported images are
+converted to RTF. Free-positioned content is arranged top-to-bottom, then
+left-to-right. Ink, attachments, media, and tags are not fully converted; the
+preview and import report flag these limitations. Internal OneNote links still
+open their original OneNote pages. Password-protected sections must be unlocked
+in OneNote. Re-importing creates another copy rather than synchronizing notes.
+
+Escape or **Stop import** cancels remaining pages and keeps completed notes.
+A report note summarizes skipped pages and conversion warnings. A JSON record in
+`.mynotes/imports` retains source page IDs and imported paths. OneNote calls run
+off the UI thread; an in-flight OneNote call may finish after cancellation, but
+its result is discarded. No remote or local-file image references are fetched
+by the converter.

@@ -151,6 +151,7 @@ public sealed class EditorTests
                 }
                 Assert.True(found, $"Expected tooltip for {url}");
                 Assert.True(ToolTip.GetIsOpen(editor));
+                Assert.Equal(PlacementMode.Custom, ToolTip.GetPlacement(editor));
             }
             window.MouseMove(new Point(500, 200));
             Assert.Null(ToolTip.GetTip(editor));
@@ -159,6 +160,61 @@ public sealed class EditorTests
             window.MouseMove(new Point(-10, -10));
             Assert.False(ToolTip.GetIsOpen(editor));
             Assert.False(editor.IsModified);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void LinkTooltipUsesWindowCoordinatesWhenEditorIsOffset()
+    {
+        var editor = new RichEditor { Margin = new Thickness(300, 180, 0, 0) };
+        editor.LoadHtml("<p><a href='https://example.com'>Link</a></p>");
+        var window = new Window { Content = editor, Width = 800, Height = 500 };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(800, 500));
+            bitmap.Render(window);
+            window.MouseMove(new Point(320, 192));
+            Assert.True(ToolTip.GetIsOpen(editor));
+            var placement = (Avalonia.Controls.Primitives.PopupPositioning.CustomPopupPlacement)Activator.CreateInstance(
+                typeof(Avalonia.Controls.Primitives.PopupPositioning.CustomPopupPlacement),
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, null,
+                [new Size(200, 40), new Thickness(), editor], null)!;
+            ToolTip.GetCustomPopupPlacementCallback(editor)!(placement);
+            Assert.Equal(new Rect(320, 192, 1, 16), placement.AnchorRectangle);
+            Assert.Equal(new Point(-8, -6), placement.Offset);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void LinkTooltipClosesAndStaysClosedWhileContextMenuIsOpen()
+    {
+        var editor = new RichEditor();
+        editor.LoadHtml("<p><a href='https://example.com'>Link</a></p>");
+        var window = new Window { Content = editor, Width = 600, Height = 400 };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(600, 400));
+            bitmap.Render(window);
+            window.MouseMove(new Point(20, 12));
+            Assert.True(ToolTip.GetIsOpen(editor));
+            window.MouseDown(new Point(20, 12), Avalonia.Input.MouseButton.Right);
+            window.MouseUp(new Point(20, 12), Avalonia.Input.MouseButton.Right);
+            var menu = (ContextMenu)typeof(RichEditor).GetField("_openContextMenu",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(editor)!;
+            Assert.True(menu.IsOpen);
+            Assert.False(ToolTip.GetIsOpen(editor));
+            Assert.Null(ToolTip.GetTip(editor));
+            window.MouseMove(new Point(21, 12));
+            Assert.False(ToolTip.GetIsOpen(editor));
+            menu.Close();
+            window.MouseMove(new Point(22, 12));
+            Assert.True(ToolTip.GetIsOpen(editor));
         }
         finally { window.Close(); }
     }

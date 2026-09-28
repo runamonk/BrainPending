@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Collections.Concurrent;
 using System.Xml.Linq;
 
 namespace MyNotes.Importing;
@@ -10,14 +11,20 @@ internal sealed record ImportPage(string Id, string Title, ImportFolder[] Folder
     public override string ToString() => Title + " — " + Location;
 }
 
-internal interface INoteImportSource
+internal interface INoteImportSource : IDisposable
 {
     Task<IReadOnlyList<ImportPage>> GetPagesAsync(string? sourceFile, CancellationToken cancellation);
     Task<string> GetPageAsync(string id, CancellationToken cancellation);
+    void IDisposable.Dispose() { }
 }
 
 internal sealed class OneNoteSource : INoteImportSource
 {
+    private readonly BlockingCollection<Action> _requests = new();
+    private readonly object _lifetime = new();
+    private Thread? _thread;
+    private object? _instance;
+    private bool _disposed;
     public Task<IReadOnlyList<ImportPage>> GetPagesAsync(string? sourceFile, CancellationToken cancellation) =>
         ReadAsync<IReadOnlyList<ImportPage>>(app =>
         {
@@ -59,35 +66,58 @@ internal sealed class OneNoteSource : INoteImportSource
                         (string?)a.Attribute("name") ?? "Untitled section")).ToArray())).ToArray();
     }
 
-    private static Task<T> ReadAsync<T>(Func<IOneNoteApplication, T> read, CancellationToken cancellation)
+    private Task<T> ReadAsync<T>(Func<IOneNoteApplication, T> read, CancellationToken cancellation)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("OneNote import requires the Windows desktop version of OneNote.");
         var completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() =>
+        lock (_lifetime)
         {
-            object? instance = null;
-            try
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_thread == null)
             {
-                if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
-                cancellation.ThrowIfCancellationRequested();
-                var type = Type.GetTypeFromProgID("OneNote.Application")
-                    ?? throw new InvalidOperationException("Install Microsoft OneNote for Windows, open your notebooks in it, then try again.");
-                instance = Activator.CreateInstance(type) ?? throw new InvalidOperationException("Could not start OneNote.");
-                var result = read((IOneNoteApplication)instance);
-                cancellation.ThrowIfCancellationRequested();
-                completion.TrySetResult(result);
+                _thread = new Thread(() =>
+                {
+                    try { foreach (var request in _requests.GetConsumingEnumerable()) request(); }
+                    finally
+                    {
+                        if (OperatingSystem.IsWindows() && _instance != null && Marshal.IsComObject(_instance))
+                            Marshal.FinalReleaseComObject(_instance);
+                        _requests.Dispose();
+                    }
+                }) { IsBackground = true, Name = "MyNotes OneNote reader" };
+                _thread.SetApartmentState(ApartmentState.STA);
+                _thread.Start();
             }
-            catch (OperationCanceledException) { completion.TrySetCanceled(cancellation); }
-            catch (COMException error) { completion.TrySetException(new IOException("OneNote could not read this content. Open it in OneNote, let it sync, and unlock any protected sections. " + error.Message, error)); }
-            catch (Exception error) { completion.TrySetException(error); }
-            finally
+            _requests.Add(() =>
             {
-                if (OperatingSystem.IsWindows() && instance != null && Marshal.IsComObject(instance)) Marshal.FinalReleaseComObject(instance);
-            }
-        }) { IsBackground = true, Name = "MyNotes OneNote reader" };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
+                try
+                {
+                    if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+                    cancellation.ThrowIfCancellationRequested();
+                    var type = Type.GetTypeFromProgID("OneNote.Application")
+                        ?? throw new InvalidOperationException("Install Microsoft OneNote for Windows, open your notebooks in it, then try again.");
+                    _instance ??= Activator.CreateInstance(type) ?? throw new InvalidOperationException("Could not start OneNote.");
+                    var result = read((IOneNoteApplication)_instance);
+                    cancellation.ThrowIfCancellationRequested();
+                    completion.TrySetResult(result);
+                }
+                catch (OperationCanceledException) { completion.TrySetCanceled(cancellation); }
+                catch (COMException error) { completion.TrySetException(new IOException("OneNote could not read this content. Open it in OneNote, let it sync, and unlock any protected sections. " + error.Message, error)); }
+                catch (Exception error) { completion.TrySetException(error); }
+            });
+        }
         // A running COM call cannot be interrupted; its result is discarded on cancellation.
         return completion.Task.WaitAsync(cancellation);
+    }
+
+    public void Dispose()
+    {
+        lock (_lifetime)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _requests.CompleteAdding();
+            if (_thread == null) _requests.Dispose();
+        }
     }
 }

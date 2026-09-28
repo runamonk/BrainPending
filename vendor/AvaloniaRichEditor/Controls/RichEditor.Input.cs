@@ -455,8 +455,12 @@ public partial class RichEditor
         ApplyCaretSelection(shift);
     }
 
-    private static void OpenUrl(string url)
+    /// <summary>Allows the host to handle application-owned links. Return true when handled.</summary>
+    public Func<string, bool>? LinkHandler { get; set; }
+
+    private void OpenUrl(string url)
     {
+        if (LinkHandler?.Invoke(url) == true) return;
         // Only launch web links from pasted content; never arbitrary schemes (file:, etc.).
         if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
             !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))

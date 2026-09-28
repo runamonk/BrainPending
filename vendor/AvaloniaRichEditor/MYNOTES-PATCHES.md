@@ -40,3 +40,5 @@ NuGet package without passing the persistence tests.
 - Images show text-selection overlays and allow drag selection from/through the image.
   Mixed clipboard selections include HTML and RTF with embedded pictures, and trim boundary
   paragraphs instead of copying unselected text. Selections within a cell retain block images.
+- `LinkHandler` lets the app handle notebook attachment links before the editor's
+  normal HTTP/HTTPS-only launcher. Other local/custom schemes remain blocked.

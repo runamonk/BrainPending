@@ -22,7 +22,7 @@
       <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">
         <TextBox x:Name="Filter" PlaceholderText="Filter by notebook, section, or page…" TextChanged="Filter_Changed" />
         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
-          <Button x:Name="SelectAllButton" Content="Select all shown" Click="SelectAll_Click" />
+          <Button x:Name="SelectAllButton" Content="Select all shown" IsEnabled="False" Click="SelectAll_Click" />
           <TextBlock Text="Ctrl/Shift-click to select pages" VerticalAlignment="Center" FontSize="11" />
         </StackPanel>
         <ListBox x:Name="Pages" Grid.Row="2" SelectionMode="Multiple" SelectionChanged="Pages_Changed" AutomationProperties.Name="OneNote pages" />
@@ -34,8 +34,12 @@
         <TextBlock x:Name="PreviewInfo" Grid.Row="2" TextWrapping="Wrap" MaxHeight="100" />
       </Grid>
     </Grid>
-    <TextBox x:Name="Status" Grid.Row="4" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="110"
-             Text="Requires Microsoft OneNote for Windows. Open and sync your notebooks in OneNote first. Handwriting, attachments, and media are reported rather than converted." />
+    <StackPanel Grid.Row="4" Spacing="6">
+      <ProgressBar x:Name="ImportProgressBar" IsVisible="False" Minimum="0" Maximum="100" Height="8" AutomationProperties.Name="Import progress" />
+      <TextBlock x:Name="ProgressLabel" IsVisible="False" />
+      <TextBox x:Name="Status" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="110"
+               Text="Requires Microsoft OneNote for Windows. Open and sync your notebooks in OneNote first. Attached files are copied; handwriting and media are reported rather than converted." />
+    </StackPanel>
     <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
       <Button x:Name="CancelButton" Content="Cancel" Click="Cancel_Click" />
       <Button x:Name="ImportButton" Content="Import selected" IsEnabled="False" Classes="action primary" Click="Import_Click" />

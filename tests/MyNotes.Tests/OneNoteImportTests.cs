@@ -34,8 +34,9 @@ public sealed class OneNoteImportTests : IDisposable
         [new("1", "Meeting", [new("book", "Work"), new("section", "Meetings")]),
          new("2", "Meeting", [new("book", "Work"), new("section", "Meetings")])];
         public Func<string, string> Read { get; set; } = _ => PageXml;
+        public Func<string, CancellationToken, Task<string>>? ReadAsync { get; set; }
         public Task<IReadOnlyList<ImportPage>> GetPagesAsync(string? sectionFile, CancellationToken cancellation) => Task.FromResult(Pages);
-        public Task<string> GetPageAsync(string id, CancellationToken cancellation) => Task.FromResult(Read(id));
+        public Task<string> GetPageAsync(string id, CancellationToken cancellation) => ReadAsync?.Invoke(id, cancellation) ?? Task.FromResult(Read(id));
     }
 
     [Theory]
@@ -218,6 +219,187 @@ public sealed class OneNoteImportTests : IDisposable
             Assert.Contains("1 pages imported", dialog.FindControl<TextBox>("Status")!.Text);
             Assert.False(dialog.FindControl<Button>("ImportButton")!.IsEnabled);
             Assert.Equal("Close", dialog.FindControl<Button>("CancelButton")!.Content);
+            Assert.Equal(1, dialog.FindControl<ProgressBar>("ImportProgressBar")!.Value);
+            Assert.Contains("100%", dialog.FindControl<TextBlock>("ProgressLabel")!.Text!.Replace(" ", ""));
+        }
+        finally { dialog.Close(); }
+    }
+
+    private sealed class CaptureProgress(Action<ImportProgress> onReport) : IProgress<ImportProgress>
+    {
+        public void Report(ImportProgress value) => onReport(value);
+    }
+
+    [AvaloniaFact]
+    public async Task ProgressCountsFailedPagesAndDeduplicatesSelection()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var source = new FakeSource { Read = id => id == "1" ? throw new IOException("Locked") : PageXml };
+        var updates = new List<ImportProgress>();
+        var result = await NoteImportService.ImportAsync(source, [..source.Pages, source.Pages[0]], workspace, _root,
+            new CaptureProgress(updates.Add), CancellationToken.None);
+        Assert.Equal(2, result.Processed);
+        Assert.Equal(1, result.Failed);
+        Assert.Equal(2, updates[^1].Completed);
+        Assert.All(updates, update => Assert.Equal(2, update.Total));
+        Assert.Equal(1, updates[^1].Imported);
+        Assert.Equal(1, updates[^1].Failed);
+        Assert.Equal(updates.Select(u => u.Completed).Order(), updates.Select(u => u.Completed));
+    }
+
+    [AvaloniaFact]
+    public async Task ImportsCachedAttachmentsAndRetainsLinksThroughRtfAndNoteMoves()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var cache = Path.Combine(_root, "cached.bin");
+        File.WriteAllBytes(cache, [0, 3, 255, 17]);
+        var xml = new System.Xml.Linq.XElement("Page", new System.Xml.Linq.XElement("InsertedFile",
+            new System.Xml.Linq.XAttribute("preferredName", "résumé.pdf"), new System.Xml.Linq.XAttribute("pathCache", cache))).ToString();
+        var source = new FakeSource { Read = _ => xml };
+        var result = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
+        File.Delete(cache);
+        Assert.Empty(result.Issues);
+        var links = new List<string>();
+        foreach (var page in result.Pages)
+        {
+            var path = Path.Combine(result.Folder, page.Path);
+            var moved = workspace.MoveToTrash(workspace.Rename(path, "Renamed " + page.SourceId));
+            var restored = RtfDocumentFormatter.Parse(workspace.Read(moved).Rtf);
+            var run = Assert.Single(restored.Blocks.OfType<Paragraph>().SelectMany(p => p.Inlines).OfType<Run>(), r => r.NavigateUri != null);
+            links.Add(run.NavigateUri!);
+            var attachment = new AttachmentStore(_root).Resolve(run.NavigateUri!);
+            Assert.Equal("résumé.pdf", attachment.Name);
+            Assert.Equal(new byte[] { 0, 3, 255, 17 }, File.ReadAllBytes(attachment.Path));
+        }
+        Assert.NotEqual(links[0], links[1]);
+    }
+
+    [AvaloniaFact]
+    public async Task MissingCacheReportsAttachmentWithoutReadingOriginalSource()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var original = Path.Combine(_root, "original.txt");
+        File.WriteAllText(original, "Do not import this external file");
+        var xml = new System.Xml.Linq.XElement("Page", new System.Xml.Linq.XElement("T", "Keep this note"),
+            new System.Xml.Linq.XElement("InsertedFile", new System.Xml.Linq.XAttribute("pathSource", original),
+                new System.Xml.Linq.XAttribute("preferredName", "original.txt"))).ToString();
+        var source = new FakeSource { Read = _ => xml };
+        var result = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
+        Assert.Equal(2, result.Pages.Count);
+        Assert.Contains(result.Issues, issue => issue.Contains("Attachment 'original.txt' could not be imported"));
+        Assert.False(Directory.Exists(Path.Combine(_root, ".mynotes", "attachments")));
+    }
+
+    [AvaloniaFact]
+    public async Task CancelDuringAttachmentCopyKeepsCompletedNotesAndRemovesUncommittedFiles()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var cache = Path.Combine(_root, "cache.bin");
+        File.WriteAllText(cache, "test");
+        var fileXml = new System.Xml.Linq.XElement("InsertedFile", new System.Xml.Linq.XAttribute("pathCache", cache),
+            new System.Xml.Linq.XAttribute("preferredName", "test.txt"));
+        var source = new FakeSource { Read = id => id == "1" ? "<Page><T>Complete</T></Page>" : new System.Xml.Linq.XElement("Page", fileXml, new System.Xml.Linq.XElement(fileXml)).ToString() };
+        using var cancellation = new CancellationTokenSource();
+        var copies = 0;
+        var result = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root,
+            new CaptureProgress(update => { if (update.Message.StartsWith("Copying attachment") && ++copies == 2) cancellation.Cancel(); }), cancellation.Token);
+        Assert.True(result.Cancelled);
+        Assert.Single(result.Pages);
+        Assert.Equal(1, result.Processed);
+        Assert.Empty(Directory.GetFiles(Path.Combine(_root, ".mynotes", "attachments"), "*", SearchOption.AllDirectories));
+    }
+
+    [AvaloniaFact]
+    public async Task DialogShowsPartialProgressAndKeepsItWhenStopped()
+    {
+        var gate = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new FakeSource { ReadAsync = (id, token) => id == "1" ? Task.FromResult(PageXml) : gate.Task.WaitAsync(token) };
+        var dialog = new ImportDialog(new NoteWorkspace(_root), _root, source);
+        dialog.Show();
+        try
+        {
+            dialog.FindControl<Button>("ConnectButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            dialog.FindControl<ListBox>("Pages")!.SelectAll();
+            dialog.FindControl<Button>("ImportButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var bar = dialog.FindControl<ProgressBar>("ImportProgressBar")!;
+            for (var i = 0; i < 100 && bar.Value < 1; i++)
+            { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
+            Assert.True(bar.IsVisible);
+            Assert.False(bar.IsIndeterminate);
+            Assert.Equal(1, bar.Value);
+            Assert.Equal(2, bar.Maximum);
+            Assert.Contains("1 of 2", dialog.FindControl<TextBlock>("ProgressLabel")!.Text);
+            dialog.FindControl<Button>("CancelButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            for (var i = 0; i < 100 && dialog.Result == null; i++)
+            { await Task.Delay(20); Dispatcher.UIThread.RunJobs(); }
+            Assert.True(dialog.Result!.Cancelled);
+            Assert.Equal(1, bar.Value);
+            Assert.Contains("stopped", dialog.FindControl<TextBlock>("ProgressLabel")!.Text);
+        }
+        finally { gate.TrySetResult(PageXml); dialog.Close(); }
+    }
+
+    [AvaloniaFact]
+    public async Task LiveOneNoteImportsImagesAndAttachmentsFromConfiguredTestNotebook()
+    {
+        var path = Environment.GetEnvironmentVariable("MYNOTES_TEST_ONENOTE");
+        if (string.IsNullOrEmpty(path)) Assert.Skip("Set MYNOTES_TEST_ONENOTE to the dummy notebook .onetoc2 for the live COM check.");
+        using var source = new OneNoteSource();
+        var pages = await source.GetPagesAsync(path, TestContext.Current.CancellationToken);
+        var prefixes = new[] { "0001", "0010", "0501", "0510", "1001", "1010", "1501", "1510" };
+        var selected = pages.Where(p => prefixes.Any(prefix => p.Title.StartsWith(prefix + " -"))).ToArray();
+        Assert.Equal(8, selected.Length);
+        var workspace = new NoteWorkspace(_root);
+        var result = await NoteImportService.ImportAsync(source, selected, workspace, _root, null, TestContext.Current.CancellationToken);
+        Assert.True(result.Pages.Count == 8, string.Join("\n", result.Issues));
+        Assert.DoesNotContain(result.Issues, issue => issue.Contains("Attachment") || issue.Contains("image") || issue.Contains("Not imported"));
+        var rtfs = result.Pages.Select(p => File.ReadAllText(Path.Combine(result.Folder, p.Path))).ToArray();
+        Assert.Equal(4, rtfs.Count(rtf => rtf.Contains(@"\pict")));
+        Assert.Equal(4, rtfs.Count(rtf => rtf.Contains(AttachmentStore.Scheme)));
+        var attached = Directory.GetFiles(Path.Combine(_root, ".mynotes", "attachments"), "*", SearchOption.AllDirectories);
+        Assert.Equal(4, attached.Length);
+        Assert.All(attached, file => Assert.True(new FileInfo(file).Length > 1_000_000));
+    }
+
+    [AvaloniaFact]
+    public void SelectAllIsDisabledWithoutVisiblePagesAndHandlesEmptyClicksSafely()
+    {
+        var source = new FakeSource { Pages = [] };
+        var dialog = new ImportDialog(new NoteWorkspace(_root), _root, source);
+        dialog.Show();
+        try
+        {
+            var selectAll = dialog.FindControl<Button>("SelectAllButton")!;
+            var load = dialog.FindControl<Button>("ConnectButton")!;
+            var pages = dialog.FindControl<ListBox>("Pages")!;
+            var filter = dialog.FindControl<TextBox>("Filter")!;
+            Assert.False(selectAll.IsEnabled);
+            // RaiseEvent deliberately bypasses the disabled button to exercise the handler guard.
+            selectAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Empty(pages.SelectedItems!);
+
+            load.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.False(selectAll.IsEnabled);
+            selectAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Empty(pages.SelectedItems!);
+
+            source.Pages = [new("1", "Alpha", []), new("2", "Beta", [])];
+            load.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.True(selectAll.IsEnabled);
+            selectAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal(2, pages.SelectedItems!.Count);
+
+            filter.Text = "No matching pages";
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(selectAll.IsEnabled);
+            selectAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Empty(pages.SelectedItems!);
+
+            filter.Text = "Alpha";
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(selectAll.IsEnabled);
+            selectAll.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.Equal("1", Assert.IsType<ImportPage>(Assert.Single(pages.SelectedItems!.Cast<object>())).Id);
         }
         finally { dialog.Close(); }
     }

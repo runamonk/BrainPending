@@ -31,6 +31,9 @@ dotnet run --project src/MyNotes -- --notes ./Notes
   Controls wrap onto another row when needed; there is no overflow menu.
 - Image insertion, clipboard images, and resize handles. Click an image to select
   it; drag its corner to resize while retaining its proportions.
+- **Attach file…** copies files into notebook storage and inserts attachment links.
+  Follow a link to see its filename and size, **Open copy**, or **Save As…**.
+  Opening a copy never changes the stored original.
 - Insert/edit links from the toolbar; right-click an existing link to edit/remove
   it. Select text before inserting a link to use that text as the label.
 - Autosave after a short typing pause; save on note switch and close.
@@ -176,14 +179,30 @@ titles unique filenames. Existing notes and source OneNote pages are not changed
 
 Text, basic formatting, links, lists, tables, and embedded supported images are
 converted to RTF. Free-positioned content is arranged top-to-bottom, then
-left-to-right. Ink, attachments, media, and tags are not fully converted; the
+left-to-right. Attached files are copied from OneNote's cache into notebook storage
+and linked from the imported note. Missing cached files are reported individually;
+the rest of the page is still imported. Ink, media, and tags are not fully converted; the
 preview and import report flag these limitations. Internal OneNote links still
 open their original OneNote pages. Password-protected sections must be unlocked
 in OneNote. Re-importing creates another copy rather than synchronizing notes.
 
 Escape or **Stop import** cancels remaining pages and keeps completed notes.
+The progress bar counts processed pages, including failures, and shows imported
+and failed counts. Notebook discovery uses an indeterminate bar. Stopping leaves
+the bar at the number of pages processed, rather than marking it complete.
 A report note summarizes skipped pages and conversion warnings. A JSON record in
 `.mynotes/imports` retains source page IDs and imported paths. OneNote calls run
 off the UI thread; an in-flight OneNote call may finish after cancellation, but
 its result is discarded. No remote or local-file image references are fetched
 by the converter.
+
+Attachment files live in `.mynotes/attachments` and use notebook-relative links,
+so renaming/moving notes or moving the whole notebook preserves them. Duplicate
+filenames are stored separately. Copy/back up the **whole notebook including
+`.mynotes`** to preserve attachments; an individual RTF export contains links,
+not embedded attachment bytes. Files are retained for undo, history, and conflict
+copies even after their links are removed. Attachment previews and automatic
+cleanup of unreferenced files are not implemented.
+
+To run the optional live import test against the generated dummy notebook, set
+`MYNOTES_TEST_ONENOTE` to its `.onetoc2` path before running `dotnet test`.

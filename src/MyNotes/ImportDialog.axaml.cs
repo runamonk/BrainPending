@@ -33,13 +33,13 @@ public partial class ImportDialog : Window
         {
             if (_importing) { e.Cancel = true; Cancel(); }
         };
-        Closed += (_, _) => { _closed = true; _operation.Cancel(); _preview.Cancel(); };
+        Closed += (_, _) => { _closed = true; _operation.Cancel(); _preview.Cancel(); _source.Dispose(); };
     }
 
     internal ImportDialog(NoteWorkspace workspace, string destination, INoteImportSource? source = null) : this()
     {
         _workspace = workspace;
-        if (source != null) _source = source;
+        if (source != null) { _source.Dispose(); _source = source; }
         Destination.ItemsSource = new[] { workspace.Root, workspace.CheckPath(destination) }.Distinct().ToArray();
         Destination.SelectedItem = destination;
     }
@@ -47,7 +47,8 @@ public partial class ImportDialog : Window
     private void Busy(bool busy)
     {
         _busy = busy;
-        SourceControls.IsEnabled = Destination.IsEnabled = ChooseDestination.IsEnabled = Filter.IsEnabled = Pages.IsEnabled = SelectAllButton.IsEnabled = !busy && !_finished;
+        SourceControls.IsEnabled = Destination.IsEnabled = ChooseDestination.IsEnabled = Filter.IsEnabled = Pages.IsEnabled = !busy && !_finished;
+        SelectAllButton.IsEnabled = CanSelectAllShown;
         ImportButton.IsEnabled = !busy && !_finished && Pages.SelectedItems?.Count > 0;
         CancelButton.Content = _importing ? "Stop import" : _finished ? "Close" : "Cancel";
     }
@@ -60,6 +61,9 @@ public partial class ImportDialog : Window
         _operation = new();
         Busy(true);
         Status.Text = "Reading OneNote notebooks…";
+        ImportProgressBar.IsVisible = true;
+        ImportProgressBar.IsIndeterminate = true;
+        ProgressLabel.IsVisible = false;
         try
         {
             _pages = await _source.GetPagesAsync(sourceFile, _operation.Token);
@@ -70,7 +74,12 @@ public partial class ImportDialog : Window
         }
         catch (OperationCanceledException) { }
         catch (Exception error) { Status.Text = error.Message; }
-        finally { if (!_closed) Busy(false); }
+        finally
+        {
+            ImportProgressBar.IsIndeterminate = false;
+            ImportProgressBar.IsVisible = false;
+            if (!_closed) Busy(false);
+        }
     }
 
     private async void OpenFile_Click(object? sender, RoutedEventArgs e)
@@ -111,8 +120,14 @@ public partial class ImportDialog : Window
     {
         var words = (Filter.Text ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
         Pages.ItemsSource = _pages.Where(p => words.All(w => p.ToString().Contains(w, StringComparison.OrdinalIgnoreCase))).ToArray();
+        SelectAllButton.IsEnabled = CanSelectAllShown;
     }
-    private void SelectAll_Click(object? sender, RoutedEventArgs e) => Pages.SelectAll();
+    private bool CanSelectAllShown => !_busy && !_finished && !_closed && Pages.ItemCount > 0;
+
+    private void SelectAll_Click(object? sender, RoutedEventArgs e)
+    {
+        if (CanSelectAllShown) Pages.SelectAll();
+    }
 
     private async void Pages_Changed(object? sender, SelectionChangedEventArgs e)
     {
@@ -144,10 +159,24 @@ public partial class ImportDialog : Window
         _operation = new();
         _importing = true;
         Busy(true);
+        ImportProgressBar.IsVisible = ProgressLabel.IsVisible = true;
+        ImportProgressBar.IsIndeterminate = false;
+        ImportProgressBar.Maximum = selected.Select(p => p.Id).Distinct().Count();
+        ImportProgressBar.Value = 0;
+        ProgressLabel.Text = $"0 of {ImportProgressBar.Maximum} pages processed";
         try
         {
-            var progress = new Progress<string>(message => { if (!_finished && !_closed) Status.Text = message; });
+            var progress = new Progress<ImportProgress>(update =>
+            {
+                if (!_importing || _finished || _closed || _operation.IsCancellationRequested) return;
+                ImportProgressBar.Value = update.Completed;
+                ProgressLabel.Text = $"{update.Completed} of {update.Total} pages processed ({(double)update.Completed / update.Total:P0}) — {update.Imported} imported, {update.Failed} failed";
+                Status.Text = update.Message;
+            });
             Result = await Task.Run(() => NoteImportService.ImportAsync(_source, selected, _workspace, destination, progress, _operation.Token));
+            ImportProgressBar.Value = Result.Processed;
+            ProgressLabel.Text = $"{Result.Processed} of {Result.Total} pages processed ({(double)Result.Processed / Result.Total:P0}) — {Result.Pages.Count} imported, {Result.Failed} failed"
+                + (Result.Cancelled ? " — stopped" : "");
             _finished = true;
             Status.Text = $"{Result.Pages.Count} pages imported" + (Result.Cancelled ? " before stopping." : ".")
                 + $"\nSaved in {Result.Folder}\n" + (Result.Issues.Count == 0 ? "No conversion warnings." : string.Join("\n", Result.Issues));

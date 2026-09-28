@@ -5,26 +5,46 @@ using MyNotes.Core;
 namespace MyNotes.Importing;
 
 internal sealed record ImportedPage(string SourceId, string Title, string Path);
-internal sealed record ImportResult(string Folder, IReadOnlyList<ImportedPage> Pages, IReadOnlyList<string> Issues, bool Cancelled);
+internal sealed record ImportResult(string Folder, IReadOnlyList<ImportedPage> Pages, IReadOnlyList<string> Issues, bool Cancelled,
+    int Processed = 0, int Total = 0, int Failed = 0);
+internal sealed record ImportProgress(int Completed, int Total, int Imported, int Failed, string Message);
 
 internal static class NoteImportService
 {
     public static async Task<ImportResult> ImportAsync(INoteImportSource source, IReadOnlyList<ImportPage> pages,
-        NoteWorkspace workspace, string destination, IProgress<string>? progress, CancellationToken cancellation)
+        NoteWorkspace workspace, string destination, IProgress<ImportProgress>? progress, CancellationToken cancellation)
     {
         cancellation.ThrowIfCancellationRequested();
         var folder = workspace.CreateFolder(destination, UniqueName(workspace, destination, $"OneNote import {DateTime.Now:yyyy-MM-dd HHmmss}"));
         var imported = new List<ImportedPage>();
         var issues = new List<string>();
         var folders = new Dictionary<string, string>();
-        foreach (var page in pages.DistinctBy(p => p.Id))
+        var selected = pages.DistinctBy(p => p.Id).ToArray();
+        var completed = 0;
+        var failed = 0;
+        var attachments = new AttachmentStore(workspace.Root);
+        foreach (var page in selected)
         {
             if (cancellation.IsCancellationRequested) break;
-            progress?.Report($"Importing {imported.Count + 1} of {pages.Count}: {page.Title}");
+            progress?.Report(new(completed, selected.Length, imported.Count, failed, $"Importing {completed + 1} of {selected.Length}: {page.Title}"));
+            var added = new List<StoredAttachment>();
+            var saved = false;
             try
             {
                 var xml = await source.GetPageAsync(page.Id, cancellation);
-                var converted = await Task.Run(() => OneNoteConverter.Convert(xml), cancellation);
+                var converted = await Task.Run(() => OneNoteConverter.Convert(xml, element =>
+                {
+                    cancellation.ThrowIfCancellationRequested();
+                    // pathSource is the original external file, not the embedded copy.
+                    var cache = (string?)element.Attribute("pathCache");
+                    if (string.IsNullOrWhiteSpace(cache) || !Path.IsPathFullyQualified(cache) || cache.StartsWith(@"\\"))
+                        throw new IOException("OneNote did not provide a local cached copy. Open and sync the page in OneNote, then retry.");
+                    var name = (string?)element.Attribute("preferredName") ?? "attachment.bin";
+                    progress?.Report(new(completed, selected.Length, imported.Count, failed, $"Copying attachment: {name}"));
+                    var attachment = attachments.Add(cache, name, cancellation);
+                    added.Add(attachment);
+                    return attachment;
+                }), cancellation);
                 cancellation.ThrowIfCancellationRequested();
                 var parent = folder;
                 var key = "";
@@ -40,13 +60,23 @@ internal static class NoteImportService
                 }
                 var rtf = RtfDocumentFormatter.Write(converted.Document);
                 var note = workspace.CreateNote(parent, UniqueName(workspace, parent, page.Title), rtf);
+                saved = true;
                 imported.Add(new(page.Id, page.Title, Path.GetRelativePath(folder, note.Path)));
                 issues.AddRange(converted.Warnings.Select(w => page.Title + ": " + w));
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { break; }
-            catch (Exception error) { issues.Add(page.Title + ": Not imported. " + error.Message); }
+            catch (Exception error) { failed++; issues.Add(page.Title + ": Not imported. " + error.Message); }
+            finally
+            {
+                if (!saved)
+                    foreach (var attachment in added)
+                        try { attachments.Discard(attachment); }
+                        catch (IOException error) { issues.Add("Could not remove an unused attachment: " + error.Message); }
+            }
+            completed++;
+            progress?.Report(new(completed, selected.Length, imported.Count, failed, $"{completed} of {selected.Length} pages processed — {imported.Count} imported, {failed} failed."));
         }
-        var result = new ImportResult(folder, imported, issues, cancellation.IsCancellationRequested);
+        var result = new ImportResult(folder, imported, issues, cancellation.IsCancellationRequested, completed, selected.Length, failed);
         try
         {
             var reports = Path.Combine(workspace.Root, ".mynotes", "imports");

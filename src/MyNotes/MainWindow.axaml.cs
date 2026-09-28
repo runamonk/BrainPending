@@ -71,6 +71,7 @@ public partial class MainWindow : Window
         EditorView.Editor.Bind(RichEditor.LinkForegroundProperty, new DynamicResourceExtension("AppLinkBrush"));
         EditorView.Editor.Bind(RichEditor.SelectionBrushProperty, new DynamicResourceExtension("AppSelectionBrush"));
         EditorView.Editor.AllowRemoteImagesOnPaste = false;
+        EditorView.Editor.LinkHandler = HandleAttachmentLink;
         EditorView.Editor.FontFamilyChoices = ["Segoe UI", "Arial", "Calibri", "Georgia", "Times New Roman", "Consolas"];
         EditorView.Editor.TextChanged += (_, _) =>
         {
@@ -495,6 +496,7 @@ public partial class MainWindow : Window
             NoteTitle.Text = Path.GetFileNameWithoutExtension(note.Path);
             Breadcrumb.Text = (_workspace!.IsInTrash(note.Path) ? "Trash  /  " + Path.GetRelativePath(_workspace.TrashPath, note.Path) : "Notebook  /  " + Path.GetRelativePath(_workspace.Root, note.Path)).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
             EditorView.IsVisible = true;
+            AttachmentActions.IsVisible = true;
             Welcome.IsVisible = false;
             if (_notePositions.TryGetValue(note.Path, out var position))
             {
@@ -522,6 +524,7 @@ public partial class MainWindow : Window
         _dirty = false;
         _autosave.Stop();
         EditorView.IsVisible = false;
+        AttachmentActions.IsVisible = false;
         Welcome.IsVisible = true;
         NoteTitle.Text = "";
         Breadcrumb.Text = "";

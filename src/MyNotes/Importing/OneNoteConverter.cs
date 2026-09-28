@@ -3,6 +3,7 @@ using System.Text;
 using System.Xml.Linq;
 using AvaloniaRichEditor.Documents;
 using AvaloniaRichEditor.Formatters;
+using MyNotes.Core;
 
 namespace MyNotes.Importing;
 
@@ -10,7 +11,7 @@ internal sealed record ConvertedPage(FlowDocument Document, IReadOnlyList<string
 
 internal static class OneNoteConverter
 {
-    public static ConvertedPage Convert(string xml)
+    public static ConvertedPage Convert(string xml, Func<XElement, StoredAttachment>? saveAttachment = null)
     {
         var page = XDocument.Parse(xml).Root ?? throw new InvalidDataException("Empty OneNote page.");
         if (page.Name.LocalName != "Page") throw new InvalidDataException("Expected a OneNote page.");
@@ -67,8 +68,29 @@ internal static class OneNoteConverter
                     }
                     html.Append(" />");
                     break;
-                case "InsertedFile": case "InkDrawing": case "Ink": case "MediaFile": case "AudioFile": case "VideoFile":
-                    var description = element.Name.LocalName == "InsertedFile" ? "Attachment" : "Ink or media";
+                case "InsertedFile":
+                    var name = (string?)element.Attribute("preferredName") ?? "attachment.bin";
+                    if (saveAttachment == null)
+                    {
+                        html.Append("<p>[Attachment: ").Append(Encode(name)).Append("]</p>");
+                        warnings.Add("Attachments will be copied when you import. Unavailable files will be reported.");
+                        break;
+                    }
+                    try
+                    {
+                        var attachment = saveAttachment(element);
+                        html.Append("<p><a href=\"").Append(Encode(attachment.Link)).Append("\">Attachment: ")
+                            .Append(Encode(attachment.Name)).Append(" (").Append(attachment.Size.ToString("N0"))
+                            .Append(" bytes)</a></p>");
+                    }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+                    {
+                        warnings.Add($"Attachment '{name}' could not be imported: {error.Message}");
+                        html.Append("<p>[Attachment not imported: ").Append(Encode(name)).Append("]</p>");
+                    }
+                    break;
+                case "InkDrawing": case "Ink": case "MediaFile": case "AudioFile": case "VideoFile":
+                    var description = "Ink or media";
                     warnings.Add(description + " could not be imported; retained in OneNote.");
                     html.Append("<p>[").Append(description).Append(" not imported: ")
                         .Append(Encode((string?)element.Attribute("preferredName") ?? element.Name.LocalName)).Append("]</p>");

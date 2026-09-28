@@ -1101,6 +1101,28 @@ public sealed class WindowTests : IDisposable
         Assert.False(compactWindow.FindControl<Border>("Sidebar")!.IsVisible);
     }
 
+    [AvaloniaFact]
+    public void AttachmentLinkOpensFileActionsWithoutLaunchingExternalApp()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var source = Path.Combine(_root, "sample.txt");
+        File.WriteAllText(source, "Attached content");
+        var attachment = new AttachmentStore(_root).Add(source, "sample.txt", TestContext.Current.CancellationToken);
+        var document = AvaloniaRichEditor.Formatters.HtmlDocumentFormatter.ParseHtml($"<p><a href='{attachment.Link}'>sample.txt</a></p>");
+        var note = workspace.CreateNote(_root, "With attachment", AvaloniaRichEditor.Formatters.RtfDocumentFormatter.Write(document));
+        var window = OpenWindow();
+        Select(window, note.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        Assert.True(window.FindControl<StackPanel>("AttachmentActions")!.IsVisible);
+        Assert.True(editor.LinkHandler!(attachment.Link));
+        var dialog = Assert.Single(window.OwnedWindows.OfType<AttachmentDialog>());
+        Assert.Contains(dialog.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "sample.txt");
+        Assert.Contains(dialog.GetVisualDescendants().OfType<Button>(), button => Equals(button.Content, "Save As…"));
+        Assert.Contains(dialog.GetVisualDescendants().OfType<Button>(), button => Equals(button.Content, "Open copy"));
+        dialog.Close();
+        Assert.False(editor.LinkHandler!("file:///outside.txt"));
+    }
+
     public void Dispose()
     {
         foreach (var window in _windows) window.Close();

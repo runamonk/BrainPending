@@ -98,6 +98,9 @@
           </Grid>
         </Border>
         <DockPanel Grid.Row="1">
+          <StackPanel x:Name="AttachmentActions" DockPanel.Dock="Top" IsVisible="False" Orientation="Horizontal" Margin="14,4" Spacing="8">
+            <Button Content="Attach file…" Click="AttachFile_Click" AutomationProperties.Name="Attach file" />
+          </StackPanel>
           <Border x:Name="FindPanel" DockPanel.Dock="Top" Height="0" ClipToBounds="True" IsVisible="False" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="16,8" MinHeight="34">
               <TextBox x:Name="FindInput" PlaceholderText="Find in note…" AutomationProperties.Name="Find in note" TextChanged="FindInput_Changed" />

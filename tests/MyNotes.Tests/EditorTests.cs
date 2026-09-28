@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media;
 using AvaloniaRichEditor.Controls;
 using AvaloniaRichEditor.Documents;
@@ -21,6 +22,35 @@ public static class TestApplication
 
 public sealed class EditorTests
 {
+    [AvaloniaFact]
+    public void AttachmentLinkActivationUsesHostHandler()
+    {
+        var editor = new RichEditor();
+        const string link = "mynotes-attachment:00000000000000000000000000000000/sample.txt";
+        editor.LoadHtml($"<p><a href='{link}'>Attachment</a></p>");
+        var window = new Window { Content = editor, Width = 400, Height = 200 };
+        string? activated = null;
+        editor.LinkHandler = url => { activated = url; return true; };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(400, 200));
+            bitmap.Render(window);
+            for (var y = 4; y < 80; y += 2)
+            {
+                var point = new Point(20, y);
+                window.MouseMove(point);
+                if (!Equals(ToolTip.GetTip(editor), link)) continue;
+                window.MouseDown(point, MouseButton.Left);
+                window.MouseUp(point, MouseButton.Left);
+                break;
+            }
+            Assert.Equal(link, activated);
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaTheory]
     [InlineData(1, true)]
     [InlineData(-1, true)]

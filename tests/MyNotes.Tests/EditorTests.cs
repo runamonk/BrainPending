@@ -69,8 +69,8 @@ public sealed class EditorTests
                 editor.InsertText(" ");
             editor.InsertText("next");
             var runs = editor.Document!.Blocks.OfType<Paragraph>().SelectMany(p => p.Inlines.OfType<Run>()).ToArray();
-            Assert.Equal("Link", Assert.Single(runs.Where(r => r.NavigateUri != null)).Text);
-            var plain = Assert.Single(runs.Where(r => r.Text?.Contains("next") == true));
+            Assert.Equal("Link", Assert.Single(runs, r => r.NavigateUri != null).Text);
+            var plain = Assert.Single(runs, r => r.Text?.Contains("next") == true);
             Assert.Null(plain.NavigateUri);
             Assert.Null(plain.Foreground);
             Assert.Equal(enter ? "next" : " next", plain.Text);

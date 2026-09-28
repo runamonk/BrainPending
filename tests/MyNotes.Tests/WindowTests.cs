@@ -215,9 +215,14 @@ public sealed class WindowTests : IDisposable
         window.UpdateLayout();
         Assert.True(reveal.IsVisible);
         Assert.True(mini.IsVisible);
-        Assert.False(window.FindControl<Grid>("SidebarToolbar")!.IsVisible);
-        Assert.True(window.FindControl<Button>("SidebarOverlayPin")!.IsVisible);
-        Assert.Equal(6, mini.GetVisualDescendants().OfType<Button>().Count());
+        var toolbar = window.FindControl<Grid>("SidebarToolbar")!;
+        Assert.True(toolbar.IsVisible);
+        Assert.False(window.FindControl<StackPanel>("SidebarPinnedActions")!.IsVisible);
+        Assert.Equal(new[] { "SidebarHome", "SidebarPin" },
+            toolbar.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).Select(b => b.Name));
+        Assert.Equal(5, mini.GetVisualDescendants().OfType<Button>().Count());
+        Assert.DoesNotContain(mini.GetVisualDescendants().OfType<Button>(),
+            b => Equals(ToolTip.GetTip(b), "Notebook home"));
         window.MouseMove(new Point(700, 200));
         await Task.Delay(500, TestContext.Current.CancellationToken);
         Dispatcher.UIThread.RunJobs();
@@ -259,16 +264,17 @@ public sealed class WindowTests : IDisposable
         reopened.KeyPress(Key.F, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.F, "f");
         Assert.True(reopened.FindControl<Border>("Sidebar")!.IsVisible);
         Assert.True(reopened.FindControl<TextBox>("SearchBox")!.IsFocused);
-        reopened.FindControl<Button>("SidebarOverlayPin")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        reopened.FindControl<Button>("SidebarPin")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.False(reopened.FindControl<Button>("SidebarReveal")!.IsVisible);
         Assert.False(reopened.FindControl<Border>("MiniSidebar")!.IsVisible);
         Assert.True(reopened.FindControl<Grid>("SidebarToolbar")!.IsVisible);
-        Assert.False(reopened.FindControl<Button>("SidebarOverlayPin")!.IsVisible);
+        Assert.True(reopened.FindControl<Button>("SidebarPin")!.IsVisible);
+        Assert.True(reopened.FindControl<StackPanel>("SidebarPinnedActions")!.IsVisible);
         Assert.True(NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json")).SidebarPinned);
     }
 
     [AvaloniaFact]
-    public async Task SidebarToggleClosesWithoutHoverReopeningAndRailActionsCollapse()
+    public async Task SidebarToggleClosesWithoutHoverReopeningAndHomeStaysOpen()
     {
         var window = OpenWindow();
         var sidebar = window.FindControl<Border>("Sidebar")!;
@@ -285,11 +291,16 @@ public sealed class WindowTests : IDisposable
         toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.True(sidebar.IsVisible);
         Assert.Equal("Hide sidebar", ToolTip.GetTip(toggle));
-        var home = window.FindControl<Border>("MiniSidebar")!.GetVisualDescendants().OfType<Button>()
-            .Single(b => Equals(ToolTip.GetTip(b), "Notebook home"));
-        home.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var home = window.FindControl<Button>("SidebarHome")!;
+        await Task.Delay(350, TestContext.Current.CancellationToken);
+        window.UpdateLayout();
+        var homePoint = home.TranslatePoint(new Point(16, 16), window)!.Value;
+        window.MouseMove(homePoint);
+        window.MouseDown(homePoint, MouseButton.Left);
+        window.MouseUp(homePoint, MouseButton.Left);
         await Task.Delay(700, TestContext.Current.CancellationToken);
-        Assert.False(sidebar.IsVisible);
+        Assert.True(sidebar.IsVisible);
+        Assert.Equal("Hide sidebar", ToolTip.GetTip(toggle));
         Assert.True(window.FindControl<Border>("MiniSidebar")!.IsVisible);
     }
 

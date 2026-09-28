@@ -27,7 +27,7 @@
         </StackPanel>
         <ListBox x:Name="Pages" Grid.Row="2" SelectionMode="Multiple" SelectionChanged="Pages_Changed" AutomationProperties.Name="OneNote pages" />
       </Grid>
-      <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center" ResizeDirection="Columns" />
+      <GridSplitter Grid.Column="1" Width="2" HorizontalAlignment="Center" ResizeDirection="Columns" />
       <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto" RowSpacing="8">
         <TextBlock Text="Preview of the selected page" />
         <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled"><rte:RichEditor x:Name="Preview" IsReadOnly="True" DefaultFontSize="12" /></ScrollViewer>

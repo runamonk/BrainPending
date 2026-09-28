@@ -26,11 +26,13 @@ public partial class MainWindow
     {
         Sidebar.RenderTransform = _sidebarSlide;
         ApplySidebarLayout();
-        MiniSidebar.AddHandler(Button.ClickEvent, (_, e) =>
+        void CollapseAfterAction(object? sender, RoutedEventArgs e)
         {
-            if (!ReferenceEquals(e.Source, SidebarReveal) && !_settings.SidebarPinned && Sidebar.IsVisible)
+            if (!ReferenceEquals(e.Source, SidebarReveal) && !ReferenceEquals(e.Source, SidebarPin) &&
+                !_settings.SidebarPinned && Sidebar.IsVisible)
                 CollapseSidebarFromButton();
-        }, RoutingStrategies.Bubble);
+        }
+        MiniSidebar.AddHandler(Button.ClickEvent, CollapseAfterAction, RoutingStrategies.Bubble);
         AddHandler(PointerMovedEvent, (_, e) => UpdateSidebarPointer(e), RoutingStrategies.Tunnel);
         PointerExited += (_, _) =>
         {
@@ -101,15 +103,14 @@ public partial class MainWindow
         _sidebarSlide.Transitions = null;
         _sidebarSlide.X = 0;
         WorkspaceGrid.ColumnDefinitions[0].Width = new GridLength(pinned ? _sidebarWidth : MiniSidebarWidth);
-        WorkspaceGrid.ColumnDefinitions[1].Width = new GridLength(pinned ? 5 : 0);
+        WorkspaceGrid.ColumnDefinitions[1].Width = new GridLength(pinned ? 1 : 0);
         Grid.SetColumnSpan(Sidebar, pinned ? 1 : 3);
         Sidebar.HorizontalAlignment = pinned ? HorizontalAlignment.Stretch : HorizontalAlignment.Left;
         Sidebar.Width = pinned ? double.NaN : _sidebarWidth;
         Sidebar.Margin = new Thickness(pinned ? 0 : MiniSidebarWidth, 0, 0, 0);
         Sidebar.IsVisible = pinned;
         MiniSidebar.IsVisible = !pinned;
-        SidebarToolbar.IsVisible = pinned;
-        SidebarOverlayPin.IsVisible = !pinned;
+        SidebarPinnedActions.IsVisible = pinned;
         SidebarSplitter.IsVisible = pinned;
         SidebarReveal.IsVisible = !pinned;
         SidebarPinnedFill.IsVisible = pinned;

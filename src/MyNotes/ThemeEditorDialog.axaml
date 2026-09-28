@@ -18,7 +18,7 @@
                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                  AutomationProperties.Name="Theme JSON" TextChanged="Json_Changed" />
       </Grid>
-      <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center" ResizeDirection="Columns" />
+      <GridSplitter Grid.Column="1" Width="2" HorizontalAlignment="Center" ResizeDirection="Columns" />
       <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*">
         <TextBlock Text="Preview" Margin="0,0,0,8" />
         <ComboBox x:Name="ThemeChoice" Grid.Row="1" HorizontalAlignment="Stretch"

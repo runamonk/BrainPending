@@ -89,9 +89,10 @@
           <TextBlock Text="Ctrl+N  new note     •     Ctrl+S  save" FontSize="12" Opacity="0.45" HorizontalAlignment="Center" />
         </StackPanel>
         <Border x:Name="Notice" Grid.Row="2" Background="{DynamicResource AppNoticeBrush}" Padding="16,12" IsVisible="False">
-          <Grid ColumnDefinitions="*,Auto">
+          <Grid ColumnDefinitions="*,Auto,Auto">
             <TextBlock x:Name="NoticeText" Foreground="{DynamicResource AppNoticeTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
-            <Button Grid.Column="1" Content="Dismiss" Classes="quiet" Foreground="{DynamicResource AppNoticeTextBrush}" Click="Dismiss_Click" />
+            <Button x:Name="RetrySaveButton" Grid.Column="1" Content="Save again" IsVisible="False" Classes="action" ToolTip.Tip="Save note (Ctrl+S)" Click="RetrySave_Click" Margin="12,0,8,0" />
+            <Button Grid.Column="2" Content="Dismiss" Classes="quiet" Foreground="{DynamicResource AppNoticeTextBrush}" Click="Dismiss_Click" />
           </Grid>
         </Border>
       </Grid>

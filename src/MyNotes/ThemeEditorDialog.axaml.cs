@@ -11,6 +11,8 @@ public partial class ThemeEditorDialog : Window
 {
     private ThemeCatalog? _catalog;
     private string _original = "";
+    private bool _saving;
+    private readonly CancellationTokenSource _saveCancellation = new();
     private string? _selectedName;
     private AppColorTheme[] _previewThemes = [];
 
@@ -23,6 +25,7 @@ public partial class ThemeEditorDialog : Window
             else if (e.Key == Key.S && e.KeyModifiers == KeyModifiers.Control)
             { e.Handled = true; Save(); }
         }, RoutingStrategies.Tunnel);
+        Closed += (_, _) => _saveCancellation.Cancel();
         Opened += (_, _) => JsonEditor.Focus();
     }
 
@@ -38,7 +41,7 @@ public partial class ThemeEditorDialog : Window
 
     private void Json_Changed(object? sender, TextChangedEventArgs e)
     {
-        if (_catalog != null) ValidateAndPreview();
+        if (_catalog != null && !_saving) ValidateAndPreview();
     }
 
     private bool ValidateAndPreview()
@@ -88,18 +91,43 @@ public partial class ThemeEditorDialog : Window
 
     private void Save_Click(object? sender, RoutedEventArgs e) => Save();
 
-    private void Save()
+    private async void Save()
     {
-        if (_catalog == null || !ValidateAndPreview()) return;
+        if (_saving || _catalog == null || !ValidateAndPreview()) return;
+        _saving = true;
+        SaveButton.IsEnabled = false;
+        JsonEditor.IsReadOnly = true;
+        var json = JsonEditor.Text ?? "";
         try
         {
-            _catalog.SaveText(JsonEditor.Text ?? "", _original);
-            Close(true);
+            for (var attempt = 0; ; attempt++)
+            {
+                _saveCancellation.Token.ThrowIfCancellationRequested();
+                try
+                {
+                    _catalog.SaveText(json, _original);
+                    Close(true);
+                    return;
+                }
+                catch (Exception error) when (SaveRetryPolicy.IsTemporary(error) && attempt < SaveRetryPolicy.Delays.Length)
+                {
+                    ValidationMessage.Text = "Saving… retrying shortly";
+                    ValidationMessage.Foreground = Foreground;
+                    await Task.Delay(SaveRetryPolicy.Delays[attempt], _saveCancellation.Token);
+                }
+            }
         }
+        catch (OperationCanceledException) { }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             ValidationMessage.Text = "Could not save themes: " + error.Message;
             ValidationMessage.Foreground = Brushes.IndianRed;
+        }
+        finally
+        {
+            _saving = false;
+            JsonEditor.IsReadOnly = false;
+            SaveButton.IsEnabled = true;
         }
     }
 

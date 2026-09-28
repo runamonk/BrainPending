@@ -21,6 +21,33 @@ public sealed class ThemeEditorDialogTests : IDisposable
         return catalog;
     }
 
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ThemeSaveRetriesTemporaryLockAndEscapeCancelsPendingSave(bool cancel)
+    {
+        var catalog = Catalog();
+        var original = File.ReadAllText(catalog.FilePath);
+        var owner = new Window();
+        owner.Show();
+        var dialog = new ThemeEditorDialog(catalog, "Default");
+        var result = dialog.ShowDialog<bool>(owner);
+        try
+        {
+            var edited = original + "\n";
+            dialog.FindControl<TextBox>("JsonEditor")!.Text = edited;
+            using (var locked = new FileStream(catalog.FilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                dialog.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
+                Assert.Equal("Saving… retrying shortly", dialog.FindControl<TextBlock>("ValidationMessage")!.Text);
+                if (cancel) dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+            }
+            Assert.Equal(!cancel, await result);
+            Assert.Equal(cancel ? original : edited, File.ReadAllText(catalog.FilePath));
+        }
+        finally { dialog.Close(); owner.Close(); }
+    }
+
     [AvaloniaFact]
     public async Task PreviewUpdatesLocallyAndEscapeDiscardsEdits()
     {

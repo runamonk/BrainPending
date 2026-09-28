@@ -28,6 +28,9 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _autosave = new() { Interval = TimeSpan.FromMilliseconds(750) };
     private readonly DispatcherTimer _poll = new() { Interval = TimeSpan.FromSeconds(3) };
     private FileSystemWatcher? _watcher;
+    private readonly DispatcherTimer _saveRetry = new();
+    private int _saveRetryCount;
+    private bool _closeAfterSave;
     private NotebookSettings _settings;
     private readonly string? _settingsPath;
     private readonly ThemeCatalog _themes;
@@ -78,6 +81,11 @@ public partial class MainWindow : Window
             _autosave.Start();
         };
         _autosave.Tick += (_, _) => { _autosave.Stop(); SaveCurrent(); };
+        _saveRetry.Tick += (_, _) =>
+        {
+            _saveRetry.Stop();
+            if (SaveCurrent() && _closeAfterSave) Close();
+        };
         _poll.Tick += (_, _) => CheckExternalChanges();
         Opened += (_, _) =>
         {
@@ -99,10 +107,10 @@ public partial class MainWindow : Window
         };
         Closing += (_, e) =>
         {
-            if (!SaveCurrent()) { e.Cancel = true; return; }
+            if (!SaveCurrent()) { e.Cancel = true; _closeAfterSave = _saveRetry.IsEnabled; return; }
             SaveWindowBounds();
         };
-        Closed += (_, _) => { _closed = true; _autosave.Stop(); _poll.Stop(); _watcher?.Dispose(); };
+        Closed += (_, _) => { _closed = true; _autosave.Stop(); _saveRetry.Stop(); _poll.Stop(); _watcher?.Dispose(); };
         AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
         Browser.AddHandler(PointerPressedEvent, Browser_PointerPressed, RoutingStrategies.Tunnel);
         Browser.AddHandler(KeyDownEvent, Browser_KeyDown, RoutingStrategies.Tunnel);
@@ -422,12 +430,15 @@ public partial class MainWindow : Window
 
     private bool SaveCurrent()
     {
+        if (_saveRetry.IsEnabled) return false;
         if (_note == null || _workspace == null || (!_dirty && !EditorView.Editor.IsModified)) return true;
         try
         {
             var result = _workspace.Save(_note, EditorView.Editor.ToRtf());
             if (result.Note.Path != _note.Path) RememberOpenNote(result.Note.Path);
             _note = result.Note;
+            _saveRetryCount = 0;
+            if (RetrySaveButton.IsVisible) { Notice.IsVisible = false; RetrySaveButton.IsVisible = false; }
             _dirty = false;
             EditorView.Editor.MarkSaved();
             NoteTitle.Text = Path.GetFileNameWithoutExtension(_note.Path);
@@ -437,10 +448,22 @@ public partial class MainWindow : Window
             RefreshBrowser();
             return true;
         }
+        catch (Exception e) when (SaveRetryPolicy.IsTemporary(e) && _saveRetryCount < SaveRetryPolicy.Delays.Length)
+        {
+            SaveStatus.Text = "Saving… retrying shortly";
+            RetrySaveButton.IsEnabled = false;
+            _saveRetry.Interval = SaveRetryPolicy.Delays[_saveRetryCount++];
+            _saveRetry.Start();
+            return false;
+        }
         catch (Exception e)
         {
+            _saveRetryCount = 0;
+            _closeAfterSave = false;
             SaveStatus.Text = "Not saved";
-            ShowNotice("Your changes are still in the editor. Could not save: " + e.Message);
+            ShowNotice("Your changes are still in the editor. Click Save again or press Ctrl+S to retry. Could not save: " + e.Message);
+            RetrySaveButton.IsVisible = true;
+            RetrySaveButton.IsEnabled = true;
             return false;
         }
     }
@@ -797,7 +820,12 @@ public partial class MainWindow : Window
     }
     private void ApplyTheme() => AppThemes.Apply(_themes.Resolve(_settings));
     private void Dismiss_Click(object? sender, RoutedEventArgs e) => Notice.IsVisible = false;
-    private void ShowNotice(string text) { NoticeText.Text = text; Notice.IsVisible = true; }
+    private void ShowNotice(string text) { RetrySaveButton.IsVisible = false; NoticeText.Text = text; Notice.IsVisible = true; }
+    private void RetrySave_Click(object? sender, RoutedEventArgs e)
+    {
+        SaveCurrent();
+        EditorView.Editor.Focus();
+    }
 
     private async void SwitchNote_Click(object? sender, RoutedEventArgs e) => await Run(SwitchNote);
 

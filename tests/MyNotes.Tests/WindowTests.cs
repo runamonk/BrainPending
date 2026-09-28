@@ -37,6 +37,69 @@ public sealed class WindowTests : IDisposable
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task TemporaryFileLockRetriesWithoutNoticeAndKeepsLatestEdits(bool close)
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Locked");
+        var window = OpenWindow();
+        Select(window, note.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        editor.InsertText("First edit ");
+        using (var locked = new FileStream(note.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            if (close) window.Close();
+            else window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
+            Assert.True(window.IsVisible);
+            Assert.Equal("Saving… retrying shortly", window.FindControl<TextBlock>("SaveStatus")!.Text);
+            Assert.False(window.FindControl<Border>("Notice")!.IsVisible);
+            if (!close) editor.InsertText("Latest edit");
+        }
+        for (var i = 0; i < 30 && editor.IsModified; i++)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            Dispatcher.UIThread.RunJobs();
+        }
+        Assert.False(editor.IsModified);
+        Assert.Contains("First edit", workspace.Read(note.Path).Rtf);
+        if (close) Assert.False(window.IsVisible);
+        else
+        {
+            Assert.Contains("Latest edit", workspace.Read(note.Path).Rtf);
+            Assert.False(window.FindControl<Border>("Notice")!.IsVisible);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task PersistentFileLockEventuallyReportsFailureWithoutDiscardingEdits()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Locked");
+        var window = OpenWindow();
+        Select(window, note.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        editor.InsertText("Keep this");
+        using (var locked = new FileStream(note.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
+            for (var i = 0; i < 50 && !window.FindControl<Border>("Notice")!.IsVisible; i++)
+            {
+                await Task.Delay(100, TestContext.Current.CancellationToken);
+                Dispatcher.UIThread.RunJobs();
+            }
+            Assert.Equal("Not saved", window.FindControl<TextBlock>("SaveStatus")!.Text);
+            Assert.True(window.FindControl<Border>("Notice")!.IsVisible);
+            Assert.True(editor.IsModified);
+        }
+        Assert.True(window.FindControl<Button>("RetrySaveButton")!.IsVisible);
+        Assert.Contains("Ctrl+S", window.FindControl<TextBlock>("NoticeText")!.Text);
+        window.FindControl<Button>("RetrySaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Assert.Contains("Keep this", workspace.Read(note.Path).Rtf);
+        Assert.False(window.FindControl<Border>("Notice")!.IsVisible);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task EscapeCancelsNewNoteAndFolderAndAllowsReopening(bool folder)
     {
         var workspace = new NoteWorkspace(_root);

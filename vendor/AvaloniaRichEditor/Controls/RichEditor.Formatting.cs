@@ -166,6 +166,7 @@ public partial class RichEditor
             p.ListType = ListKind.None;
             p.ListMarker = ListMarkerStyle.Default;
             p.ListLevel = 0;
+            p.ListStart = null;
         }
         UpdateParents(Document);
         InvalidateVisual();
@@ -290,6 +291,7 @@ public partial class RichEditor
         {
             var np = new Paragraph();
             np.CopyFormatFrom(p);
+            if (result.Count > 0) np.ListStart = null;
             return np;
         }
         var cur = NewPara();

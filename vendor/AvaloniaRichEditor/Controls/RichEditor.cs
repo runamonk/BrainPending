@@ -1520,6 +1520,7 @@ public partial class RichEditor : Control
         // included — unlike Enter, this is a split of one logical paragraph, not a new one).
         var tail = new Paragraph();
         tail.CopyFormatFrom(p);
+        tail.ListStart = null;
         while (p.Inlines.Count > splitAt)
         {
             var inl = p.Inlines[splitAt];
@@ -1720,6 +1721,7 @@ public partial class RichEditor : Control
         // a normal paragraph (core rule #3).
         var np = new Paragraph();
         np.CopyFormatFrom(p);
+        np.ListStart = null;
         // Enter starts a new line without carrying paragraph gaps across the split.
         p.MarginBottom = 0;
         np.MarginTop = 0;

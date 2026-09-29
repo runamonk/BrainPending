@@ -299,7 +299,7 @@ public partial class RichEditor
         // instead of a fixed-height bar floating at the line top far above the text.
         double caretHeight = 20;
         Rect? blockCaretRect = null;
-        int orderedIndex = 0;
+        var numbering = new ListNumbering();
 
         foreach (var block in Document!.Blocks)
         {
@@ -311,7 +311,7 @@ public partial class RichEditor
             double beHeight = BlockExtent(block, maxWidth, yOffset, out var beParaLayout, out var beTableLayout);
             if (block is TableBlock tb)
             {
-                orderedIndex = 0;
+                numbering.Clear();
                 double startX = 10 + tb.Indent;
                 double tableTop = yOffset;
                 var tl = beTableLayout!.Value; // == LayoutTable(tb, 10 + tb.Indent, tableTop) from BlockExtent
@@ -392,13 +392,13 @@ public partial class RichEditor
 
                 double px = ParaLeft(paragraph);
 
-                // Ordered numbering runs continuously across consecutive ordered paragraphs; reset otherwise.
-                if (paragraph.ListType != ListKind.Ordered) orderedIndex = 0;
+                // Nested lists keep their own counters.
+                numbering.Begin(paragraph);
 
                 if (fullText == "" && !hasPreedit)
                 {
                     if (paragraph.ListType != ListKind.None)
-                        DrawListMarker(context, paragraph, paragraph.ListType == ListKind.Ordered ? ++orderedIndex : 0, px, yOffset);
+                        DrawListMarker(context, paragraph, numbering.Next(paragraph), px, yOffset);
                     if (chrome && _caretPosition != null && _caretPosition.Paragraph == paragraph)
                     {
                         caretPoint = new Point(px, yOffset);
@@ -431,7 +431,7 @@ public partial class RichEditor
                     {
                         if (i == fullText.Length || fullText[i] == '\n')
                         {
-                            int marker = paragraph.ListType == ListKind.Ordered ? ++orderedIndex : 0;
+                            int marker = numbering.Next(paragraph);
                             if (pVisible)
                             {
                                 var lcr = layout.HitTestTextPosition(Math.Min(segStart, fullText.Length));
@@ -483,7 +483,7 @@ public partial class RichEditor
             }
             else if (block is ImageBlock img)
             {
-                orderedIndex = 0;
+                numbering.Clear();
                 double cullHeight = beHeight; // == img.Height (or 200 fallback), from BlockExtent
                 // Cull check before touching img.Image: the getter lazily decodes RawBytes (N6-2), so
                 // skipping it means off-screen images are never decoded at all. yOffset advances by the
@@ -532,7 +532,7 @@ public partial class RichEditor
             }
             else if (block is DividerBlock dv)
             {
-                orderedIndex = 0;
+                numbering.Clear();
                 if (yOffset + beHeight >= visTop && yOffset <= visBottom)
                 {
                     double y = yOffset + beHeight / 2; // beHeight == DividerHeight, from BlockExtent
@@ -560,7 +560,7 @@ public partial class RichEditor
         ref Point? caretPoint, ref double caretHeight)
     {
         double by = 0;
-        int orderedIndex = 0; // ordered numbering restarts per cell (this block list)
+        var numbering = new ListNumbering(); // ordered numbering restarts per cell (this block list)
         foreach (var cb2 in blocks)
         {
             double blkY = oy + by;
@@ -575,7 +575,7 @@ public partial class RichEditor
                     ? BuildTextLayout(para, pw, _caretPosition!.Offset, _preeditText)
                     : BuildTextLayout(para, pw);
 
-                if (para.ListType != ListKind.Ordered) orderedIndex = 0;
+                numbering.Begin(para);
                 if (para.ListType != ListKind.None)
                 {
                     string plain = BuildPlain(para);
@@ -583,7 +583,7 @@ public partial class RichEditor
                     for (int i = 0; i <= plain.Length; i++)
                         if (i == plain.Length || plain[i] == '\n')
                         {
-                            int marker = para.ListType == ListKind.Ordered ? ++orderedIndex : 0;
+                            int marker = numbering.Next(para);
                             var lcr = layout.HitTestTextPosition(Math.Min(segStart, plain.Length));
                             DrawListMarker(context, para, marker, px, blkY + lcr.Y);
                             segStart = i + 1;
@@ -620,7 +620,7 @@ public partial class RichEditor
             }
             else if (cb2 is ImageBlock cimg)
             {
-                orderedIndex = 0;
+                numbering.Clear();
                 // A block image inside a cell, scaled to fit the cell width. With chrome on, it gets the
                 // same selection overlay + resize handle as a top-level block image, registered in
                 // document coordinates so the shared resize/hit-test paths work unchanged.
@@ -654,14 +654,14 @@ public partial class RichEditor
             }
             else if (cb2 is DividerBlock)
             {
-                orderedIndex = 0;
+                numbering.Clear();
                 double y = blkY + DividerHeight / 2;
                 context.DrawLine(GrayBorderPen, new Point(ox, y), new Point(ox + innerW, y));
                 by += DividerHeight;
             }
             else if (cb2 is TableBlock nt)
             {
-                orderedIndex = 0;
+                numbering.Clear();
                 // A nested table. Draws the grid + recurses into each nested cell, registering
                 // row/column resize handles like a top-level table (no selected-table affordance yet).
                 DrawNestedTable(context, nt, ox, blkY, chrome, selectedParagraphs, selStart, selEnd, ref caretPoint, ref caretHeight);

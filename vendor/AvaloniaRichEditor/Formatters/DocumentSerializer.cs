@@ -215,7 +215,8 @@ public static class DocumentSerializer
             Background = BrushToString(p.Background),
             Indent = p.Indent,
             IsQuote = p.IsQuote,
-            ListLevel = p.ListLevel
+            ListLevel = p.ListLevel,
+            ListStart = p.ListStart
         };
         foreach (var inline in p.Inlines)
         {
@@ -362,6 +363,7 @@ public static class DocumentSerializer
             Indent = d.Indent,
             IsQuote = d.IsQuote,
             ListLevel = d.ListLevel,
+            ListStart = d.ListStart,
             ListType = Enum.TryParse<ListKind>(d.ListType, out var lk) ? lk : (d.IsListItem ? ListKind.Bullet : ListKind.None),
             ListMarker = Enum.TryParse<ListMarkerStyle>(d.ListMarker, out var lm) ? lm : ListMarkerStyle.Default
         };
@@ -529,6 +531,7 @@ internal class BlockDto
     public double Indent { get; set; }
     public bool IsQuote { get; set; }
     public int ListLevel { get; set; }
+    public int? ListStart { get; set; }
 
     public string? ImageRef { get; set; } // v2: key into FlowDocumentDto.Images
     public string? ImageBase64 { get; set; } // v1 legacy: inline base64 (read fallback)

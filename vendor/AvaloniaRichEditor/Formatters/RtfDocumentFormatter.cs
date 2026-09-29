@@ -384,6 +384,7 @@ internal sealed class RtfParser
                 _para.ListLevel = Math.Clamp(p ?? 0, 0, 8);
                 _pendingListGutter = RtfDocumentFormatter.ListGutterTwips(_para.ListLevel);
                 break;
+            case "arstart": _para.ListStart = Math.Max(1, p ?? 1); break;
             // The list kind + exact marker style, and a signal that the text up to the next \tab is the
             // MARKER rather than content. Every other reader skips the ignorable group and renders that
             // text, which is the point — it is the only spelling both Word and HWP show.
@@ -1074,11 +1075,12 @@ internal sealed class RtfWriter
 
     public string Build(FlowDocument doc)
     {
-        int ordered = 0;
+        var numbering = new ListNumbering();
         foreach (var block in doc.Blocks)
         {
-            if (block is Paragraph p && p.ListType == ListKind.Ordered) ordered++;
-            else ordered = 0;
+            int ordered = 0;
+            if (block is Paragraph p) { numbering.Begin(p); ordered = numbering.Next(p); }
+            else numbering.Clear();
             WriteBlock(block, ordered);
         }
 
@@ -1211,6 +1213,7 @@ internal sealed class RtfWriter
     private void WriteListMarker(Paragraph p, int ordered)
     {
         _body.Append(@"{\*\arlvl").Append(Math.Clamp(p.ListLevel, 0, 8)).Append('}');
+        if (p.ListStart is { } start) _body.Append(@"{\*\arstart").Append(start).Append('}');
         _body.Append(p.ListType == ListKind.Bullet ? @"{\*\armkb" : @"{\*\armkn")
              .Append(RtfDocumentFormatter.MarkerCode(p.ListMarker)).Append('}');
         WriteEscaped(Controls.RichEditor.ListMarkerText(p.ListType, p.ListMarker, ordered));
@@ -1384,15 +1387,18 @@ internal sealed class RtfWriter
             first = false;
         }
 
+        var numbering = new ListNumbering();
         foreach (var blk in cell.Blocks)
         {
+            if (blk is Paragraph numbered) numbering.Begin(numbered);
+            else numbering.Clear();
             if (blk is Paragraph cpara)
             {
                 if (!first) _body.Append(@"\par ");
                 first = false;
                 // Cell paragraphs need their own alignment and indent after pard/intbl.
                 WriteParagraphPropsBody(cpara);
-                if (cpara.ListType != ListKind.None) WriteListMarker(cpara, 1);
+                if (cpara.ListType != ListKind.None) WriteListMarker(cpara, numbering.Next(cpara));
                 bool heading = cpara.HeadingLevel is >= 1 and <= 6;
                 double headingSize = heading ? HeadingSize(cpara.HeadingLevel) : 0;
                 foreach (var inline in cpara.Inlines)

@@ -24,9 +24,13 @@ function Fill-RoundedRect($color, [single]$x, [single]$y, [single]$width, [singl
     $path.Dispose()
 }
 
-Fill-RoundedRect '#282A36' 8 8 240 240 54
+Fill-RoundedRect '#282A36' 2 2 252 252 54
 
 # Two lobes, one thought. Still waiting on the thought.
+$brainTransform = $graphics.Save()
+$graphics.TranslateTransform(128, 116)
+$graphics.ScaleTransform(1.2, 1.4)
+$graphics.TranslateTransform(-128, -110)
 $brain = [Drawing.Drawing2D.GraphicsPath]::new()
 $brain.AddBezier(128, 52, 112, 27, 79, 35, 72, 58)
 $brain.AddBezier(72, 58, 46, 54, 32, 76, 42, 98)
@@ -57,12 +61,13 @@ $brain.Dispose(); $pink.Dispose(); $outline.Dispose()
 Fill-RoundedRect '#282A36' 88 115 14 22 7
 Fill-RoundedRect '#282A36' 153 115 14 22 7
 Fill-RoundedRect '#282A36' 117 151 22 7 3.5
-Fill-RoundedRect '#FF92C2' 87 207 16 16 8
-Fill-RoundedRect '#BD93F9' 120 207 16 16 8
-Fill-RoundedRect '#6272A4' 153 207 16 16 8
+$graphics.Restore($brainTransform)
+Fill-RoundedRect '#FF92C2' 87 232 16 16 8
+Fill-RoundedRect '#BD93F9' 120 232 16 16 8
+Fill-RoundedRect '#6272A4' 153 232 16 16 8
 $graphics.Dispose()
 
-$sizes = @(16, 20, 24, 32, 48, 64, 128, 256)
+$sizes = @(16, 20, 24, 28, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256)
 $frames = @()
 foreach ($size in $sizes) {
     $bitmap = [Drawing.Bitmap]::new($size, $size)

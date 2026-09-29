@@ -32,19 +32,24 @@ internal static class NoteImportService
             try
             {
                 var xml = await source.GetPageAsync(page.Id, cancellation);
-                var converted = await Task.Run(() => OneNoteConverter.Convert(xml, element =>
+                var converted = await Task.Run(() =>
                 {
-                    cancellation.ThrowIfCancellationRequested();
-                    // pathSource is the original external file, not the embedded copy.
-                    var cache = (string?)element.Attribute("pathCache");
-                    if (string.IsNullOrWhiteSpace(cache) || !Path.IsPathFullyQualified(cache) || cache.StartsWith(@"\\"))
-                        throw new IOException("OneNote did not provide a local cached copy. Open and sync the page in OneNote, then retry.");
-                    var name = (string?)element.Attribute("preferredName") ?? "attachment.bin";
-                    progress?.Report(new(completed, selected.Length, imported.Count, failed, $"Copying attachment: {name}"));
-                    var attachment = attachments.Add(cache, name, cancellation);
-                    added.Add(attachment);
-                    return attachment;
-                }), cancellation);
+                    var document = OneNoteConverter.Convert(xml, element =>
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        // pathSource is the original external file, not the embedded copy.
+                        var cache = (string?)element.Attribute("pathCache");
+                        if (string.IsNullOrWhiteSpace(cache) || !Path.IsPathFullyQualified(cache) || cache.StartsWith(@"\\"))
+                            throw new IOException("OneNote did not provide a local cached copy. Open and sync the page in OneNote, then retry.");
+                        var name = (string?)element.Attribute("preferredName") ?? "attachment.bin";
+                        progress?.Report(new(completed, selected.Length, imported.Count, failed, $"Copying attachment: {name}"));
+                        var attachment = attachments.Add(cache, name, cancellation);
+                        added.Add(attachment);
+                        return attachment;
+                    });
+                    // Read formatting on the same thread that created it.
+                    return (Rtf: RtfDocumentFormatter.Write(document.Document), document.Warnings);
+                }, cancellation);
                 cancellation.ThrowIfCancellationRequested();
                 var parent = folder;
                 var key = "";
@@ -58,8 +63,7 @@ internal static class NoteImportService
                     }
                     parent = path;
                 }
-                var rtf = RtfDocumentFormatter.Write(converted.Document);
-                var note = workspace.CreateNote(parent, UniqueName(workspace, parent, page.Title), rtf);
+                var note = workspace.CreateNote(parent, UniqueName(workspace, parent, page.Title), converted.Rtf);
                 saved = true;
                 imported.Add(new(page.Id, page.Title, Path.GetRelativePath(folder, note.Path)));
                 issues.AddRange(converted.Warnings.Select(w => page.Title + ": " + w));

@@ -4,6 +4,7 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Platform.Storage;
 using AvaloniaRichEditor.Controls;
+using AvaloniaRichEditor.Formatters;
 using BrainPending.Core;
 using BrainPending.Importing;
 
@@ -141,9 +142,14 @@ public partial class ImportDialog : Window
         try
         {
             var xml = await _source.GetPageAsync(page.Id, token);
-            var converted = await Task.Run(() => OneNoteConverter.Convert(xml), token);
+            var converted = await Task.Run(() =>
+            {
+                var page = OneNoteConverter.Convert(xml);
+                // Only serialized data crosses threads; brushes and decorations belong to their creator.
+                return (Json: DocumentSerializer.Serialize(page.Document), page.Warnings);
+            }, token);
             token.ThrowIfCancellationRequested();
-            Preview.Document = converted.Document;
+            Preview.LoadJson(converted.Json);
             PreviewInfo.Text = string.Join("\n", converted.Warnings);
         }
         catch (OperationCanceledException) { }

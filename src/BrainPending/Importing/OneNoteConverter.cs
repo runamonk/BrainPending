@@ -1,4 +1,5 @@
 using System.Net;
+using System.Globalization;
 using System.Text;
 using System.Xml.Linq;
 using AvaloniaRichEditor.Documents;
@@ -17,28 +18,116 @@ internal static class OneNoteConverter
         if (page.Name.LocalName != "Page") throw new InvalidDataException("Expected a OneNote page.");
         var warnings = new HashSet<string>();
         var html = new StringBuilder();
+        var styles = page.Elements().Where(e => e.Name.LocalName == "QuickStyleDef")
+            .ToDictionary(e => (string)e.Attribute("index")!, e => e);
         string Encode(string text) => WebUtility.HtmlEncode(text);
+        string TextStyle(XElement element)
+        {
+            var declarations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var ancestor in element.AncestorsAndSelf().Reverse())
+            {
+                if ((string?)ancestor.Attribute("quickStyleIndex") is { } index && styles.TryGetValue(index, out var definition))
+                {
+                    foreach (var (attribute, property) in new[] { ("font", "font-family"), ("fontSize", "font-size"),
+                        ("fontColor", "color"), ("highlightColor", "background-color") })
+                        if ((string?)definition.Attribute(attribute) is { } value)
+                            declarations[property] = value == "automatic" ? (property == "color" ? "#000000" : "transparent")
+                                : value + (attribute == "fontSize" ? "pt" : "");
+                    bool Enabled(string name) => (string?)definition.Attribute(name) is "true" or "1";
+                    declarations["font-weight"] = Enabled("bold") ? "bold" : "normal";
+                    declarations["font-style"] = Enabled("italic") ? "italic" : "normal";
+                    declarations["text-decoration"] = string.Join(' ',
+                        new[] { Enabled("underline") ? "underline" : "", Enabled("strikethrough") ? "line-through" : "" }).Trim();
+                }
+                foreach (var declaration in ((string?)ancestor.Attribute("style") ?? "").Split(';'))
+                {
+                    var pair = declaration.Split(':', 2);
+                    if (pair.Length == 2) declarations[pair[0].Trim()] = pair[1].Trim();
+                }
+            }
+            return string.Join(';', declarations.Select(d => d.Key + ":" + d.Value));
+        }
+        (string Tag, string Style)? ListStyle(XElement element)
+        {
+            var list = element.Elements().FirstOrDefault(e => e.Name.LocalName == "List");
+            if (list == null) return null;
+            var number = list.Elements().FirstOrDefault(e => e.Name.LocalName == "Number");
+            if (number == null)
+            {
+                var bullet = list.Elements().FirstOrDefault(e => e.Name.LocalName == "Bullet");
+                return ("ul", (string?)bullet?.Attribute("bullet") == "3" ? "circle" : "disc");
+            }
+            var marker = (string?)number.Attribute("numberSequence") switch
+            {
+                "2" => "lower-roman", "3" => "upper-alpha", "4" => "lower-alpha",
+                _ => "decimal"
+            };
+            if ((string?)number.Attribute("numberSequence") is { } sequence && sequence is not ("0" or "2" or "3" or "4"))
+                warnings.Add("Some number styles were converted to decimal numbering.");
+            return ("ol", marker);
+        }
+        void RenderChildren(XElement element)
+        {
+            (string Tag, string Style)? active = null;
+            foreach (var child in element.Elements())
+            {
+                var next = ListStyle(child);
+                if (active != next)
+                {
+                    if (active is { } previous) html.Append("</").Append(previous.Tag).Append('>');
+                    if (next is { } current)
+                        html.Append('<').Append(current.Tag).Append(" style=\"list-style-type:").Append(current.Style).Append("\">");
+                    active = next;
+                }
+                Render(child);
+            }
+            if (active is { } last) html.Append("</").Append(last.Tag).Append('>');
+        }
         void Render(XElement element)
         {
             switch (element.Name.LocalName)
             {
-                case "T": html.Append(element.Value); break; // OneNote stores formatted HTML in CDATA.
+                case "T":
+                    // Put inherited formatting on an inline wrapper, where the HTML reader applies it.
+                    html.Append("<span data-are-fg=\"1\" style=\"").Append(Encode(TextStyle(element))).Append("\">")
+                        .Append(element.Value).Append("</span>");
+                    break;
+                case "OEChildren": RenderChildren(element); break;
                 case "OE":
-                    var list = element.Elements().FirstOrDefault(e => e.Name.LocalName == "List");
-                    var tag = list == null ? "div" : "li";
-                    var listTag = list?.Elements().Any(e => e.Name.LocalName == "Number") == true ? "ol" : "ul";
-                    if (list != null) html.Append('<').Append(listTag).Append('>');
+                    var tag = ListStyle(element) == null ? "div" : "li";
                     html.Append('<').Append(tag);
-                    var style = (string?)element.Attribute("style");
-                    if (style != null) html.Append(" style=\"").Append(Encode(style)).Append('"');
+                    var number = element.Elements().FirstOrDefault(e => e.Name.LocalName == "List")?
+                        .Elements().FirstOrDefault(e => e.Name.LocalName == "Number");
+                    if (int.TryParse((string?)number?.Attribute("restartNumberingAt"), out var restart) && restart > 0)
+                        html.Append(" value=\"").Append(restart).Append('"');
+                    if ((string?)element.Attribute("alignment") is { } alignment)
+                        html.Append(" style=\"text-align:").Append(Encode(alignment)).Append('"');
                     html.Append('>');
                     foreach (var child in element.Elements()) Render(child);
                     html.Append("</").Append(tag).Append('>');
-                    if (list != null) html.Append("</").Append(listTag).Append('>');
                     break;
                 case "Table": Wrap("table", element); break;
                 case "Row": Wrap("tr", element); break;
-                case "Cell": Wrap("td", element); break;
+                case "Cell":
+                    html.Append("<td");
+                    if ((string?)element.Attribute("shadingColor") is { } shading && shading != "automatic")
+                        html.Append(" style=\"background-color:").Append(Encode(shading)).Append('"');
+                    html.Append('>');
+                    foreach (var child in element.Elements()) Render(child);
+                    html.Append("</td>");
+                    break;
+                case "Columns":
+                    html.Append("<colgroup>");
+                    foreach (var column in element.Elements().OrderBy(e => (int?)e.Attribute("index") ?? 0))
+                    {
+                        html.Append("<col");
+                        if (double.TryParse((string?)column.Attribute("width"), NumberStyles.Float, CultureInfo.InvariantCulture, out var width)
+                            && double.IsFinite(width) && width > 0)
+                            html.Append(" style=\"width:").Append((width * 96 / 72).ToString(CultureInfo.InvariantCulture)).Append("px\"");
+                        html.Append('>');
+                    }
+                    html.Append("</colgroup>");
+                    break;
                 case "Image":
                     var data = element.Elements().FirstOrDefault(e => e.Name.LocalName == "Data")?.Value;
                     var format = ((string?)element.Attribute("format") ?? "png").ToLowerInvariant();
@@ -97,7 +186,7 @@ internal static class OneNoteConverter
                     break;
                 case "Tag": warnings.Add("OneNote tags and checkbox states were not converted."); break;
                 case "Position": case "Size": case "List": case "Meta": case "TagDef":
-                case "QuickStyleDef": case "PageSettings": case "Columns": case "Column": break;
+                case "QuickStyleDef": case "PageSettings": case "Column": break;
                 default:
                     foreach (var child in element.Elements()) Render(child);
                     break;

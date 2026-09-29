@@ -75,7 +75,6 @@ public partial class MainWindow : Window
         EditorView.Editor.Bind(RichEditor.SelectionBrushProperty, new DynamicResourceExtension("AppSelectionBrush"));
         EditorView.Editor.AllowRemoteImagesOnPaste = false;
         EditorView.Editor.LinkHandler = HandleAttachmentLink;
-        EditorView.Editor.FontFamilyChoices = ["Segoe UI", "Arial", "Calibri", "Georgia", "Times New Roman", "Consolas"];
         EditorView.Editor.TextChanged += (_, _) =>
         {
             if (_loading || _note == null || !EditorView.Editor.IsModified) return;

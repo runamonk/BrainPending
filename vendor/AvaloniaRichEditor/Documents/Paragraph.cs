@@ -68,6 +68,7 @@ public class Paragraph : Block
     public bool IsQuote { get; set; } = false;
     /// <summary>Nested list depth (0 = top level).</summary>
     public int ListLevel { get; set; } = 0;
+    public int? ListStart { get; set; }
 
     public bool IsListItem => ListType != ListKind.None;
 
@@ -88,6 +89,7 @@ public class Paragraph : Block
         Indent = source.Indent;
         IsQuote = source.IsQuote;
         ListLevel = source.ListLevel;
+        ListStart = source.ListStart;
     }
 
     public override TextElement Clone()

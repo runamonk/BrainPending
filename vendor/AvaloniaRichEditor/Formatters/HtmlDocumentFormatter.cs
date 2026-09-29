@@ -337,6 +337,7 @@ namespace AvaloniaRichEditor.Formatters
         private static void ParseList(HtmlNode listNode, FlowDocument flow, ListKind kind, int level, string? linkUri)
         {
             var marker = ListMarkerFromCss(ReadStyleValue(listNode, "list-style-type"));
+            int? start = kind == ListKind.Ordered ? Math.Max(1, listNode.GetAttributeValue("start", 1)) : null;
 
             // Walk items and directly nested lists together in document order; separate passes lose or reorder nested items.
             foreach (var child in listNode.ChildNodes)
@@ -351,12 +352,31 @@ namespace AvaloniaRichEditor.Formatters
                 }
                 if (!child.Name.Equals("li", StringComparison.OrdinalIgnoreCase)) continue;
 
-                var p = new Paragraph { ListType = kind, ListLevel = level, ListMarker = marker };
+                var content = HtmlNode.CreateNode("<div></div>");
+                foreach (var itemChild in child.ChildNodes.Where(n => n.Name is not ("ul" or "ol")))
+                    content.AppendChild(itemChild.CloneNode(true));
+                content.SetAttributeValue("style", child.GetAttributeValue("style", ""));
+                var item = new FlowDocument();
+                if (HasBlockChild(content)) WalkBlocks(content, item, linkUri);
+                else
+                {
+                    var inlineParagraph = new Paragraph();
+                    ParseInlines(child, inlineParagraph, uri: linkUri, inLink: !string.IsNullOrEmpty(linkUri));
+                    item.Blocks.Add(inlineParagraph);
+                }
+                var p = item.Blocks.FirstOrDefault() as Paragraph;
+                if (p == null) { p = new Paragraph(); item.Blocks.Insert(0, p); }
+                p.ListType = kind;
+                p.ListLevel = level;
+                p.ListMarker = marker;
+                p.ListStart = kind == ListKind.Ordered && child.Attributes["value"] != null
+                    ? Math.Max(1, child.GetAttributeValue("value", 1)) : start;
+                start = null;
+                ApplyBlockLeafFormat(child, "li", p);
                 // An <li> that was also a heading (see the export's data-are-h): HTML has no tag for both.
                 int liHeading = child.GetAttributeValue("data-are-h", 0);
                 if (liHeading >= 1 && liHeading <= 6) p.HeadingLevel = liHeading;
-                ParseInlines(child, p, uri: linkUri, inLink: !string.IsNullOrEmpty(linkUri));
-                if (p.Inlines.Count > 0) flow.Blocks.Add(p);
+                foreach (var block in item.Blocks) flow.Blocks.Add(block);
 
                 // A sublist nested INSIDE the item (the shape most other producers emit) still follows it.
                 foreach (var nested in child.ChildNodes.Where(n => n.Name.Equals("ul", StringComparison.OrdinalIgnoreCase) || n.Name.Equals("ol", StringComparison.OrdinalIgnoreCase)))
@@ -611,6 +631,9 @@ namespace AvaloniaRichEditor.Formatters
         // re-read per node, because the marker sits on the span while the text it colours is its child.
         private static void ParseInlines(HtmlNode node, Paragraph p, FontWeight weight = FontWeight.Normal, FontStyle style = FontStyle.Normal, IBrush? color = null, string? uri = null, double baseSize = 10, bool inLink = false, IBrush? background = null, string? family = null, bool underline = false, bool strike = false, bool ownColor = false)
         {
+            ApplyInlineStyle(node.GetAttributeValue("style", ""), ref weight, ref style, ref color, ref baseSize,
+                ref background, ref family, ref underline, ref strike);
+            ownColor |= node.GetAttributeValue("data-are-fg", "") == "1";
             foreach (var child in node.ChildNodes)
             {
                 var cw = weight;
@@ -707,8 +730,12 @@ namespace AvaloniaRichEditor.Formatters
                     || (double.TryParse(v, System.Globalization.NumberStyles.Float,
                             System.Globalization.CultureInfo.InvariantCulture, out double n) && n >= 600))
                     weight = FontWeight.Bold;
+                else if (v == "normal" || v == "400") weight = FontWeight.Normal;
             }
-            if (s.Contains("font-style:italic") || s.Contains("font-style: italic")) style = FontStyle.Italic;
+            var fs = System.Text.RegularExpressions.Regex.Match(s, @"font-style\s*:\s*(italic|normal)");
+            if (fs.Success) style = fs.Groups[1].Value == "italic" ? FontStyle.Italic : FontStyle.Normal;
+            if (System.Text.RegularExpressions.Regex.IsMatch(s, @"text-decoration(?:-line)?\s*:\s*none"))
+                underline = strike = false;
             if (System.Text.RegularExpressions.Regex.IsMatch(s, "text-decoration[^;]*underline")) underline = true;
             if (System.Text.RegularExpressions.Regex.IsMatch(s, "text-decoration[^;]*line-through")) strike = true;
 
@@ -954,6 +981,7 @@ namespace AvaloniaRichEditor.Formatters
             if (p.MarginTop != 0 || p.MarginBottom != DefaultMarginBottom || p.MarginRight != 0)
                 extraAttr += $" data-are-m=\"{Px(p.MarginTop)},{Px(p.MarginBottom)},{Px(p.MarginRight)}\"";
             if (p.Inlines.Count == 0) extraAttr += " data-are-empty=\"1\"";
+            if (p.ListType == ListKind.Ordered && p.ListStart is { } start) extraAttr += $" value=\"{start}\"";
             sb.Append($"<{tag}{extraAttr} style=\"{pStyle}\">");
             for (int i = 0; i < p.Inlines.Count; i++)
                 EmitInline(sb, p.Inlines[i], i == 0, i == p.Inlines.Count - 1);

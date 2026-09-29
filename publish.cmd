@@ -1,1 +1,1 @@
-dotnet publish src/MyNotes -c Release -r win-x64 --self-contained true -o C:\my.files\Tools\MyNotes
+dotnet publish src/BrainPending -c Release -r win-x64 --self-contained true -o C:\my.files\Tools\BrainPending

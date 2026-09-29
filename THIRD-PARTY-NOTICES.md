@@ -1,6 +1,6 @@
 # Third-party components
 
-MyNotes uses free components; no Avalonia Pro licence is required.
+Brain Pending uses free components; no Avalonia Pro licence is required.
 
 - **Avalonia 12.1.3**, AvaloniaUI contributors, MIT: https://github.com/AvaloniaUI/Avalonia/blob/master/licence.md
 - **AvaloniaRichEditor 1.2.1**, copyright (c) 2026 centwon, MIT: https://github.com/centwon/AvaloniaRichEditor. Pinned source and local RTF fixes are in `vendor/AvaloniaRichEditor`; its full licence is distributed in `licenses/AvaloniaRichEditor.txt`.

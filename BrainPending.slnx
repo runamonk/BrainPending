@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BrainPending.Core/BrainPending.Core.csproj" />
+    <Project Path="src/BrainPending/BrainPending.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BrainPending.Tests/BrainPending.Tests.csproj" />
+  </Folder>
+  <Folder Name="/vendor/">
+    <Project Path="vendor/AvaloniaRichEditor/AvaloniaRichEditor.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,35 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:BrainPending"
+        x:Class="BrainPending.MoveFolderDialog"
+        Title="Move to folder" Width="460" Height="480" MinWidth="360" MinHeight="360"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}">
+  <Grid Margin="24" RowDefinitions="Auto,Auto,*,Auto,Auto">
+    <TextBlock x:Name="MoveHeading" FontSize="21" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,16,0,10">
+      <Button x:Name="HomeButton" Classes="quiet" Width="32" Height="32" Padding="6" Click="Home_Click" ToolTip.Tip="Notebook home" AutomationProperties.Name="Notebook home">
+        <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 1,9 L 10,2 L 19,9 M 4,7 L 4,18 L 8,18 L 8,12 L 12,12 L 12,18 L 16,18 L 16,7" />
+      </Button>
+      <TextBlock x:Name="Location" Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+    </Grid>
+    <Grid Grid.Row="2">
+      <ListBox x:Name="Folders" Background="Transparent" SelectionChanged="Folders_SelectionChanged" AutomationProperties.Name="Destination folders">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="local:BrowserItem">
+            <Grid ColumnDefinitions="28,*" MinHeight="28">
+              <Path Data="{Binding IconData}" Width="20" Height="20" Stroke="{DynamicResource AppIconBrush}" StrokeThickness="1.5" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <TextBlock x:Name="EmptyMessage" Text="No folders here" IsVisible="False" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
+    </Grid>
+    <TextBlock x:Name="Error" Grid.Row="3" Foreground="{DynamicResource AppErrorBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
+    <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+      <Button Classes="action quiet" Content="Cancel" Click="Cancel_Click" />
+      <Button x:Name="MoveButton" Classes="action" Content="Move here" Background="{DynamicResource AppAccentBrush}" Foreground="{DynamicResource AppAccentTextBrush}" Click="Move_Click" />
+    </StackPanel>
+  </Grid>
+</Window>

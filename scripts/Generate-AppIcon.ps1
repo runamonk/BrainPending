@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-$assetDirectory = Join-Path $PSScriptRoot '../src/MyNotes/Assets'
+$assetDirectory = Join-Path $PSScriptRoot '../src/BrainPending/Assets'
 [IO.Directory]::CreateDirectory($assetDirectory) | Out-Null
 
 # Vector geometry rendered at 4x resolution, then downsampled for each Windows icon size.
@@ -24,22 +24,42 @@ function Fill-RoundedRect($color, [single]$x, [single]$y, [single]$width, [singl
     $path.Dispose()
 }
 
-Fill-RoundedRect '#44475A' 44 18 184 222 18
-Fill-RoundedRect '#F8F8F2' 61 202 155 28 9
-Fill-RoundedRect '#BD93F9' 44 16 184 202 18
-Fill-RoundedRect '#6272A4' 44 16 30 202 14
-foreach ($ringY in @(51, 93, 135, 177)) { Fill-RoundedRect '#8BE9FD' 27 $ringY 37 12 6 }
-$bookmark = [Drawing.PointF[]]@(
-    [Drawing.PointF]::new(180,16), [Drawing.PointF]::new(202,16),
-    [Drawing.PointF]::new(202,81), [Drawing.PointF]::new(191,72),
-    [Drawing.PointF]::new(180,81)
-)
-$brush = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#FF79C6'))
-$graphics.FillPolygon($brush, $bookmark)
-$brush.Dispose()
-Fill-RoundedRect '#44475A' 94 105 88 10 5
-Fill-RoundedRect '#44475A' 94 132 88 10 5
-Fill-RoundedRect '#44475A' 94 159 59 10 5
+Fill-RoundedRect '#282A36' 8 8 240 240 54
+
+# Two lobes, one thought. Still waiting on the thought.
+$brain = [Drawing.Drawing2D.GraphicsPath]::new()
+$brain.AddBezier(128, 52, 112, 27, 79, 35, 72, 58)
+$brain.AddBezier(72, 58, 46, 54, 32, 76, 42, 98)
+$brain.AddBezier(42, 98, 19, 117, 33, 147, 51, 151)
+$brain.AddBezier(51, 151, 49, 179, 82, 190, 101, 176)
+$brain.AddBezier(101, 176, 112, 190, 125, 180, 128, 172)
+$brain.AddBezier(128, 172, 141, 190, 155, 183, 162, 175)
+$brain.AddBezier(162, 175, 186, 190, 210, 172, 206, 152)
+$brain.AddBezier(206, 152, 232, 143, 232, 114, 216, 100)
+$brain.AddBezier(216, 100, 227, 77, 210, 54, 187, 58)
+$brain.AddBezier(187, 58, 177, 32, 145, 28, 128, 52)
+$brain.CloseFigure()
+$pink = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#FF92C2'))
+$outline = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#AD497B'), 7)
+$outline.StartCap = $outline.EndCap = [Drawing.Drawing2D.LineCap]::Round
+$graphics.FillPath($pink, $brain)
+$graphics.DrawPath($outline, $brain)
+$graphics.DrawBezier($outline, 128, 53, 117, 69, 136, 80, 128, 96)
+$graphics.DrawBezier($outline, 72, 60, 68, 77, 92, 76, 87, 95)
+$graphics.DrawBezier($outline, 43, 100, 57, 92, 70, 105, 66, 116)
+$graphics.DrawBezier($outline, 187, 60, 192, 81, 163, 73, 169, 95)
+$graphics.DrawBezier($outline, 215, 102, 198, 94, 187, 106, 193, 119)
+$graphics.DrawBezier($outline, 52, 150, 65, 136, 81, 143, 80, 157)
+$graphics.DrawBezier($outline, 205, 152, 187, 140, 178, 145, 178, 160)
+$brain.Dispose(); $pink.Dispose(); $outline.Dispose()
+
+# A blank stare and a loading ellipsis.
+Fill-RoundedRect '#282A36' 88 115 14 22 7
+Fill-RoundedRect '#282A36' 153 115 14 22 7
+Fill-RoundedRect '#282A36' 117 151 22 7 3.5
+Fill-RoundedRect '#FF92C2' 87 207 16 16 8
+Fill-RoundedRect '#BD93F9' 120 207 16 16 8
+Fill-RoundedRect '#6272A4' 153 207 16 16 8
 $graphics.Dispose()
 
 $sizes = @(16, 20, 24, 32, 48, 64, 128, 256)
@@ -53,12 +73,12 @@ foreach ($size in $sizes) {
     $stream = [IO.MemoryStream]::new()
     $bitmap.Save($stream, [Drawing.Imaging.ImageFormat]::Png)
     $frames += ,$stream.ToArray()
-    if ($size -eq 256) { $bitmap.Save((Join-Path $assetDirectory 'MyNotes.png'), [Drawing.Imaging.ImageFormat]::Png) }
+    if ($size -eq 256) { $bitmap.Save((Join-Path $assetDirectory 'BrainPending.png'), [Drawing.Imaging.ImageFormat]::Png) }
     $stream.Dispose(); $g.Dispose(); $bitmap.Dispose()
 }
 $canvas.Dispose()
 
-$file = [IO.File]::Create((Join-Path $assetDirectory 'MyNotes.ico'))
+$file = [IO.File]::Create((Join-Path $assetDirectory 'BrainPending.ico'))
 $writer = [IO.BinaryWriter]::new($file)
 $writer.Write([uint16]0); $writer.Write([uint16]1); $writer.Write([uint16]$sizes.Count)
 $offset = 6 + 16 * $sizes.Count
@@ -72,4 +92,4 @@ for ($i = 0; $i -lt $sizes.Count; $i++) {
 }
 foreach ($frame in $frames) { $writer.Write([byte[]]$frame) }
 $writer.Dispose()
-Write-Output 'Generated MyNotes.png and MyNotes.ico (16–256px).'
+Write-Output 'Generated BrainPending.png and BrainPending.ico (16–256px).'

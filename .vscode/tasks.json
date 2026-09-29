@@ -5,7 +5,7 @@
       "label": "build",
       "type": "process",
       "command": "dotnet",
-      "args": ["build", "${workspaceFolder}/src/MyNotes/MyNotes.csproj"],
+      "args": ["build", "${workspaceFolder}/src/BrainPending/BrainPending.csproj"],
       "problemMatcher": "$msCompile",
       "group": { "kind": "build", "isDefault": true }
     },
@@ -13,14 +13,14 @@
       "label": "test",
       "type": "process",
       "command": "dotnet",
-      "args": ["test", "${workspaceFolder}/MyNotes.slnx"],
+      "args": ["test", "${workspaceFolder}/BrainPending.slnx"],
       "problemMatcher": "$msCompile"
     },
     {
       "label": "publish portable Windows app",
       "type": "process",
       "command": "dotnet",
-      "args": ["publish", "${workspaceFolder}/src/MyNotes/MyNotes.csproj", "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", "${workspaceFolder}/artifacts/MyNotes"],
+      "args": ["publish", "${workspaceFolder}/src/BrainPending/BrainPending.csproj", "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", "${workspaceFolder}/artifacts/BrainPending"],
       "problemMatcher": "$msCompile"
     }
   ]

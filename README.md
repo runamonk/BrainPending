@@ -1,18 +1,26 @@
-# MyNotes
+# Brain Pending
+
+![Brain Pending icon](src/BrainPending/Assets/BrainPending.png)
+
+**A place for thoughts still loading.**
 
 A portable note-taking app built with C# / .NET 10 and Avalonia. No WPF, WinForms,
 browser shell, or paid editor components.
 
+Formerly MyNotes. Existing notebooks, attachments, themes, and preferences stay
+compatible: the `.mynotes` notebook folder, `mynotes-attachment:` links, and
+`%LOCALAPPDATA%/MyNotes` preferences directory keep their original names.
+
 ## Run in VS Code
 
 Install the .NET 10 SDK and Microsoft's C# extension (C# Dev Kit is recommended).
-Open this folder, select **MyNotes** in Run and Debug, and press **F5**.
+Open this folder, select **Brain Pending** in Run and Debug, and press **F5**.
 The workspace recommends the optional Avalonia extension for XAML editing.
 
 Or run from a terminal:
 
 ```powershell
-dotnet run --project src/MyNotes -- --notes ./Notes
+dotnet run --project src/BrainPending -- --notes ./Notes
 ```
 
 ## What works
@@ -71,10 +79,10 @@ dotnet run --project src/MyNotes -- --notes ./Notes
 ## Portable Windows build
 
 ```powershell
-dotnet publish src/MyNotes -c Release -r win-x64 --self-contained true -o artifacts/MyNotes
+dotnet publish src/BrainPending -c Release -r win-x64 --self-contained true -o artifacts/BrainPending
 ```
 
-Copy the **whole output folder** to your synced location. Run `MyNotes.exe`.
+Copy the **whole output folder** to your synced location. Run `BrainPending.exe`.
 No .NET SDK or IDE is needed on the destination computer.
 
 Notebook selection order: `--notes <folder>`, the last successfully opened notebook
@@ -89,7 +97,7 @@ with the notes. Use `--notes` to open multiple independent notebooks/instances.
 
 ## Shared-folder behaviour
 
-Your existing sync service transfers the files; MyNotes reacts when they arrive.
+Your existing sync service transfers the files; Brain Pending reacts when they arrive.
 “Saved locally” does not mean the sync service has uploaded a change.
 
 - Clean open notes reload on an external change.
@@ -113,7 +121,7 @@ limit yet; image-heavy notes can consume substantial space.
 ## Validation and current scope
 
 ```powershell
-dotnet test MyNotes.slnx
+dotnet test BrainPending.slnx
 ```
 
 Tests cover persistence, competing instances, external changes in an open window,
@@ -131,14 +139,24 @@ external RTF objects and advanced table/page formatting need further compatibili
 testing. Original bytes are retained until the user edits, and previous revisions
 are kept. Windows is the validated target; macOS/Linux have not been validated.
 
+## App icon
+
+The pink brain has a blank stare and three loading dots. Thinking is pending;
+your notes are saved. The window and Windows executable use the same icon.
+Regenerate the PNG and multi-size ICO (16–256 px) on Windows with:
+
+```powershell
+pwsh -File scripts/Generate-AppIcon.ps1
+```
+
 ## Source layout
 
-- `src/MyNotes`: Avalonia application and UI.
-- `src/MyNotes.Core`: storage and conflict preservation.
-- `tests/MyNotes.Tests`: persistence, editor, and window integration tests.
+- `src/BrainPending`: Avalonia application and UI.
+- `src/BrainPending.Core`: storage and conflict preservation.
+- `tests/BrainPending.Tests`: persistence, editor, and window integration tests.
 - `vendor/AvaloniaRichEditor`: pinned MIT editor source with documented RTF fixes.
 
-See `THIRD-PARTY-NOTICES.md` and `vendor/AvaloniaRichEditor/MYNOTES-PATCHES.md`.
+See `THIRD-PARTY-NOTICES.md` and `vendor/AvaloniaRichEditor/BRAINPENDING-PATCHES.md`.
 
 ### Custom themes
 
@@ -159,7 +177,7 @@ Invalid files show an error without replacing the current palette; startup uses
 bundled defaults if loading fails. **Reset built-in themes** restores all supplied
 themes, preserves custom entries, and saves a uniquely named `.bak` beside the
 file. Correct invalid JSON before resetting so custom entries can be preserved.
-The bundled defaults are maintained in `src/MyNotes/DefaultThemes.json`.
+The bundled defaults are maintained in `src/BrainPending/DefaultThemes.json`.
 
 ## Import from Microsoft OneNote
 
@@ -168,12 +186,12 @@ import source requires the Windows desktop version of OneNote, with first-run
 setup completed and the notebooks open and synced. **Open .one / .onetoc2…** asks
 OneNote to open an existing section (`.one`) or notebook (`.onetoc2`). Selecting
 `.onetoc2` loads pages from the notebook’s sections and section groups; keep the
-accompanying `.one` files and subfolders in place. MyNotes reads through OneNote,
+accompanying `.one` files and subfolders in place. Brain Pending reads through OneNote,
 rather than parsing these binary files directly.
 
 Filter by notebook, section, or page name. Use **Select all shown**, or Ctrl/Shift
 selection, and review a page preview. Choose a destination inside the current
-MyNotes notebook and click **Import selected**. Each run creates a separate
+Brain Pending notebook and click **Import selected**. Each run creates a separate
 folder, preserving notebook/section-group/section structure and giving duplicate
 titles unique filenames. Existing notes and source OneNote pages are not changed.
 
@@ -205,4 +223,4 @@ copies even after their links are removed. Attachment previews and automatic
 cleanup of unreferenced files are not implemented.
 
 To run the optional live import test against the generated dummy notebook, set
-`MYNOTES_TEST_ONENOTE` to its `.onetoc2` path before running `dotnet test`.
+`BRAINPENDING_TEST_ONENOTE` to its `.onetoc2` path before running `dotnet test`.

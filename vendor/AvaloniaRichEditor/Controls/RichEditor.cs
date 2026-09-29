@@ -767,6 +767,7 @@ public partial class RichEditor : Control
         // Auto-link: typing whitespace right after a web URL turns the URL into a hyperlink.
         // Runs after the insertion so the space itself stays outside the linked range.
         if (AutoLinkOnType && (text == " " || text == "\t")) TryAutoLink(_caretPosition.Paragraph, preCaret);
+        TypingFormatChanged?.Invoke(this, GetCaretFormat());
         MarkTextChanged();
         // Typing scrolls directly; ResetCaretBlink would break the current undo group.
         _bringCaretIntoView = true;

@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private readonly string? _startupPath;
     private bool _closed;
     private string? _titleEditingPath;
+    private ThoughtFormatting? _thoughtFormatting;
 
     public MainWindow() : this(null) { }
 
@@ -78,6 +79,15 @@ public partial class MainWindow : Window
         EditorView.Editor.TextChanged += (_, _) =>
         {
             if (_loading || _note == null || !EditorView.Editor.IsModified) return;
+            _dirty = true;
+            SaveStatus.Text = "Unsaved changes…";
+            _autosave.Stop();
+            _autosave.Start();
+        };
+        EditorView.Editor.TypingFormatChanged += (_, format) =>
+        {
+            if (_loading || _note == null) return;
+            _thoughtFormatting = ThoughtFormatting.From(format);
             _dirty = true;
             SaveStatus.Text = "Unsaved changes…";
             _autosave.Stop();
@@ -437,7 +447,9 @@ public partial class MainWindow : Window
         if (_note == null || _workspace == null || (!_dirty && !EditorView.Editor.IsModified)) return true;
         try
         {
-            var result = _workspace.Save(_note, EditorView.Editor.ToRtf());
+            var rtf = EditorView.Editor.ToRtf();
+            if (_thoughtFormatting != null) rtf = _thoughtFormatting.Write(rtf);
+            var result = _workspace.Save(_note, rtf);
             if (result.Note.Path != _note.Path) RememberOpenNote(result.Note.Path);
             _note = result.Note;
             _saveRetryCount = 0;
@@ -491,6 +503,7 @@ public partial class MainWindow : Window
         {
             RememberNotePosition();
             EditorView.Editor.LoadRtf(note.Rtf);
+            _thoughtFormatting = ThoughtFormatting.Read(note.Rtf);
             EditorView.ScrollToTop();
             _note = note;
             _dirty = false;
@@ -506,6 +519,9 @@ public partial class MainWindow : Window
                 UpdateLayout();
                 EditorView.ScrollOffset = position.Scroll;
             }
+            if (_thoughtFormatting is { } format)
+                EditorView.Editor.RestoreTypingFormat(format.FontFamily, format.FontSize,
+                    format.Color == null ? null : new SolidColorBrush(Color.Parse(format.Color)));
             SaveStatus.Text = "Saved locally";
             Title = NoteTitle.Text + " — Brain Pending";
         }

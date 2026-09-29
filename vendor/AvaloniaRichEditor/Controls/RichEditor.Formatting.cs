@@ -55,7 +55,25 @@ public partial class RichEditor
 
     public void ToggleBold() { ApplyStyleToSelection(r => r.FontWeight = r.FontWeight == FontWeight.Bold ? FontWeight.Normal : FontWeight.Bold); }
     public void ToggleItalic() { ApplyStyleToSelection(r => r.FontStyle = r.FontStyle == FontStyle.Italic ? FontStyle.Normal : FontStyle.Italic); }
-    public void SetFontSize(double size) { ApplyStyleToSelection(r => r.FontSize = size); }
+    public event EventHandler<CaretFormat>? TypingFormatChanged;
+
+    public void RestoreTypingFormat(string? family, double size, IBrush? foreground)
+    {
+        (_pendingCaretStyles ??= new List<Action<Run>>()).Add(r =>
+        {
+            r.FontFamily = family;
+            r.FontSize = size;
+            r.Foreground = foreground;
+        });
+        NotifyStatus();
+    }
+
+    public void SetFontSize(double size)
+    {
+        if (IsReadOnly) return;
+        ApplyStyleToSelection(r => r.FontSize = size);
+        TypingFormatChanged?.Invoke(this, GetCaretFormat() with { FontSize = size });
+    }
 
     private static readonly double[] FontSizeLadder =
         { 8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 72, 96 };
@@ -81,8 +99,18 @@ public partial class RichEditor
         }
         SetFontSize(target);
     }
-    public void SetForeground(IBrush brush) { ApplyStyleToSelection(r => r.Foreground = brush); }
-    public void SetFontFamily(string family) { ApplyStyleToSelection(r => r.FontFamily = family); }
+    public void SetForeground(IBrush brush)
+    {
+        if (IsReadOnly) return;
+        ApplyStyleToSelection(r => r.Foreground = brush);
+        TypingFormatChanged?.Invoke(this, GetCaretFormat() with { Foreground = brush });
+    }
+    public void SetFontFamily(string family)
+    {
+        if (IsReadOnly) return;
+        ApplyStyleToSelection(r => r.FontFamily = family);
+        TypingFormatChanged?.Invoke(this, GetCaretFormat() with { FontFamily = family });
+    }
     /// <summary>Sets the highlight (background) brush of the current selection; pass <see langword="null"/> to clear.</summary>
     public void SetHighlight(IBrush? brush) { ApplyStyleToSelection(r => r.Background = brush); }
 

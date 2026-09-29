@@ -34,14 +34,14 @@ public sealed class NoteWorkspace
         var full = System.IO.Path.GetFullPath(path);
         if (string.Equals(full, Root, PathComparison))
         {
-            if (!allowRoot) throw new IOException("Choose a note or folder inside the notebook.");
+            if (!allowRoot) throw new IOException("Choose a thought or cluster inside the notebook.");
             return full;
         }
         if (!full.StartsWith(Root + System.IO.Path.DirectorySeparatorChar, PathComparison))
             throw new IOException("This item is outside the notebook.");
         var relative = System.IO.Path.GetRelativePath(Root, full);
         var inTrash = IsInTrash(full);
-        if (!allowRoot && IsTrash(full)) throw new IOException("The Trash folder cannot be renamed, moved or deleted.");
+        if (!allowRoot && IsTrash(full)) throw new IOException("The Trash cluster cannot be renamed, moved or deleted.");
         var current = Root;
         var index = 0;
         foreach (var part in relative.Split(System.IO.Path.DirectorySeparatorChar))
@@ -81,7 +81,7 @@ public sealed class NoteWorkspace
         var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         if (!File.Exists(PinsPath)) return new(comparer);
         try { return new(JsonSerializer.Deserialize<string[]>(File.ReadAllText(PinsPath)) ?? [], comparer); }
-        catch (JsonException e) { throw new IOException("Could not read pinned notes.", e); }
+        catch (JsonException e) { throw new IOException("Could not read pinned thoughts.", e); }
     }
 
     private void UpdatePins(Func<HashSet<string>, bool> update)
@@ -103,7 +103,7 @@ public sealed class NoteWorkspace
     {
         path = CheckPath(path, false);
         if (!File.Exists(path) || !System.IO.Path.GetExtension(path).Equals(".rtf", StringComparison.OrdinalIgnoreCase))
-            throw new IOException("Only notes can be pinned.");
+            throw new IOException("Only thoughts can be pinned.");
         var relative = System.IO.Path.GetRelativePath(Root, path);
         UpdatePins(pins => pinned ? pins.Add(relative) : pins.Remove(relative));
     }
@@ -243,14 +243,14 @@ public sealed class NoteWorkspace
     {
         path = CheckPath(path, false);
         destinationFolder = CheckPath(destinationFolder);
-        if (!Directory.Exists(destinationFolder)) throw new IOException("The destination folder no longer exists.");
+        if (!Directory.Exists(destinationFolder)) throw new IOException("The destination cluster no longer exists.");
         var isFolder = Directory.Exists(path);
         if (isFolder && (string.Equals(path, destinationFolder, PathComparison) ||
             destinationFolder.StartsWith(path + System.IO.Path.DirectorySeparatorChar, PathComparison)))
-            throw new IOException("A folder cannot be moved into itself or one of its subfolders.");
+            throw new IOException("A cluster cannot be moved into itself or one of its subclusters.");
         var target = CheckPath(System.IO.Path.Combine(destinationFolder, System.IO.Path.GetFileName(path)), false);
         if (string.Equals(path, target, PathComparison)) return path;
-        if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists in the destination folder.");
+        if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists in the destination cluster.");
         if (isFolder) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
         return target;

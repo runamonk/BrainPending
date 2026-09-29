@@ -71,7 +71,7 @@ public partial class MoveFolderDialog : Window
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            Error.Text = "This folder is unavailable. Choose another folder.";
+            Error.Text = "This cluster is unavailable. Choose another cluster.";
             MoveButton.IsEnabled = false;
         }
     }
@@ -92,11 +92,11 @@ public partial class MoveFolderDialog : Window
         try
         {
             if (_move(_folder)) Close();
-            else Error.Text = "The current note could not be saved. Cancel and resolve the save problem before moving.";
+            else Error.Text = "The current thought could not be saved. Cancel and resolve the save problem before moving.";
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Error.Text = "Could not move here. Check that the folder is available and does not already contain an item with this name.";
+            Error.Text = "Could not move here. Check that the cluster is available and does not already contain an item with this name.";
         }
     }
 }

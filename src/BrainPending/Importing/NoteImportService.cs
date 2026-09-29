@@ -84,7 +84,7 @@ internal static class NoteImportService
             File.WriteAllText(Path.Combine(reports, Guid.NewGuid().ToString("N") + ".json"),
                 JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }));
             var summary = $"OneNote import: {imported.Count} pages imported.\n" +
-                (result.Cancelled ? "Stopped early. Completed notes were kept.\n" : "") +
+                (result.Cancelled ? "Stopped early. Completed thoughts were kept.\n" : "") +
                 "Original OneNote content was not changed.\n\n" + string.Join("\n", issues);
             workspace.CreateNote(folder, UniqueName(workspace, folder, "Import report"), NoteWorkspace.PlainTextRtf(summary));
         }

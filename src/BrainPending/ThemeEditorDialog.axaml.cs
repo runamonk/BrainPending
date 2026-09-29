@@ -83,7 +83,7 @@ public partial class ThemeEditorDialog : Window
         var document = new FlowDocument();
         var paragraph = new Paragraph();
         paragraph.Inlines.Add(new Run { Text = "Capture an idea, plan your day, or keep something worth remembering.\n\n", Foreground = Brush(theme.Text), FontSize = 12 });
-        paragraph.Inlines.Add(new Run { Text = "A link in your note", NavigateUri = "https://example.com", FontSize = 12 });
+        paragraph.Inlines.Add(new Run { Text = "A link in your thought", NavigateUri = "https://example.com", FontSize = 12 });
         document.Blocks.Add(paragraph);
         PreviewEditor.Document = document;
         // Preview brushes stay local: typing must never change the application's palette.

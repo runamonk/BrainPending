@@ -284,7 +284,7 @@ public partial class MainWindow : Window
             ClearNote();
             _folder = _workspace.Root;
             RefreshBrowser(true);
-            ShowNotice("The last open note could not be reopened. Choose another note to continue. " + e.Message);
+            ShowNotice("The last open thought could not be reopened. Choose another thought to continue. " + e.Message);
         }
     }
 
@@ -318,7 +318,7 @@ public partial class MainWindow : Window
                 await Run(async () =>
                 {
                     if (!await Confirm("Remove recent notebook?",
-                        $"Remove ‘{name}’ from recent notebooks? The notebook and its notes will remain unchanged.", "Remove")) return;
+                        $"Remove ‘{name}’ from recent notebooks? The notebook and its thoughts will remain unchanged.", "Remove")) return;
                     _settings = NotebookSettings.Read(_settingsPath).RemoveRecentNotebook(path);
                     _settings.Save(_settingsPath);
                     RefreshRecentNotebooks();
@@ -380,10 +380,10 @@ public partial class MainWindow : Window
         if (_folder != _workspace.Root)
         {
             var parent = _workspace.ParentFolder(_folder);
-            rows.Add(new(parent, "Up to " + (parent == _workspace.Root ? "notebook" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, "Parent folder"));
+            rows.Add(new(parent, "Up to " + (parent == _workspace.Root ? "notebook" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, "Parent cluster"));
         }
         rows.AddRange(entries.Select(e => new BrowserItem(e.Path, e.Name, e.IsFolder, false,
-            !string.IsNullOrWhiteSpace(SearchBox.Text) ? Path.GetRelativePath(_folder, e.Path) : e.IsFolder ? "Folder" : "Edited " + e.ModifiedUtc.ToLocalTime().ToString("d MMM, HH:mm"), IsPinned: e.IsPinned)));
+            !string.IsNullOrWhiteSpace(SearchBox.Text) ? Path.GetRelativePath(_folder, e.Path) : e.IsFolder ? "Cluster" : "Edited " + e.ModifiedUtc.ToLocalTime().ToString("d MMM, HH:mm"), IsPinned: e.IsPinned)));
         if (_folder == _workspace.Root && (string.IsNullOrWhiteSpace(SearchBox.Text) || "Trash".Contains(SearchBox.Text.Trim(), StringComparison.OrdinalIgnoreCase)))
             rows.Add(new(_workspace.TrashPath, "Trash", true, false, "", true));
         _refreshing = true;
@@ -393,9 +393,9 @@ public partial class MainWindow : Window
             Browser.SelectedItem = rows.FirstOrDefault(e => e.Path == _note?.Path);
         }
         finally { _refreshing = false; }
-        FolderEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? (_workspace.IsTrash(_folder) ? "Trash is empty." : "Create your first note here.") : "No matching titles.";
+        FolderEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? (_workspace.IsTrash(_folder) ? "Trash is empty." : "Create your first thought here.") : "No matching titles.";
         FolderEmpty.IsVisible = rows.All(r => r.IsUp);
-        ItemCount.Text = $"{entries.Count(e => !e.IsFolder)} notes · {entries.Count(e => e.IsFolder)} folders";
+        ItemCount.Text = $"{entries.Count(e => !e.IsFolder)} thoughts · {entries.Count(e => e.IsFolder)} clusters";
     }
 
     private void CheckExternalChanges()
@@ -415,7 +415,7 @@ public partial class MainWindow : Window
                     else if (revision == null)
                     {
                         ClearNote();
-                        ShowNotice("The open note was moved or deleted outside this app. The folder has been refreshed.");
+                        ShowNotice("The open thought was moved or deleted outside this app. The cluster has been refreshed.");
                     }
                     else
                     {
@@ -447,7 +447,7 @@ public partial class MainWindow : Window
             NoteTitle.Text = Path.GetFileNameWithoutExtension(_note.Path);
             SaveStatus.Text = "Saved locally · " + DateTime.Now.ToString("HH:mm");
             if (result.IsConflict)
-                ShowNotice("This note changed on disk while you were editing. Your work is saved in this conflict copy; the other version is unchanged.");
+                ShowNotice("This thought changed on disk while you were editing. Your work is saved in this conflict copy; the other version is unchanged.");
             RefreshBrowser();
             return true;
         }
@@ -562,7 +562,7 @@ public partial class MainWindow : Window
         await Run(async () =>
         {
             if (_workspace == null || !SaveCurrent()) return;
-            var name = await Prompt("New note", "Give your note a title", "Untitled note", "Create note");
+            var name = await Prompt("New thought", "Give your thought a title", "Untitled thought", "Create thought");
             if (name == null) return;
             LoadNote(_workspace.CreateNote(_folder, name));
             SearchBox.Text = "";
@@ -576,7 +576,7 @@ public partial class MainWindow : Window
     private Task NewFolder() => Run(async () =>
     {
         if (_workspace == null) return;
-        var name = await Prompt("New folder", "Keep related notes together", "New folder", "Create folder");
+        var name = await Prompt("New cluster", "Keep related thoughts together", "New cluster", "Create cluster");
         if (name != null) await Navigate(_workspace.CreateFolder(_folder, name));
     });
 
@@ -625,8 +625,8 @@ public partial class MainWindow : Window
                 if (_workspace == null || _note == null || _titleEditingPath == null) return;
                 var source = _titleEditingPath;
                 var name = NoteWorkspace.ValidateName(NoteTitleInput.Text ?? "");
-                if (!SaveCurrent()) throw new IOException("Save the note successfully before renaming it.");
-                if (_note.Path != source) throw new IOException("The note changed while editing. Cancel and try renaming the current note.");
+                if (!SaveCurrent()) throw new IOException("Save the thought successfully before renaming it.");
+                if (_note.Path != source) throw new IOException("The thought changed while editing. Cancel and try renaming the current thought.");
                 var target = _workspace.Rename(source, name);
                 LoadNote(_workspace.Read(target));
                 RefreshBrowser(true);
@@ -715,7 +715,7 @@ public partial class MainWindow : Window
             if (destination != null) MoveItem(item, destination);
             return Task.CompletedTask;
         });
-        var moveTo = new MenuItem { Header = "Move to folder…" };
+        var moveTo = new MenuItem { Header = "Move to cluster…" };
         moveTo.Click += async (_, _) => await Run(async () =>
         {
             if (_workspace == null) return;
@@ -739,7 +739,7 @@ public partial class MainWindow : Window
         var actions = new List<Control>();
         if (!item.IsFolder)
         {
-            var pin = new MenuItem { Header = item.IsPinned ? "Unpin note" : "Pin note" };
+            var pin = new MenuItem { Header = item.IsPinned ? "Unpin thought" : "Pin thought" };
             pin.Click += async (_, _) => await Run(() =>
             {
                 _workspace?.SetPinned(item.Path, !item.IsPinned);
@@ -805,7 +805,7 @@ public partial class MainWindow : Window
     private async void OpenNotebook_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
     {
         if (!SaveCurrent()) return;
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose your notes folder", AllowMultiple = false });
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose your notebook folder", AllowMultiple = false });
         var path = folders.FirstOrDefault()?.TryGetLocalPath();
         if (path == null) return;
         SetWorkspace(path);
@@ -987,7 +987,7 @@ public partial class MainWindow : Window
         var workspace = _workspace;
         var notePath = _note.Path;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        { Title = "Attach files to note", AllowMultiple = true });
+        { Title = "Attach files to thought", AllowMultiple = true });
         var store = new AttachmentStore(workspace.Root);
         foreach (var file in files)
         {
@@ -996,7 +996,7 @@ public partial class MainWindow : Window
             if (_workspace != workspace || _note?.Path != notePath)
             {
                 store.Discard(attachment);
-                throw new IOException("The selected note changed. Please attach the file again.");
+                throw new IOException("The selected thought changed. Please attach the file again.");
             }
             EditorView.Editor.InsertHtml($"<p><a href=\"{WebUtility.HtmlEncode(attachment.Link)}\">Attachment: {WebUtility.HtmlEncode(attachment.Name)} ({attachment.Size:N0} bytes)</a></p>");
         }

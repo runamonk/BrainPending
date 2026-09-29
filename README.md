@@ -21,7 +21,7 @@ dotnet run --project src/BrainPending -- --notes ./Notes
 
 ## What works
 
-- Two primary panels, no tabs. Folders and notes share the left panel.
+- Two primary panels, no tabs. Clusters and thoughts share the left panel. Clusters are folders on disk.
 - Use the pin at the right end of the left panel's toolbar to auto-hide the panel;
   click the mini sidebar’s toggle to reveal it over the editor, or use Ctrl+Shift+F.
   Pin it again to keep it visible. The pin preference is remembered across launches.
@@ -50,7 +50,7 @@ dotnet run --project src/BrainPending -- --notes ./Notes
   or delete to recoverable trash. Shift+F10 opens the menu for a selected entry.
 - Pin notes from their right-click menu to keep them above other entries. Pins
   are saved in the notebook and follow notes when renamed or moved in the app.
-- Move to folder uses an in-app folder browser with Home, Up, and Move here;
+- Move to cluster uses an in-app cluster browser with Home, Up, and Move here;
   destinations stay inside the notebook.
 - Trash is a protected notebook folder. Deleted notes and folders stay browsable
   and editable there; move them out to recover them. Deleting from Trash sends
@@ -104,7 +104,7 @@ Your existing sync service transfers the files; Brain Pending reacts when they a
 - Immutable RTF revisions are stored in `Notes/.mynotes/history`, with JSON files
   identifying their original paths. Deleted items live in `.mynotes/trash/items`
   and appear in the notebook's Trash folder. Earlier trash entries migrate into this view.
-  Recover deleted items with Move to folder or Move to parent; history recovery
+  Recover deleted items with Move to cluster or Move to parent; history recovery
   still requires copying an RTF from the history directory.
 
 This is eventual file synchronization, not collaborative live editing. Offline
@@ -177,7 +177,7 @@ The bundled defaults are maintained in `src/BrainPending/DefaultThemes.json`.
 
 ## Import from Microsoft OneNote
 
-Choose **Import notes** in the sidebar, then **Load notebooks**. This first
+Choose **Import thoughts** in the sidebar, then **Load notebooks**. This first
 import source requires the Windows desktop version of OneNote, with first-run
 setup completed and the notebooks open and synced. **Open .one / .onetoc2…** asks
 OneNote to open an existing section (`.one`) or notebook (`.onetoc2`). Selecting

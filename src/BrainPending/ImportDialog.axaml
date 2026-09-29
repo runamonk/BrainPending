@@ -1,12 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:rte="using:AvaloniaRichEditor.Controls"
-        x:Class="BrainPending.ImportDialog" Title="Import notes" Width="1000" Height="720"
+        x:Class="BrainPending.ImportDialog" Title="Import thoughts" Width="1000" Height="720"
         MinWidth="760" MinHeight="500" ShowInTaskbar="False" WindowStartupLocation="CenterOwner">
   <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" RowSpacing="12">
     <StackPanel Spacing="5">
-      <TextBlock Text="Import notes" FontSize="23" />
-      <TextBlock Text="Copy pages into a new folder. Your original notes stay in OneNote." TextWrapping="Wrap" />
+      <TextBlock Text="Import thoughts" FontSize="23" />
+      <TextBlock Text="Copy pages into a new cluster. Your original pages stay in OneNote." TextWrapping="Wrap" />
     </StackPanel>
     <StackPanel x:Name="SourceControls" Grid.Row="1" Orientation="Horizontal" Spacing="10">
       <ComboBox SelectedIndex="0" MinWidth="200" AutomationProperties.Name="Import source"><ComboBoxItem Content="Microsoft OneNote" /></ComboBox>
@@ -16,7 +16,7 @@
     <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
       <TextBlock Text="Import into" VerticalAlignment="Center" />
       <ComboBox x:Name="Destination" Grid.Column="1" HorizontalAlignment="Stretch" AutomationProperties.Name="Import destination" />
-      <Button x:Name="ChooseDestination" Grid.Column="2" Content="Choose folder…" Click="Destination_Click" />
+      <Button x:Name="ChooseDestination" Grid.Column="2" Content="Choose cluster…" Click="Destination_Click" />
     </Grid>
     <Grid Grid.Row="3" ColumnDefinitions="*,10,*">
       <Grid RowDefinitions="Auto,Auto,*" RowSpacing="8">

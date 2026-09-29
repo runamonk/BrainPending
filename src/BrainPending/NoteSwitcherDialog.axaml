@@ -2,13 +2,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:BrainPending"
         x:Class="BrainPending.NoteSwitcherDialog"
-        Title="Switch note" Width="540" Height="520" MinWidth="360" MinHeight="300"
+        Title="Switch thought" Width="540" Height="520" MinWidth="360" MinHeight="300"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource AppSurfaceBrush}">
   <Grid Margin="20" RowDefinitions="Auto,*,Auto">
-    <TextBox x:Name="Query" PlaceholderText="Search all notes…" TextChanged="Query_Changed" AutomationProperties.Name="Search all notes" />
+    <TextBox x:Name="Query" PlaceholderText="Search all thoughts…" TextChanged="Query_Changed" AutomationProperties.Name="Search all thoughts" />
     <Grid Grid.Row="1" Margin="0,12,0,12">
-      <ListBox x:Name="Results" Background="Transparent" DoubleTapped="Results_DoubleTapped" AutomationProperties.Name="Matching notes">
+      <ListBox x:Name="Results" Background="Transparent" DoubleTapped="Results_DoubleTapped" AutomationProperties.Name="Matching thoughts">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="local:NoteSwitchItem">
             <StackPanel Spacing="3" Margin="2,4">
@@ -18,7 +18,7 @@
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
-      <TextBlock x:Name="EmptyMessage" Text="No matching notes" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Opacity="0.6" />
+      <TextBlock x:Name="EmptyMessage" Text="No matching thoughts" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Opacity="0.6" />
     </Grid>
     <TextBlock Grid.Row="2" Text="↑ ↓ to select · Enter to open · Esc to cancel" FontSize="12" Opacity="0.6" />
   </Grid>

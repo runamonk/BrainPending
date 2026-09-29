@@ -118,7 +118,7 @@ public sealed class WindowTests : IDisposable
         var physical = folder ? PhysicalKey.D : PhysicalKey.N;
         window.KeyPress(key, RawInputModifiers.Control, physical, null);
         var dialog = Assert.Single(window.OwnedWindows);
-        Assert.Equal(folder ? "New folder" : "New note", dialog.Title);
+        Assert.Equal(folder ? "New cluster" : "New thought", dialog.Title);
         dialog.GetVisualDescendants().OfType<TextBox>().Single().Text = "Cancelled";
         dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
         await Task.Yield();
@@ -161,7 +161,7 @@ public sealed class WindowTests : IDisposable
         editor.InsertText("Keep these edits");
         window.KeyPress(Key.N, RawInputModifiers.Control, PhysicalKey.N, "n");
         var dialog = Assert.Single(window.OwnedWindows);
-        Assert.Equal("New note", dialog.Title);
+        Assert.Equal("New thought", dialog.Title);
         dialog.GetVisualDescendants().OfType<TextBox>().Single().Text = "Created by shortcut";
         dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
         await Task.Yield();
@@ -1020,13 +1020,13 @@ public sealed class WindowTests : IDisposable
         Select(window, note.Path);
         var browser = window.FindControl<ListBox>("Browser")!;
         var item = browser.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == note.Path);
-        window.CreateItemMenu(item).Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Pin note"))
+        window.CreateItemMenu(item).Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Pin thought"))
             .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         var pinned = browser.ItemsSource!.Cast<BrowserItem>().First();
         Assert.Equal(note.Path, pinned.Path);
         Assert.True(pinned.IsPinned);
         Assert.Equal(note.Path, ((BrowserItem)browser.SelectedItem!).Path);
-        window.CreateItemMenu(pinned).Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Unpin note"))
+        window.CreateItemMenu(pinned).Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Unpin thought"))
             .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         Assert.True(browser.ItemsSource!.Cast<BrowserItem>().First().IsFolder);
         Assert.Equal(note.Revision, workspace.Read(note.Path).Revision);

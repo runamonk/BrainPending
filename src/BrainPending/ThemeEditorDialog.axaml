@@ -27,16 +27,16 @@
           <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
             <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
               <TextBlock x:Name="PreviewIcon" Text="✎" FontSize="24" />
-              <TextBlock x:Name="PreviewTitle" Grid.Column="1" Text="A note of your own" FontSize="20" TextWrapping="Wrap" />
+              <TextBlock x:Name="PreviewTitle" Grid.Column="1" Text="A thought of your own" FontSize="20" TextWrapping="Wrap" />
             </Grid>
             <Border x:Name="PreviewSelection" Grid.Row="1" Padding="10" CornerRadius="4">
-              <TextBlock x:Name="PreviewSelectedText" Text="Selected note" />
+              <TextBlock x:Name="PreviewSelectedText" Text="Selected thought" />
             </Border>
             <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
               <editor:RichEditor x:Name="PreviewEditor" IsReadOnly="True" DefaultFontSize="12" />
             </ScrollViewer>
             <Border x:Name="PreviewAccent" Grid.Row="3" Padding="12,8" CornerRadius="6" HorizontalAlignment="Left">
-              <TextBlock x:Name="PreviewAccentText" Text="Write a note" />
+              <TextBlock x:Name="PreviewAccentText" Text="Write a thought" />
             </Border>
           </Grid>
         </Border>

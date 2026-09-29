@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:BrainPending"
         x:Class="BrainPending.MoveFolderDialog"
-        Title="Move to folder" Width="460" Height="480" MinWidth="360" MinHeight="360"
+        Title="Move to cluster" Width="460" Height="480" MinWidth="360" MinHeight="360"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource AppSurfaceBrush}">
   <Grid Margin="24" RowDefinitions="Auto,Auto,*,Auto,Auto">
@@ -14,7 +14,7 @@
       <TextBlock x:Name="Location" Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
     </Grid>
     <Grid Grid.Row="2">
-      <ListBox x:Name="Folders" Background="Transparent" SelectionChanged="Folders_SelectionChanged" AutomationProperties.Name="Destination folders">
+      <ListBox x:Name="Folders" Background="Transparent" SelectionChanged="Folders_SelectionChanged" AutomationProperties.Name="Destination clusters">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="local:BrowserItem">
             <Grid ColumnDefinitions="28,*" MinHeight="28">
@@ -24,7 +24,7 @@
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
-      <TextBlock x:Name="EmptyMessage" Text="No folders here" IsVisible="False" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
+      <TextBlock x:Name="EmptyMessage" Text="No clusters here" IsVisible="False" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.6" />
     </Grid>
     <TextBlock x:Name="Error" Grid.Row="3" Foreground="{DynamicResource AppErrorBrush}" TextWrapping="Wrap" Margin="0,8,0,0" />
     <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">

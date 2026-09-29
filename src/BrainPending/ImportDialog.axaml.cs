@@ -105,7 +105,7 @@ public partial class ImportDialog : Window
     {
         try
         {
-            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose a folder in the current notebook" });
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose a cluster in the current notebook" });
             if (folders.FirstOrDefault()?.TryGetLocalPath() is not { } path || _workspace == null) return;
             path = _workspace.CheckPath(path);
             if (_workspace.IsInTrash(path)) throw new IOException("Choose a destination outside Trash.");
@@ -190,7 +190,7 @@ public partial class ImportDialog : Window
     private void Cancel()
     {
         _operation.Cancel();
-        if (_importing) { Status.Text = "Stopping import… completed notes will be kept."; return; }
+        if (_importing) { Status.Text = "Stopping import… completed thoughts will be kept."; return; }
         Close();
     }
 }

@@ -62,6 +62,7 @@ public partial class MainWindow : Window
         RichEditorLocalization.Language = "en";
         EditorView.Toolbar.ToolbarLevel = ToolbarLevel.Normal;
         EditorView.Toolbar.Compact = true;
+        InitializeAttachmentToolbar();
         EditorView.Editor.DefaultFontFamily = new FontFamily("Segoe UI");
         EditorView.Editor.DefaultFontSize = 12;
         // The editor adds a 10px text inset; align with the 14px title inset.
@@ -496,7 +497,6 @@ public partial class MainWindow : Window
             NoteTitle.Text = Path.GetFileNameWithoutExtension(note.Path);
             Breadcrumb.Text = (_workspace!.IsInTrash(note.Path) ? "Trash  /  " + Path.GetRelativePath(_workspace.TrashPath, note.Path) : "Notebook  /  " + Path.GetRelativePath(_workspace.Root, note.Path)).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
             EditorView.IsVisible = true;
-            AttachmentActions.IsVisible = true;
             Welcome.IsVisible = false;
             if (_notePositions.TryGetValue(note.Path, out var position))
             {
@@ -524,7 +524,6 @@ public partial class MainWindow : Window
         _dirty = false;
         _autosave.Stop();
         EditorView.IsVisible = false;
-        AttachmentActions.IsVisible = false;
         Welcome.IsVisible = true;
         NoteTitle.Text = "";
         Breadcrumb.Text = "";

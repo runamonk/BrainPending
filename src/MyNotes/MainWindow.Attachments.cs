@@ -1,6 +1,10 @@
 using System.Net;
+using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Platform.Storage;
 using MyNotes.Core;
 
@@ -8,6 +12,35 @@ namespace MyNotes;
 
 public partial class MainWindow
 {
+    private void InitializeAttachmentToolbar()
+    {
+        var paperclip = new Avalonia.Controls.Shapes.Path
+        {
+            Data = Geometry.Parse("M 21,11.5 L 12.5,20 A 6,6 0 0 1 4,11.5 L 12.5,3 A 4,4 0 0 1 18.2,8.7 L 9.7,17.2 A 2,2 0 0 1 6.8,14.3 L 14.6,6.5"),
+            StrokeThickness = 1.5,
+            StrokeLineCap = PenLineCap.Round,
+            StrokeJoin = PenLineJoin.Round
+        };
+        paperclip.Bind(Avalonia.Controls.Shapes.Path.StrokeProperty,
+            new DynamicResourceExtension("SystemControlForegroundBaseHighBrush"));
+        var canvas = new Canvas { Width = 24, Height = 24 };
+        canvas.Children.Add(paperclip);
+        var button = new Button
+        {
+            Name = "AttachFileButton",
+            Content = new Viewbox { Width = 20, Height = 20, Child = canvas, Stretch = Stretch.Uniform },
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(5),
+            Padding = new Thickness(7, 3),
+            Focusable = false
+        };
+        AutomationProperties.SetName(button, "Attach file");
+        ToolTip.SetTip(button, "Attach link to file");
+        button.Click += AttachFile_Click;
+        EditorView.Toolbar.TrailingItems.Add(button);
+    }
+
     private async void AttachFile_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
     {
         if (_workspace == null || _note == null) return;

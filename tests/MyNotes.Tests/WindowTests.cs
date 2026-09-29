@@ -1113,7 +1113,12 @@ public sealed class WindowTests : IDisposable
         var window = OpenWindow();
         Select(window, note.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
-        Assert.True(window.FindControl<StackPanel>("AttachmentActions")!.IsVisible);
+        var toolbar = window.FindControl<RichEditorView>("EditorView")!.Toolbar;
+        var attachButton = Assert.Single(toolbar.TrailingItems.OfType<Button>(), button => button.Name == "AttachFileButton");
+        Assert.Contains(attachButton, toolbar.GetVisualDescendants());
+        Assert.IsType<Viewbox>(attachButton.Content);
+        Assert.Equal("Attach file…", ToolTip.GetTip(attachButton));
+        Assert.False(attachButton.Focusable);
         Assert.True(editor.LinkHandler!(attachment.Link));
         var dialog = Assert.Single(window.OwnedWindows.OfType<AttachmentDialog>());
         Assert.Contains(dialog.GetVisualDescendants().OfType<TextBlock>(), text => text.Text == "sample.txt");

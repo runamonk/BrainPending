@@ -1114,10 +1114,13 @@ public sealed class WindowTests : IDisposable
         Select(window, note.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
         var toolbar = window.FindControl<RichEditorView>("EditorView")!.Toolbar;
-        var attachButton = Assert.Single(toolbar.TrailingItems.OfType<Button>(), button => button.Name == "AttachFileButton");
+        var attachButton = Assert.Single(toolbar.GetVisualDescendants().OfType<Button>(), button => button.Name == "AttachFileButton");
         Assert.Contains(attachButton, toolbar.GetVisualDescendants());
         Assert.IsType<Viewbox>(attachButton.Content);
-        Assert.Equal("Attach file…", ToolTip.GetTip(attachButton));
+        Assert.Equal("Attach link to file", ToolTip.GetTip(attachButton));
+        var strip = Assert.IsType<WrapPanel>(attachButton.Parent);
+        var imageButton = strip.Children[strip.Children.IndexOf(attachButton) - 1];
+        Assert.Equal(AvaloniaRichEditor.RichEditorLocalization.GetString("InsertImage"), ToolTip.GetTip(imageButton));
         Assert.False(attachButton.Focusable);
         Assert.True(editor.LinkHandler!(attachment.Link));
         var dialog = Assert.Single(window.OwnedWindows.OfType<AttachmentDialog>());

@@ -1706,12 +1706,23 @@ public partial class RichEditor : Control
         if (container == null) return;
         int idx = container.IndexOf(p);
         if (idx < 0) return;
+        var sourceRun = RunAtOffset(p, Math.Max(0, _caretPosition.Offset - 1))
+            ?? p.Inlines.OfType<Run>().FirstOrDefault();
+        var nextRun = sourceRun != null ? (Run)sourceRun.Clone() : new Run { FontSize = BodyFontSizePt };
+        nextRun.Text = "";
+        nextRun.NavigateUri = null;
+        if (_pendingCaretStyles != null)
+            foreach (var apply in _pendingCaretStyles) apply(nextRun);
         int insertAt = SplitInlinesAt(p, _caretPosition.Offset);
         // Inherit the whole paragraph format (list, indent, alignment, background, line spacing,
         // quote bar, margins, marker style) — but drop back to body text: a heading's Enter starts
         // a normal paragraph (core rule #3).
         var np = new Paragraph();
         np.CopyFormatFrom(p);
+        // Enter starts a new line without carrying paragraph gaps across the split.
+        p.MarginBottom = 0;
+        np.MarginTop = 0;
+        np.MarginBottom = 0;
         np.HeadingLevel = 0;
         while (p.Inlines.Count > insertAt)
         {
@@ -1720,8 +1731,8 @@ public partial class RichEditor : Control
             inl.Parent = np;
             np.Inlines.Add(inl);
         }
-        if (np.Inlines.Count == 0) np.Inlines.Add(new Run { Text = "" });
-        if (p.Inlines.Count == 0) p.Inlines.Add(new Run { Text = "" });
+        if (np.Inlines.Count == 0) np.Inlines.Add(nextRun);
+        if (p.Inlines.Count == 0) p.Inlines.Add((Run)nextRun.Clone());
         np.Parent = p.Parent;
         container.Insert(idx + 1, np);
         _caretPosition = new TextPointer(np, 0);

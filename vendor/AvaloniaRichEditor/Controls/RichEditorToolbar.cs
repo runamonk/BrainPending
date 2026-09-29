@@ -46,6 +46,44 @@ public partial class RichEditorToolbar : UserControl
     /// <summary>Host controls shown at the end of the strip, after the formatting buttons (e.g. zoom).</summary>
     public AvaloniaList<Control> TrailingItems { get; } = new();
 
+    private EventHandler? _attachFileRequested;
+
+    /// <summary>Raised when Attach file is clicked. The button is shown when a host handles this event.</summary>
+    public event EventHandler? AttachFileRequested
+    {
+        add { _attachFileRequested += value; Build(); Sync(); }
+        remove { _attachFileRequested -= value; Build(); Sync(); }
+    }
+
+    private Button BuildAttachmentButton()
+    {
+        var paperclip = new Avalonia.Controls.Shapes.Path
+        {
+            Data = Geometry.Parse("M 21,11.5 L 12.5,20 A 6,6 0 0 1 4,11.5 L 12.5,3 A 4,4 0 0 1 18.2,8.7 L 9.7,17.2 A 2,2 0 0 1 6.8,14.3 L 14.6,6.5"),
+            StrokeThickness = 1.5,
+            StrokeLineCap = PenLineCap.Round,
+            StrokeJoin = PenLineJoin.Round
+        };
+        paperclip.Bind(Avalonia.Controls.Shapes.Path.StrokeProperty,
+            new DynamicResourceExtension("SystemControlForegroundBaseHighBrush"));
+        var canvas = new Canvas { Width = 24, Height = 24 };
+        canvas.Children.Add(paperclip);
+        var button = new Button
+        {
+            Name = "AttachFileButton",
+            Content = new Viewbox { Width = 20, Height = 20, Child = canvas, Stretch = Stretch.Uniform },
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            CornerRadius = new CornerRadius(5),
+            Padding = new Thickness(7, 3),
+            Focusable = false
+        };
+        Avalonia.Automation.AutomationProperties.SetName(button, "Attach file");
+        ToolTip.SetTip(button, "Attach link to file");
+        button.Click += (_, _) => _attachFileRequested?.Invoke(this, EventArgs.Empty);
+        return button;
+    }
+
     // Shared brushes must be immutable so toolbars on different UI threads can use them.
     private static readonly IBrush ActiveBrush = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.Parse("#506780"));
 
@@ -83,7 +121,7 @@ public partial class RichEditorToolbar : UserControl
     // Use identical invariant labels for items and caret reflection; fractional sizes must round-trip.
     private static string SizeText(double pt)
         => pt.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
-    private Control? _tableBtn, _imageBtn, _dividerBtn;
+    private Control? _tableBtn, _imageBtn, _attachmentBtn, _dividerBtn;
     // Color-picker faces, synced to the caret's run: either a swatch bar under the built-in glyph,
     // or (with a host icon) a wrapper whose Foreground tints the icon's colour-inheriting layers.
     private Border? _colorSwatch, _highlightSwatch;
@@ -267,7 +305,7 @@ public partial class RichEditorToolbar : UserControl
         _undoBtn = _redoBtn = _boldBtn = _italicBtn = _underlineBtn = _strikeBtn = _bulletBtn = _numberBtn = null;
         _fontCombo = _sizeCombo = _headingCombo = _alignCombo = null;
         _spacingBox = null; _bulletPreview = _numberPreview = null;
-        _tableBtn = _imageBtn = _dividerBtn = null;
+        _tableBtn = _imageBtn = _attachmentBtn = _dividerBtn = null;
         _zoomCombo = _paperCombo = _orientCombo = null; _exportBtn = _importBtn = _printBtn = null;
         _colorSwatch = _highlightSwatch = null; _colorIconHost = _highlightIconHost = null;
 
@@ -340,7 +378,9 @@ public partial class RichEditorToolbar : UserControl
             _tableBtn = BuildTableButton();
             _imageBtn = Btn("🖼", Loc("InsertImage"), () => { _ = Target?.InsertImageFromFileAsync(); }, RichEditorIcon.InsertImage);
             _dividerBtn = Btn("―", Loc("InsertDivider"), () => Target?.InsertDivider(), RichEditorIcon.InsertDivider);
-            Add(_tableBtn); Add(_imageBtn); Add(_dividerBtn);
+            Add(_tableBtn); Add(_imageBtn);
+            if (_attachFileRequested != null) Add(_attachmentBtn = BuildAttachmentButton());
+            Add(_dividerBtn);
             Add(linkButton = Btn("Link", "Insert or edit hyperlink", () => { _ = Target?.EditLinkFromToolbarAsync(); }, RichEditorIcon.InsertLink));           
             Add(Btn("Clear", "Clear formatting", () => Target?.ClearFormatting()));
 
@@ -350,7 +390,7 @@ public partial class RichEditorToolbar : UserControl
         {
             var primary = new System.Collections.Generic.List<Control>();
             foreach (var control in new Control?[] { _boldBtn, _italicBtn, _underlineBtn, _strikeBtn,
-                colorButton, highlightButton, _fontCombo, _sizeCombo, linkButton,_imageBtn, bulletBox, numberBox, _tableBtn })
+                colorButton, highlightButton, _fontCombo, _sizeCombo, linkButton, _imageBtn, _attachmentBtn, bulletBox, numberBox, _tableBtn })
                 if (control != null) primary.Add(control);
             items = primary;
         }

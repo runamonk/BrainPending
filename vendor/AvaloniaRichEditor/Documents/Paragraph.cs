@@ -38,6 +38,11 @@ public enum ListMarkerStyle
 
 public class Paragraph : Block
 {
+    public Paragraph()
+    {
+        MarginBottom = 0;
+    }
+
     public List<Inline> Inlines { get; set; } = new();
     public TextAlignment TextAlignment { get; set; } = TextAlignment.Left;
     /// <summary>Absolute line-box height in device-independent pixels ("exactly" spacing, like Word's

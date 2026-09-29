@@ -6,3 +6,4 @@ artifacts/
 *.user
 Notes/
 *.log
+.tmp/

@@ -7,10 +7,6 @@
 A portable note-taking app built with C# / .NET 10 and Avalonia. No WPF, WinForms,
 browser shell, or paid editor components.
 
-Formerly MyNotes. Existing notebooks, attachments, themes, and preferences stay
-compatible: the `.mynotes` notebook folder, `mynotes-attachment:` links, and
-`%LOCALAPPDATA%/MyNotes` preferences directory keep their original names.
-
 ## Run in VS Code
 
 Install the .NET 10 SDK and Microsoft's C# extension (C# Dev Kit is recommended).

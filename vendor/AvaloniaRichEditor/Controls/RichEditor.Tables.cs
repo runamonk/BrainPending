@@ -256,13 +256,28 @@ public partial class RichEditor
     }
 
     // Tab moves to the next table cell (Shift+Tab to the previous); Tab in the last cell appends a
-    // new row. Outside a table it inserts spaces so focus doesn't leave the editor.
+    // new row. Outside a table, indent at the paragraph start; insert spaces within text.
     private void HandleTab(bool shift)
     {
         var loc = _caretPosition.Paragraph != null ? FindCell(_caretPosition.Paragraph) : null;
         if (loc == null)
         {
             if (shift) { ShiftTabOutsideTable(); return; }
+            var paragraph = _caretPosition.Paragraph;
+            if (paragraph != null && _selectionStart == _selectionEnd &&
+                BuildPlain(paragraph).Take(_caretPosition.Offset).All(ch => ch is ' ' or '\t'))
+            {
+                if (Document != null) PushUndo();
+                int removed = ConvertLeadingTabsToIndent(paragraph);
+                _caretPosition.Offset = System.Math.Max(0, _caretPosition.Offset - removed);
+                paragraph.Indent = System.Math.Min(paragraph.Indent + 20, 400);
+                CollapseSelectionToCaret();
+                MarkTextChanged();
+                InvalidateMeasure();
+                InvalidateVisual();
+                NotifyStatus();
+                return;
+            }
             if (Document != null) PushUndo();
             InsertText("    ");
             return;
@@ -299,11 +314,7 @@ public partial class RichEditor
         }
     }
 
-    // Shift+Tab outside a table has to undo what Tab did there. Tab types four spaces, so this removes
-    // up to four spaces immediately before the caret; only when there are none — the paragraph was
-    // indented from the toolbar or the shortcut instead — does it fall back to outdenting the paragraph.
-    // Outdenting alone looked like the key did nothing after a Tab, because the two act on different
-    // things: literal spaces in the text versus the paragraph's Indent.
+    // Remove spaces inserted within text, otherwise reduce the paragraph indent.
     private void ShiftTabOutsideTable()
     {
         var p = _caretPosition.Paragraph;

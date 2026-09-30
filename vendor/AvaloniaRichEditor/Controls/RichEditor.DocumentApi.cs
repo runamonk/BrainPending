@@ -1,5 +1,6 @@
 ﻿using System.Linq;
 using System.Threading.Tasks;
+using System;
 using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
@@ -42,8 +43,34 @@ public partial class RichEditor
         // Keep the open document on failure — but only when there IS one. With no document loaded there
         // is nothing to protect, and bailing would leave the editor inert (null Document, no caret), so
         // an empty document is the better landing spot.
-        if (Formatters.RtfDocumentFormatter.TryParse(rtf, out var parsed, out _)) LoadDocument(parsed);
+        if (Formatters.RtfDocumentFormatter.TryParse(rtf, out var parsed, out _))
+        {
+            LoadDocument(parsed);
+            foreach (var paragraph in GetAllParagraphsInOrder()) ConvertLeadingTabsToIndent(paragraph);
+            InvalidateMeasure();
+        }
         else if (Document == null) LoadDocument(new FlowDocument());
+    }
+
+    // Older Tab presses were saved as four spaces. Preserve their width as paragraph formatting.
+    private int ConvertLeadingTabsToIndent(Paragraph paragraph)
+    {
+        if (paragraph.TextAlignment != Avalonia.Media.TextAlignment.Left) return 0;
+        string text = BuildPlain(paragraph);
+        int count = 0;
+        while (count < text.Length)
+        {
+            if (text[count] == '\t') count++;
+            else if (text.AsSpan(count).StartsWith("    ")) count += 4;
+            else break;
+        }
+        if (count == 0) return 0;
+
+        var layout = BuildTextLayout(paragraph, double.PositiveInfinity);
+        double width = layout.HitTestTextPosition(count).X - layout.HitTestTextPosition(0).X;
+        paragraph.Indent += width;
+        DeleteLocalText(paragraph, 0, count);
+        return count;
     }
 
     public string ToJson() => Document != null ? Formatters.DocumentSerializer.Serialize(Document) : "";

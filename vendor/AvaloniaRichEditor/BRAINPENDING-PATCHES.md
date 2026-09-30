@@ -9,6 +9,10 @@ hyperlink destinations, font families on read, and text highlighting. Brain Pend
 requires those properties to survive reopening a note.
 
 Local changes:
+- Tab at the start of a paragraph applies paragraph indentation so wrapped lines align.
+  Tab within text still inserts spaces; Shift+Tab removes spaces or outdents.
+- Reopening RTF converts leading tabs and groups of four spaces from older Tab presses
+  to paragraph indentation, retaining their measured width so existing notes wrap correctly.
 - Simplified project file for local builds; Avalonia pinned to 12.1.3.
 - RTF formatter: standard hyperlink fields, font table reading, highlight colour
   read/write, scoped character state, paragraph alignment, indentation, headings,

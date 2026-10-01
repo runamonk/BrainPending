@@ -1,4 +1,6 @@
+using System.Runtime.InteropServices;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Themes.Fluent;
@@ -9,6 +11,27 @@ internal sealed record AppColorTheme(string Name, bool Dark, string Surface, str
 
 internal static class AppThemes
 {
+    private const int DwmwaCaptionColor = 35;
+    private const int DwmwaTextColor = 36;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr window, int attribute, ref uint value, int size);
+
+    public static void ApplyTitleBar(Window window, AppColorTheme theme)
+    {
+        if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) return;
+        var handle = window.TryGetPlatformHandle();
+        if (handle is not { HandleDescriptor: "HWND" } || handle.Handle == IntPtr.Zero) return;
+
+        var surface = Color.Parse(theme.Surface);
+        var text = Color.Parse(theme.Text);
+        // Windows COLORREF stores red in the lowest byte.
+        uint captionColor = (uint)(surface.R | surface.G << 8 | surface.B << 16);
+        uint textColor = (uint)(text.R | text.G << 8 | text.B << 16);
+        DwmSetWindowAttribute(handle.Handle, DwmwaCaptionColor, ref captionColor, sizeof(uint));
+        DwmSetWindowAttribute(handle.Handle, DwmwaTextColor, ref textColor, sizeof(uint));
+    }
+
     public static readonly AppColorTheme[] All = LoadDefaults();
 
     private static AppColorTheme[] LoadDefaults()

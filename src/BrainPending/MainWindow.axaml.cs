@@ -101,6 +101,7 @@ public partial class MainWindow : Window
         _poll.Tick += (_, _) => CheckExternalChanges();
         Opened += (_, _) =>
         {
+            AppThemes.ApplyTitleBar(this, _themes.Resolve(_settings));
             if (WindowState == WindowState.Normal)
             {
                 _normalPosition = Position;
@@ -889,7 +890,12 @@ public partial class MainWindow : Window
         AppearanceButton.Flyout = menu;
         menu.ShowAt(AppearanceButton);
     }
-    private void ApplyTheme() => AppThemes.Apply(_themes.Resolve(_settings));
+    private void ApplyTheme()
+    {
+        var theme = _themes.Resolve(_settings);
+        AppThemes.Apply(theme);
+        AppThemes.ApplyTitleBar(this, theme);
+    }
     private void Dismiss_Click(object? sender, RoutedEventArgs e) => Notice.IsVisible = false;
     private void ShowNotice(string text) { RetrySaveButton.IsVisible = false; NoticeText.Text = text; Notice.IsVisible = true; }
     private void RetrySave_Click(object? sender, RoutedEventArgs e)

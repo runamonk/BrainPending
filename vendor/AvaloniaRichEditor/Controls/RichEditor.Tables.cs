@@ -259,6 +259,13 @@ public partial class RichEditor
     // new row. Outside a table, indent at the paragraph start; insert spaces within text.
     private void HandleTab(bool shift)
     {
+        if (_selectionStart.Paragraph != null && _selectionEnd.Paragraph != null &&
+            _selectionStart.CompareTo(_selectionEnd) != 0)
+        {
+            Indent(shift ? -20 : 20);
+            return;
+        }
+
         var loc = _caretPosition.Paragraph != null ? FindCell(_caretPosition.Paragraph) : null;
         if (loc == null)
         {

@@ -20,11 +20,10 @@ public partial class NoteSwitcherDialog : Window
 
     public NoteSwitcherDialog(NoteWorkspace workspace, IReadOnlyList<string> recent, string? current) : this()
     {
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var history = recent.ToList();
         _notes = workspace.List(workspace.Root, recursive: true).Where(n => !n.IsFolder)
-            .OrderBy(n => comparer.Equals(n.Path, current) ? 2 : history.Contains(n.Path, comparer) ? 0 : 1)
-            .ThenBy(n => history.FindIndex(p => comparer.Equals(p, n.Path)))
+            .OrderBy(n => PathRules.AreEqual(n.Path, current) ? 2 : history.Contains(n.Path, PathRules.Comparer) ? 0 : 1)
+            .ThenBy(n => history.FindIndex(p => PathRules.AreEqual(p, n.Path)))
             .ThenBy(n => n.Name, StringComparer.CurrentCultureIgnoreCase)
             .Select(n => new NoteSwitchItem(n.Path, n.Name, Path.GetRelativePath(workspace.Root, n.Path))).ToList();
         Filter();

@@ -16,11 +16,9 @@ public sealed class NoteWorkspace
     public event EventHandler<string>? Warning;
     public string MetadataPath => System.IO.Path.Combine(Root, ".mynotes");
     public string TrashPath => System.IO.Path.Combine(MetadataPath, "trash", "items");
-    public bool IsTrash(string path) => string.Equals(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path)), TrashPath, PathComparison);
-    public bool IsInTrash(string path) => IsTrash(path) || System.IO.Path.GetFullPath(path).StartsWith(TrashPath + System.IO.Path.DirectorySeparatorChar, PathComparison);
+    public bool IsTrash(string path) => PathRules.AreEqual(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path)), TrashPath);
+    public bool IsInTrash(string path) => PathRules.IsSameOrDescendant(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path)), TrashPath);
     public string ParentFolder(string path) => IsTrash(path) ? Root : System.IO.Path.GetDirectoryName(path)!;
-    private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     public NoteWorkspace(string root)
     {
@@ -33,13 +31,13 @@ public sealed class NoteWorkspace
 
     public string CheckPath(string path, bool allowRoot = true)
     {
-        var full = System.IO.Path.GetFullPath(path);
-        if (string.Equals(full, Root, PathComparison))
+        var full = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path));
+        if (PathRules.AreEqual(full, Root))
         {
             if (!allowRoot) throw new IOException("Choose a thought or cluster inside the notebook.");
             return full;
         }
-        if (!full.StartsWith(Root + System.IO.Path.DirectorySeparatorChar, PathComparison))
+        if (!PathRules.IsSameOrDescendant(full, Root))
             throw new IOException("This item is outside the notebook.");
         var relative = System.IO.Path.GetRelativePath(Root, full);
         var inTrash = IsInTrash(full);
@@ -91,9 +89,8 @@ public sealed class NoteWorkspace
 
     private HashSet<string> ReadPins()
     {
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        if (!File.Exists(PinsPath)) return new(comparer);
-        try { return new(JsonSerializer.Deserialize<string[]>(File.ReadAllText(PinsPath)) ?? [], comparer); }
+        if (!File.Exists(PinsPath)) return new(PathRules.Comparer);
+        try { return new(JsonSerializer.Deserialize<string[]>(File.ReadAllText(PinsPath)) ?? [], PathRules.Comparer); }
         catch (JsonException e) { throw new IOException("Could not read pinned thoughts.", e); }
     }
 
@@ -122,8 +119,7 @@ public sealed class NoteWorkspace
         {
             UpdatePins(pins =>
             {
-                var affected = pins.Where(p => string.Equals(p, relative, PathComparison) ||
-                    p.StartsWith(relative + System.IO.Path.DirectorySeparatorChar, PathComparison)).ToList();
+                var affected = pins.Where(p => PathRules.IsSameOrDescendant(p, relative)).ToList();
                 foreach (var pin in affected)
                 {
                     pins.Remove(pin);
@@ -254,7 +250,7 @@ public sealed class NoteWorkspace
         path = CheckPath(path, false);
         var isFolder = Directory.Exists(path);
         var target = CheckPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, ValidateName(name) + (isFolder ? "" : ".rtf")), false);
-        if (string.Equals(path, target, PathComparison)) return path;
+        if (PathRules.AreEqual(path, target)) return path;
         if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists.");
         if (isFolder) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
@@ -267,11 +263,10 @@ public sealed class NoteWorkspace
         destinationFolder = CheckPath(destinationFolder);
         if (!Directory.Exists(destinationFolder)) throw new IOException("The destination cluster no longer exists.");
         var isFolder = Directory.Exists(path);
-        if (isFolder && (string.Equals(path, destinationFolder, PathComparison) ||
-            destinationFolder.StartsWith(path + System.IO.Path.DirectorySeparatorChar, PathComparison)))
+        if (isFolder && PathRules.IsSameOrDescendant(destinationFolder, path))
             throw new IOException("A cluster cannot be moved into itself or one of its subclusters.");
         var target = CheckPath(System.IO.Path.Combine(destinationFolder, System.IO.Path.GetFileName(path)), false);
-        if (string.Equals(path, target, PathComparison)) return path;
+        if (PathRules.AreEqual(path, target)) return path;
         if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists in the destination cluster.");
         if (isFolder) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);

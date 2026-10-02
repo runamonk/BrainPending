@@ -77,19 +77,13 @@ public partial class MainWindow : Window
         EditorView.Editor.TextChanged += (_, _) =>
         {
             if (_loading || _note == null || !EditorView.Editor.IsModified) return;
-            _dirty = true;
-            SaveStatus.Text = "Unsaved changes…";
-            _autosave.Stop();
-            _autosave.Start();
+            ScheduleSave();
         };
         EditorView.Editor.TypingFormatChanged += (_, format) =>
         {
             if (_loading || _note == null) return;
             _thoughtFormatting = ThoughtFormatting.From(format);
-            _dirty = true;
-            SaveStatus.Text = "Unsaved changes…";
-            _autosave.Stop();
-            _autosave.Start();
+            ScheduleSave();
         };
         _autosave.Tick += (_, _) => { _autosave.Stop(); SaveCurrent(); };
         _saveRetry.Tick += (_, _) =>
@@ -381,27 +375,27 @@ public partial class MainWindow : Window
     private void RefreshBrowser(bool force = false)
     {
         if (_workspace == null) return;
-        while (!Directory.Exists(_folder) && _folder != _workspace.Root)
+        while (!Directory.Exists(_folder) && !PathRules.AreEqual(_folder, _workspace.Root))
             _folder = _workspace.ParentFolder(_folder);
         var entries = _workspace.List(_folder, SearchBox.Text ?? "");
         var signature = _folder + "|" + SearchBox.Text + "|" + string.Join('|', entries.Select(e => e.Path + e.ModifiedUtc.Ticks + e.IsPinned.ToString()));
         if (!force && signature == _listingSignature) return;
         _listingSignature = signature;
         var rows = new List<BrowserItem>();
-        if (_folder != _workspace.Root)
+        if (!PathRules.AreEqual(_folder, _workspace.Root))
         {
             var parent = _workspace.ParentFolder(_folder);
-            rows.Add(new(parent, "Up to " + (parent == _workspace.Root ? "notebook" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, "Parent cluster"));
+            rows.Add(new(parent, "Up to " + (PathRules.AreEqual(parent, _workspace.Root) ? "notebook" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, "Parent cluster"));
         }
         rows.AddRange(entries.Select(e => new BrowserItem(e.Path, e.Name, e.IsFolder, false,
             !string.IsNullOrWhiteSpace(SearchBox.Text) ? Path.GetRelativePath(_folder, e.Path) : e.IsFolder ? "Cluster" : "Edited " + e.ModifiedUtc.ToLocalTime().ToString("d MMM, HH:mm"), IsPinned: e.IsPinned)));
-        if (_folder == _workspace.Root && (string.IsNullOrWhiteSpace(SearchBox.Text) || "Trash".Contains(SearchBox.Text.Trim(), StringComparison.OrdinalIgnoreCase)))
+        if (PathRules.AreEqual(_folder, _workspace.Root) && (string.IsNullOrWhiteSpace(SearchBox.Text) || "Trash".Contains(SearchBox.Text.Trim(), StringComparison.OrdinalIgnoreCase)))
             rows.Add(new(_workspace.TrashPath, "Trash", true, false, "", true));
         _refreshing = true;
         try
         {
             Browser.ItemsSource = rows;
-            Browser.SelectedItem = rows.FirstOrDefault(e => e.Path == _note?.Path);
+            Browser.SelectedItem = rows.FirstOrDefault(e => PathRules.AreEqual(e.Path, _note?.Path));
         }
         finally { _refreshing = false; }
         FolderEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? (_workspace.IsTrash(_folder) ? "Trash is empty." : "Create your first thought here.") : "No matching titles.";
@@ -442,6 +436,14 @@ public partial class MainWindow : Window
         catch (Exception e) { ShowNotice("Could not load an incoming change: " + e.Message); }
     }
 
+    private void ScheduleSave()
+    {
+        _dirty = true;
+        SaveStatus.Text = "Unsaved changes…";
+        _autosave.Stop();
+        _autosave.Start();
+    }
+
     private bool SaveCurrent(bool force = false)
     {
         if (force) _saveRetry.Stop();
@@ -473,7 +475,7 @@ public partial class MainWindow : Window
             RetrySaveButton.IsEnabled = true;
             return false;
         }
-        if (result.Note.Path != _note.Path) RememberOpenNote(result.Note.Path);
+        if (!PathRules.AreEqual(result.Note.Path, _note.Path)) RememberOpenNote(result.Note.Path);
         _note = result.Note;
         _saveRetryCount = 0;
         if (RetrySaveButton.IsVisible) { Notice.IsVisible = false; RetrySaveButton.IsVisible = false; }
@@ -490,7 +492,7 @@ public partial class MainWindow : Window
 
     private readonly List<string> _recentNotes = [];
     private readonly Dictionary<string, (EditorTextPosition Text, Vector Scroll)> _notePositions =
-        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        new(PathRules.Comparer);
 
     private void RememberNotePosition()
     {
@@ -530,7 +532,7 @@ public partial class MainWindow : Window
             Title = NoteTitle.Text + " — Brain Pending";
         }
         finally { _loading = false; }
-        _recentNotes.RemoveAll(p => string.Equals(p, note.Path, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal));
+        _recentNotes.RemoveAll(p => PathRules.AreEqual(p, note.Path));
         _recentNotes.Insert(0, note.Path);
         RememberOpenNote(note.Path);
     }
@@ -575,7 +577,7 @@ public partial class MainWindow : Window
             }
         });
         _refreshing = true;
-        try { Browser.SelectedItem = Browser.Items.OfType<BrowserItem>().FirstOrDefault(row => row.Path == _note?.Path); }
+        try { Browser.SelectedItem = Browser.Items.OfType<BrowserItem>().FirstOrDefault(row => PathRules.AreEqual(row.Path, _note?.Path)); }
         finally { _refreshing = false; }
     }
 
@@ -649,10 +651,9 @@ public partial class MainWindow : Window
                 var source = _titleEditingPath;
                 var name = NoteWorkspace.ValidateName(NoteTitleInput.Text ?? "");
                 if (!SaveCurrent()) throw new IOException("Save the thought successfully before renaming it.");
-                if (_note.Path != source) throw new IOException("The thought changed while editing. Cancel and try renaming the current thought.");
+                if (!PathRules.AreEqual(_note.Path, source)) throw new IOException("The thought changed while editing. Cancel and try renaming the current thought.");
                 var target = _workspace.Rename(source, name);
-                LoadNote(_workspace.Read(target));
-                RefreshBrowser(true);
+                RefreshAfterMove(source, target);
                 EditorView.Editor.Focus();
             }
             catch (Exception error)
@@ -668,12 +669,8 @@ public partial class MainWindow : Window
         if (_workspace == null || !SaveCurrent()) return;
         var newName = await Prompt("Rename", "Choose a new name", name, "Rename");
         if (newName == null) return;
-        var notePath = _note?.Path;
         var target = _workspace.Rename(path, newName);
-        if (notePath == path) LoadNote(_workspace.Read(target));
-        else if (notePath?.StartsWith(path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) == true)
-            LoadNote(_workspace.Read(Path.Combine(target, Path.GetRelativePath(path, notePath))));
-        RefreshBrowser(true);
+        RefreshAfterMove(path, target);
     });
 
     private void Browser_PointerPressed(object? sender, PointerPressedEventArgs e)
@@ -730,7 +727,7 @@ public partial class MainWindow : Window
         rename.Click += async (_, _) => await Rename(item.Path, item.Name);
         if (!item.CanManage) return new ContextMenu();
         var parent = Path.GetDirectoryName(item.Path);
-        var destination = parent == _workspace?.Root ? null : Path.GetDirectoryName(parent!);
+        var destination = PathRules.AreEqual(parent, _workspace?.Root) ? null : Path.GetDirectoryName(parent!);
         if (_workspace?.IsTrash(parent!) == true) destination = _workspace.Root;
         var moveUp = new MenuItem { Header = "Move to parent", IsEnabled = destination != null };
         moveUp.Click += async (_, _) => await Run(() =>
@@ -743,9 +740,7 @@ public partial class MainWindow : Window
         {
             if (_workspace == null) return;
             var dialog = new MoveFolderDialog(_workspace, item, target => MoveItem(item, target));
-            _inDialog = true;
-            try { await dialog.ShowDialog(this); }
-            finally { _inDialog = false; }
+            await ShowOwnedDialogAsync<object?>(dialog);
         });
         var inTrash = _workspace?.IsInTrash(item.Path) == true;
         var trash = new MenuItem { Header = inTrash ? "Move to Recycle Bin…" : "Delete…" };
@@ -756,7 +751,7 @@ public partial class MainWindow : Window
             if (!await Confirm(inTrash ? "Move to Recycle Bin?" : "Move to Trash?", description, inTrash ? "Move to Recycle Bin" : "Move to Trash")) return;
             if (inTrash) _workspace.RecycleFromTrash(item.Path, RecycleItem);
             else _workspace.MoveToTrash(item.Path);
-            if (_note?.Path == item.Path || _note?.Path.StartsWith(item.Path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) == true) ClearNote();
+            if (PathRules.IsSameOrDescendant(_note?.Path, item.Path)) ClearNote();
             RefreshBrowser(true);
         });
         var actions = new List<Control>();
@@ -802,14 +797,22 @@ public partial class MainWindow : Window
     private bool MoveItem(BrowserItem item, string destination)
     {
         if (_workspace == null || !SaveCurrent()) return false;
-        var notePath = _note?.Path;
         var target = _workspace.Move(item.Path, destination);
-        if (notePath == item.Path) LoadNote(_workspace.Read(target));
-        else if (notePath?.StartsWith(item.Path + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) == true)
-            LoadNote(_workspace.Read(Path.Combine(target, Path.GetRelativePath(item.Path, notePath))));
-        RefreshBrowser(true);
-        SaveStatus.Text = "Moved to " + (destination == _workspace.Root ? "notebook" : Path.GetFileName(destination));
+        RefreshAfterMove(item.Path, target);
+        SaveStatus.Text = "Moved to " + (PathRules.AreEqual(destination, _workspace.Root) ? "notebook" : Path.GetFileName(destination));
         return true;
+    }
+
+    private void RefreshAfterMove(string source, string target)
+    {
+        if (_workspace == null) return;
+        if (_note is { } note && PathRules.IsSameOrDescendant(note.Path, source))
+        {
+            var path = PathRules.AreEqual(note.Path, source)
+                ? target : Path.Combine(target, Path.GetRelativePath(source, note.Path));
+            LoadNote(_workspace.Read(path));
+        }
+        RefreshBrowser(true);
     }
 
     private async void ImportNotes_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
@@ -817,9 +820,7 @@ public partial class MainWindow : Window
         if (_workspace == null || !SaveCurrent()) return;
         var destination = _workspace.IsInTrash(_folder) ? _workspace.Root : _folder;
         var dialog = new ImportDialog(_workspace, destination);
-        _inDialog = true;
-        try { await dialog.ShowDialog(this); }
-        finally { _inDialog = false; }
+        await ShowOwnedDialogAsync<object?>(dialog);
         RefreshBrowser(true);
         if (dialog.Result is { } result)
             ShowNotice($"Imported {result.Pages.Count} OneNote pages into {result.Folder}. See Import report for details.");
@@ -870,16 +871,11 @@ public partial class MainWindow : Window
         editThemes.Click += async (_, _) => await Run(async () =>
         {
             var dialog = new ThemeEditorDialog(_themes, _themes.Resolve(_settings).Name);
-            _inDialog = true;
-            try
+            if (await ShowOwnedDialogAsync<bool>(dialog))
             {
-                if (await dialog.ShowDialog<bool>(this))
-                {
-                    ApplyTheme();
-                    SaveStatus.Text = "Themes saved";
-                }
+                ApplyTheme();
+                SaveStatus.Text = "Themes saved";
             }
-            finally { _inDialog = false; }
         });
         menu.Items.Add(editThemes);
         Action("Reload themes", () =>
@@ -917,10 +913,7 @@ public partial class MainWindow : Window
     {
         if (_workspace == null) return;
         var dialog = new NoteSwitcherDialog(_workspace, _recentNotes, _note?.Path);
-        _inDialog = true;
-        string? selected;
-        try { selected = await dialog.ShowDialog<string?>(this); }
-        finally { _inDialog = false; }
+        var selected = await ShowOwnedDialogAsync<string?>(dialog);
         if (selected == null || !SaveCurrent()) return;
         LoadNote(_workspace.Read(selected));
         _folder = Path.GetDirectoryName(selected)!;
@@ -939,7 +932,7 @@ public partial class MainWindow : Window
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; ShowSidebar(); SearchBox.Focus(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.O)
         { e.Handled = true; await Run(SwitchNote); }
-        else if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Up && _workspace != null && _folder != _workspace.Root)
+        else if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Up && _workspace != null && !PathRules.AreEqual(_folder, _workspace.Root))
         { e.Handled = true; await Run(() => Navigate(_workspace.ParentFolder(_folder), true)); }
     }
 
@@ -947,6 +940,14 @@ public partial class MainWindow : Window
     {
         try { await action(); }
         catch (Exception e) { ShowNotice(e.Message); }
+    }
+
+    private async Task<T> ShowOwnedDialogAsync<T>(Window dialog)
+    {
+        var wasInDialog = _inDialog;
+        _inDialog = true;
+        try { return await dialog.ShowDialog<T>(this); }
+        finally { _inDialog = wasInDialog; }
     }
 
     private async Task<string?> Prompt(string title, string description, string initial, string action)
@@ -971,9 +972,7 @@ public partial class MainWindow : Window
             new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Children = { cancel, accept } }
         }};
         dialog.Opened += (_, _) => { input.Focus(); input.SelectAll(); };
-        _inDialog = true;
-        try { return await dialog.ShowDialog<string?>(this); }
-        finally { _inDialog = false; }
+        return await ShowOwnedDialogAsync<string?>(dialog);
     }
 
     private async Task<bool> Confirm(string title, string description, string action)
@@ -989,9 +988,7 @@ public partial class MainWindow : Window
             new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap },
             new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Children = { cancel, accept } }
         }};
-        _inDialog = true;
-        try { return await dialog.ShowDialog<bool>(this); }
-        finally { _inDialog = false; }
+        return await ShowOwnedDialogAsync<bool>(dialog);
     }
 
     private static Window Dialog(string title)
@@ -1021,7 +1018,7 @@ public partial class MainWindow : Window
         {
             if (file.TryGetLocalPath() is not { } path) continue;
             var attachment = await Task.Run(() => store.Add(path, file.Name));
-            if (_workspace != workspace || _note?.Path != notePath)
+            if (_workspace != workspace || !PathRules.AreEqual(_note?.Path, notePath))
             {
                 store.Discard(attachment);
                 throw new IOException("The selected thought changed. Please attach the file again.");
@@ -1038,9 +1035,7 @@ public partial class MainWindow : Window
         {
             if (_workspace == null || _inDialog) return;
             var attachment = new AttachmentStore(_workspace.Root).Resolve(link);
-            _inDialog = true;
-            try { await new AttachmentDialog(attachment).ShowDialog(this); }
-            finally { _inDialog = false; }
+            await ShowOwnedDialogAsync<object?>(new AttachmentDialog(attachment));
         });
         return true;
     }

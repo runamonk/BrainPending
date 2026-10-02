@@ -13,8 +13,6 @@ public partial class MoveFolderDialog : Window
     private readonly string _sourceFolder = "";
     private string _folder = "";
     private bool _refreshing;
-    private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     // Avalonia's runtime XAML loader needs a public parameterless constructor.
     public MoveFolderDialog()
@@ -37,7 +35,7 @@ public partial class MoveFolderDialog : Window
         AddHandler(KeyDownEvent, (_, e) =>
         {
             if (e.Key == Key.Escape) { e.Handled = true; Close(); }
-            else if (e.Key == Key.Up && e.KeyModifiers == KeyModifiers.Alt && _folder != _workspace.Root)
+            else if (e.Key == Key.Up && e.KeyModifiers == KeyModifiers.Alt && !PathRules.AreEqual(_folder, _workspace.Root))
             { e.Handled = true; Navigate(_workspace.ParentFolder(_folder)); }
         }, RoutingStrategies.Tunnel);
     }
@@ -49,24 +47,23 @@ public partial class MoveFolderDialog : Window
         {
             folder = _workspace.CheckPath(folder);
             var children = _workspace.List(folder).Where(e => e.IsFolder &&
-                (!_item.IsFolder || (!string.Equals(e.Path, _item.Path, PathComparison) &&
-                 !e.Path.StartsWith(_item.Path + Path.DirectorySeparatorChar, PathComparison)))).ToList();
+                (!_item.IsFolder || !PathRules.IsSameOrDescendant(e.Path, _item.Path))).ToList();
             var rows = new List<BrowserItem>();
-            if (folder != _workspace.Root)
+            if (!PathRules.AreEqual(folder, _workspace.Root))
             {
                 var parent = _workspace.ParentFolder(folder);
-                rows.Add(new(parent, "Up to " + (parent == _workspace.Root ? "notebook" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, ""));
+                rows.Add(new(parent, "Up to " + (PathRules.AreEqual(parent, _workspace.Root) ? "notebook" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, ""));
             }
             rows.AddRange(children.Select(e => new BrowserItem(e.Path, e.Name, true, false, "")));
             _folder = folder;
             _refreshing = true;
             try { Folders.ItemsSource = rows; Folders.SelectedItem = null; }
             finally { _refreshing = false; }
-            Location.Text = folder == _workspace.Root ? "Notebook" : _workspace.IsTrash(folder) ? "Trash" :
+            Location.Text = PathRules.AreEqual(folder, _workspace.Root) ? "Notebook" : _workspace.IsTrash(folder) ? "Trash" :
                 (_workspace.IsInTrash(folder) ? "Trash / " + Path.GetRelativePath(_workspace.TrashPath, folder) : "Notebook / " + Path.GetRelativePath(_workspace.Root, folder))
                 .Replace(Path.DirectorySeparatorChar.ToString(), " / ");
             EmptyMessage.IsVisible = children.Count == 0;
-            MoveButton.IsEnabled = !string.Equals(folder, _sourceFolder, PathComparison);
+            MoveButton.IsEnabled = !PathRules.AreEqual(folder, _sourceFolder);
             Error.Text = "";
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)

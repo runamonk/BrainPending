@@ -9,12 +9,11 @@ internal sealed record NotebookSettings(string? NotebookPath = null, bool? DarkT
     Dictionary<string, string>? LastOpenNotes = null, string? ColorTheme = null, bool SidebarPinned = true)
 {
     public string? LastNote(string notebook) => LastOpenNotes?.FirstOrDefault(p =>
-        string.Equals(p.Key, notebook, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)).Value;
+        PathRules.AreEqual(p.Key, notebook)).Value;
 
     public NotebookSettings RememberNote(string notebook, string? relativePath)
     {
-        var notes = new Dictionary<string, string>(LastOpenNotes ?? [],
-            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+        var notes = new Dictionary<string, string>(LastOpenNotes ?? [], PathRules.Comparer);
         if (relativePath == null) notes.Remove(notebook);
         else notes[notebook] = relativePath;
         return this with { LastOpenNotes = notes };
@@ -22,19 +21,17 @@ internal sealed record NotebookSettings(string? NotebookPath = null, bool? DarkT
 
     public NotebookSettings RememberNotebook(string path)
     {
-        var comparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         var recent = new[] { path }.Concat(RecentNotebooks ?? (NotebookPath is null ? [] : new[] { NotebookPath }))
             .Where(p => !string.IsNullOrWhiteSpace(p))
             .Select(p => Path.TrimEndingDirectorySeparator(Path.GetFullPath(p)))
-            .Distinct(comparer).Take(10).ToArray();
+            .Distinct(PathRules.Comparer).Take(10).ToArray();
         return this with { NotebookPath = recent[0], RecentNotebooks = recent, SkipAutomaticNotebook = false };
     }
 
     public NotebookSettings RemoveRecentNotebook(string path)
     {
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var recent = RecentNotebooks ?? (NotebookPath is null ? [] : new[] { NotebookPath });
-        return this with { RecentNotebooks = recent.Where(p => !string.Equals(p, path, comparison)).ToArray() };
+        return this with { RecentNotebooks = recent.Where(p => !PathRules.AreEqual(p, path)).ToArray() };
     }
 
     private static string FilePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MyNotes", "settings.json");

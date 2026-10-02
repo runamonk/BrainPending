@@ -9,6 +9,7 @@ hyperlink destinations, font families on read, and text highlighting. Brain Pend
 requires those properties to survive reopening a note.
 
 Local changes:
+- List markers align with the text baseline, including custom line spacing and table cells.
 - Tab at the start of a paragraph applies paragraph indentation so wrapped lines align.
   Tab within text still inserts spaces; Shift+Tab removes spaces or outdents.
 - Reopening RTF converts leading tabs and groups of four spaces from older Tab presses

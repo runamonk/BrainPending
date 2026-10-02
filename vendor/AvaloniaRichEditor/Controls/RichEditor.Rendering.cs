@@ -434,8 +434,8 @@ public partial class RichEditor
                             int marker = numbering.Next(paragraph);
                             if (pVisible)
                             {
-                                var lcr = layout.HitTestTextPosition(Math.Min(segStart, fullText.Length));
-                                DrawListMarker(context, paragraph, marker, px, yOffset + lcr.Y);
+                                DrawListMarker(context, paragraph, marker, px, yOffset,
+                                    layout, Math.Min(segStart, fullText.Length));
                             }
                             segStart = i + 1;
                         }
@@ -584,8 +584,8 @@ public partial class RichEditor
                         if (i == plain.Length || plain[i] == '\n')
                         {
                             int marker = numbering.Next(para);
-                            var lcr = layout.HitTestTextPosition(Math.Min(segStart, plain.Length));
-                            DrawListMarker(context, para, marker, px, blkY + lcr.Y);
+                            DrawListMarker(context, para, marker, px, blkY,
+                                layout, Math.Min(segStart, plain.Length));
                             segStart = i + 1;
                         }
                 }

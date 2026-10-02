@@ -1134,7 +1134,8 @@ public partial class RichEditor : Control
     // The marker takes the item's own text styling (its first run: size, family, weight, colour) so a
     // heading / coloured / enlarged list item gets a matching bullet or number instead of a fixed
     // small black default. Instance method so it can fall back to the editor's default font/size.
-    private void DrawListMarker(DrawingContext context, Paragraph p, int num, double textLeft, double y)
+    private void DrawListMarker(DrawingContext context, Paragraph p, int num, double textLeft, double y,
+        Avalonia.Media.TextFormatting.TextLayout? layout = null, int textOffset = 0)
     {
         if (p.ListType == ListKind.None) return;
         string m = ListMarkerText(p.ListType, p.ListMarker, num);
@@ -1153,6 +1154,21 @@ public partial class RichEditor : Control
         var brush = DisplayInk(first?.Foreground, first?.Background ?? p.Background);
         var ft = new FormattedText(m, System.Globalization.CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight, new Typeface(family, FontStyle.Normal, weight), PtToPx(size), brush);
+        if (layout != null)
+        {
+            double lineTop = 0;
+            var lines = layout.TextLines;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (i + 1 == lines.Count || textOffset < lines[i + 1].FirstTextSourceIndex)
+                {
+                    // Align the marker and text baselines, including extra line spacing.
+                    y += lineTop + lines[i].Baseline - ft.Baseline;
+                    break;
+                }
+                lineTop += lines[i].Height;
+            }
+        }
         const double gap = 6;
         context.DrawText(ft, new Point(textLeft - gap - ft.Width, y));
     }

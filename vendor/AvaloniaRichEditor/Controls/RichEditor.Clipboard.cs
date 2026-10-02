@@ -18,9 +18,11 @@ public partial class RichEditor
     public async Task PasteFromClipboardAsync()
     {
         if (Document == null || IsReadOnly) return;
+        var document = Document;
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard == null) return;
         string? text = await clipboard.TryGetTextAsync();
+        if (!ReferenceEquals(Document, document) || IsReadOnly) return;
         if (TryPasteUnhighlightedUrl(text)) return;
 
         // 1. Internal rich clipboard: if the system text still matches what we last copied
@@ -50,6 +52,7 @@ public partial class RichEditor
         //    Word's CF_HTML only references temp files that may already be gone. Browsers don't put
         //    RTF on the clipboard, so their HTML path (below) is unaffected.
         string? rtf = AllowRichPaste ? await TryGetRtfAsync(clipboard) : null;
+        if (!ReferenceEquals(Document, document) || IsReadOnly) return;
         if (!string.IsNullOrEmpty(rtf) && Formatters.RtfDocumentFormatter.LooksLikeRtf(rtf))
         {
             try
@@ -70,6 +73,7 @@ public partial class RichEditor
         }
 
         string? html = AllowRichPaste ? await TryGetHtmlAsync(clipboard) : null;
+        if (!ReferenceEquals(Document, document) || IsReadOnly) return;
         if (!string.IsNullOrEmpty(html))
         {
             // Malformed/exotic HTML can make the parser throw; fall through to the plain-text
@@ -80,6 +84,7 @@ public partial class RichEditor
                 // Async: remote images download off the UI thread so a slow network can't freeze
                 // the paste (model build stays on the UI thread inside ParseHtmlAsync).
                 var parsed = await Formatters.HtmlDocumentFormatter.ParseHtmlAsync(fragment, AllowLocalFileImages, AllowRemoteImagesOnPaste);
+                if (!ReferenceEquals(Document, document) || IsReadOnly) return;
                 if (parsed.Blocks.Count > 0)
                 {
                     PushUndo();
@@ -97,6 +102,7 @@ public partial class RichEditor
         var (clipImage, clipBytes, clipMeta) = AllowImages
             ? await TryGetImageAsync(clipboard)
             : ((Avalonia.Media.Imaging.Bitmap?)null, (byte[]?)null, (string?)null);
+        if (!ReferenceEquals(Document, document) || IsReadOnly) return;
         if (clipImage != null)
         {
             var meta = ParseImageMeta(clipMeta);
@@ -132,11 +138,13 @@ public partial class RichEditor
     private async Task PastePlainTextAsync()
     {
         if (Document == null || IsReadOnly) return;
+        var document = Document;
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard == null) return;
         string? text = null;
         try { text = await clipboard.TryGetTextAsync(); }
         catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
+        if (!ReferenceEquals(Document, document) || IsReadOnly) return;
         if (string.IsNullOrEmpty(text)) return;
         if (TryPasteUnhighlightedUrl(text)) return;
         PushUndo();

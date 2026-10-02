@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BrainPending.Core;
 
 namespace BrainPending;
 
@@ -42,10 +43,6 @@ internal sealed record NotebookSettings(string? NotebookPath = null, bool? DarkT
         try { return JsonSerializer.Deserialize<NotebookSettings>(File.ReadAllText(filePath ?? FilePath)) ?? new(); }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException) { return new(); }
     }
-    public void Save(string? filePath = null)
-    {
-        var path = filePath ?? FilePath;
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(this));
-    }
+    public void Save(string? filePath = null) =>
+        AtomicFile.WriteAllText(filePath ?? FilePath, JsonSerializer.Serialize(this));
 }

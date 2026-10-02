@@ -367,6 +367,8 @@ public partial class RichEditor : Control
         _pendingCaretStyles = null;
         _lastTypingRun = null;
         _persistedTypingRun = null;
+        _editRun = EditRunKind.None;
+        _editRunRearm = EditRunKind.None;
 
         // A drag can only be in flight for a block of the old document.
         _isResizingColumn = false; _resizingTable = null;

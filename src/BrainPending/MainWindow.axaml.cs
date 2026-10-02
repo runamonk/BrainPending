@@ -14,7 +14,6 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using AvaloniaRichEditor;
 using AvaloniaRichEditor.Controls;
-using AvaloniaRichEditor.Formatters;
 using BrainPending.Core;
 
 namespace BrainPending;
@@ -230,6 +229,7 @@ public partial class MainWindow : Window
         var workspace = new NoteWorkspace(path);
         _watcher?.Dispose();
         _workspace = workspace;
+        workspace.Warning += (_, warning) => ShowNotice(warning);
         _recentNotes.Clear();
         _folder = workspace.Root;
         ClearNote(forget: false);
@@ -447,23 +447,12 @@ public partial class MainWindow : Window
         if (force) _saveRetry.Stop();
         else if (_saveRetry.IsEnabled) return false;
         if (_note == null || _workspace == null || (!_dirty && !EditorView.Editor.IsModified)) return true;
+        SaveResult result;
         try
         {
             var rtf = EditorView.Editor.ToRtf();
             if (_thoughtFormatting != null) rtf = _thoughtFormatting.Write(rtf);
-            var result = _workspace.Save(_note, rtf);
-            if (result.Note.Path != _note.Path) RememberOpenNote(result.Note.Path);
-            _note = result.Note;
-            _saveRetryCount = 0;
-            if (RetrySaveButton.IsVisible) { Notice.IsVisible = false; RetrySaveButton.IsVisible = false; }
-            _dirty = false;
-            EditorView.Editor.MarkSaved();
-            NoteTitle.Text = Path.GetFileNameWithoutExtension(_note.Path);
-            SaveStatus.Text = "Saved locally · " + DateTime.Now.ToString("HH:mm");
-            if (result.IsConflict)
-                ShowNotice("This thought changed on disk while you were editing. Your work is saved in this conflict copy; the other version is unchanged.");
-            RefreshBrowser();
-            return true;
+            result = _workspace.Save(_note, rtf);
         }
         catch (Exception e) when (SaveRetryPolicy.IsTemporary(e) && _saveRetryCount < SaveRetryPolicy.Delays.Length)
         {
@@ -484,6 +473,19 @@ public partial class MainWindow : Window
             RetrySaveButton.IsEnabled = true;
             return false;
         }
+        if (result.Note.Path != _note.Path) RememberOpenNote(result.Note.Path);
+        _note = result.Note;
+        _saveRetryCount = 0;
+        if (RetrySaveButton.IsVisible) { Notice.IsVisible = false; RetrySaveButton.IsVisible = false; }
+        _dirty = false;
+        EditorView.Editor.MarkSaved();
+        NoteTitle.Text = Path.GetFileNameWithoutExtension(_note.Path);
+        SaveStatus.Text = "Saved locally · " + DateTime.Now.ToString("HH:mm");
+        try { RefreshBrowser(); }
+        catch (Exception error) { ShowNotice("The thought was saved, but the notebook list could not be refreshed: " + error.Message); }
+        if (result.IsConflict)
+            ShowNotice("This thought changed on disk while you were editing. Your work is saved in this conflict copy; the other version is unchanged.");
+        return true;
     }
 
     private readonly List<string> _recentNotes = [];
@@ -498,14 +500,13 @@ public partial class MainWindow : Window
 
     private void LoadNote(NoteSnapshot note)
     {
-        if (!RtfDocumentFormatter.TryParse(note.Rtf, out var document, out var error))
-            throw new IOException("This RTF could not be opened: " + error + ". The file has not been changed.");
-        CancelTitleEditing();
         _loading = true;
         try
         {
             RememberNotePosition();
-            EditorView.Editor.LoadRtf(note.Rtf);
+            if (!EditorView.Editor.TryLoadRtf(note.Rtf, out var error))
+                throw new IOException("This RTF could not be opened: " + error + ". The file has not been changed.");
+            CancelTitleEditing();
             _thoughtFormatting = ThoughtFormatting.Read(note.Rtf);
             EditorView.ScrollToTop();
             _note = note;
@@ -573,6 +574,9 @@ public partial class MainWindow : Window
                 CollapseSidebarAfterNoteSelection();
             }
         });
+        _refreshing = true;
+        try { Browser.SelectedItem = Browser.Items.OfType<BrowserItem>().FirstOrDefault(row => row.Path == _note?.Path); }
+        finally { _refreshing = false; }
     }
 
     private async void NewNote_Click(object? sender, RoutedEventArgs e) => await NewNote();

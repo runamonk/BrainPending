@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Avalonia.Media;
+using BrainPending.Core;
 
 namespace BrainPending;
 
@@ -78,7 +79,7 @@ internal sealed class ThemeCatalog
         if (!File.Exists(FilePath) || File.ReadAllText(FilePath) != original)
             throw new IOException("The theme file changed outside this window. Reopen the editor to load those changes before saving.");
         File.Copy(FilePath, FilePath + $".{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.bak");
-        WriteText(json);
+        AtomicFile.WriteAllText(FilePath, json);
         Themes = themes;
     }
 
@@ -97,17 +98,5 @@ internal sealed class ThemeCatalog
     }
 
     private void Write(IEnumerable<AppColorTheme> themes) =>
-        WriteText(JsonSerializer.Serialize(themes, JsonOptions) + Environment.NewLine);
-
-    private void WriteText(string json)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        var temporary = FilePath + $".{Guid.NewGuid():N}.tmp";
-        try
-        {
-            File.WriteAllText(temporary, json);
-            File.Move(temporary, FilePath, overwrite: true);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
-    }
+        AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(themes, JsonOptions) + Environment.NewLine);
 }

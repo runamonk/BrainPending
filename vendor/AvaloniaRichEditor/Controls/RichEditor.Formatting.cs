@@ -60,9 +60,8 @@ public partial class RichEditor
     private Run? _lastTypingRun;
     private Run? _persistedTypingRun;
 
-    internal (string? Family, double? Size) GetSelectionFont()
+    internal (string? Family, double? Size) GetSelectionFont(CaretFormat caret)
     {
-        var caret = GetCaretFormat();
         string? family = caret.FontFamily ?? DefaultFontFamily.Name;
         double? size = caret.FontSize;
         bool cells = SelectedCellsBlock() != null;
@@ -92,6 +91,7 @@ public partial class RichEditor
                     {
                         if (!string.Equals(family, runFamily, StringComparison.OrdinalIgnoreCase)) family = null;
                         if (size != runSize) size = null;
+                        if (family == null && size == null) return (null, null);
                     }
                 }
                 offset += length;

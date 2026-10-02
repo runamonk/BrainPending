@@ -1,1 +1,2 @@
 ﻿#nullable enable
+AvaloniaRichEditor.Controls.RichEditor.TryLoadRtf(string! rtf, out string? error) -> bool

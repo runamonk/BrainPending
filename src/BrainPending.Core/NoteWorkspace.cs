@@ -1,3 +1,4 @@
+using System.IO.Enumeration;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -12,6 +13,7 @@ public sealed class NoteWorkspace
 {
     public const string EmptyRtf = @"{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}\f0\fs24\pard }";
     public string Root { get; }
+    public event EventHandler<string>? Warning;
     public string MetadataPath => System.IO.Path.Combine(Root, ".mynotes");
     public string TrashPath => System.IO.Path.Combine(MetadataPath, "trash", "items");
     public bool IsTrash(string path) => string.Equals(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path)), TrashPath, PathComparison);
@@ -60,17 +62,28 @@ public sealed class NoteWorkspace
     {
         folder = CheckPath(folder);
         var pins = ReadPins();
+        var query = search?.Trim() ?? "";
         var options = new EnumerationOptions
         {
-            RecurseSubdirectories = recursive || !string.IsNullOrWhiteSpace(search),
+            RecurseSubdirectories = recursive || query.Length > 0,
             AttributesToSkip = FileAttributes.ReparsePoint | FileAttributes.Hidden | FileAttributes.System,
             IgnoreInaccessible = true
         };
-        return Directory.EnumerateFileSystemEntries(folder, "*", options)
-            .Where(p => !System.IO.Path.GetRelativePath(folder, p).Split(System.IO.Path.DirectorySeparatorChar).Any(s => s.StartsWith('.')))
-            .Where(p => Directory.Exists(p) || System.IO.Path.GetExtension(p).Equals(".rtf", StringComparison.OrdinalIgnoreCase))
-            .Select(p => new WorkspaceEntry(p, Directory.Exists(p) ? System.IO.Path.GetFileName(p) : System.IO.Path.GetFileNameWithoutExtension(p), Directory.Exists(p), File.GetLastWriteTimeUtc(p), !Directory.Exists(p) && pins.Contains(System.IO.Path.GetRelativePath(Root, p))))
-            .Where(e => string.IsNullOrWhiteSpace(search) || e.Name.Contains(search.Trim(), StringComparison.OrdinalIgnoreCase))
+        var entries = new FileSystemEnumerable<WorkspaceEntry>(folder, (ref FileSystemEntry entry) =>
+        {
+            var path = entry.ToFullPath();
+            var name = entry.FileName.ToString();
+            return new WorkspaceEntry(path, entry.IsDirectory ? name : System.IO.Path.GetFileNameWithoutExtension(name),
+                entry.IsDirectory, entry.LastWriteTimeUtc.UtcDateTime,
+                !entry.IsDirectory && pins.Contains(System.IO.Path.GetRelativePath(Root, path)));
+        }, options)
+        {
+            ShouldRecursePredicate = (ref FileSystemEntry entry) => !entry.FileName.StartsWith("."),
+            ShouldIncludePredicate = (ref FileSystemEntry entry) => !entry.FileName.StartsWith(".") &&
+                (entry.IsDirectory || System.IO.Path.GetExtension(entry.FileName).Equals(".rtf", StringComparison.OrdinalIgnoreCase))
+        };
+        return entries
+            .Where(e => query.Length == 0 || e.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(e => e.IsPinned).ThenByDescending(e => e.IsFolder).ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 
@@ -90,13 +103,7 @@ public sealed class NoteWorkspace
         using var lease = AcquireLock(PinsPath);
         var pins = ReadPins();
         if (!update(pins)) return;
-        var temp = System.IO.Path.Combine(MetadataPath, $".pins-{Guid.NewGuid():N}.tmp");
-        try
-        {
-            File.WriteAllText(temp, JsonSerializer.Serialize(pins.Order(StringComparer.Ordinal)));
-            File.Move(temp, PinsPath, true);
-        }
-        finally { if (File.Exists(temp)) File.Delete(temp); }
+        AtomicFile.WriteAllText(PinsPath, JsonSerializer.Serialize(pins.Order(StringComparer.Ordinal)));
     }
 
     public void SetPinned(string path, bool pinned)
@@ -111,17 +118,25 @@ public sealed class NoteWorkspace
     private void RelocatePins(string source, string? target)
     {
         var relative = System.IO.Path.GetRelativePath(Root, source);
-        UpdatePins(pins =>
+        try
         {
-            var affected = pins.Where(p => string.Equals(p, relative, PathComparison) ||
-                p.StartsWith(relative + System.IO.Path.DirectorySeparatorChar, PathComparison)).ToList();
-            foreach (var pin in affected)
+            UpdatePins(pins =>
             {
-                pins.Remove(pin);
-                if (target != null) pins.Add(System.IO.Path.GetRelativePath(Root, target) + pin[relative.Length..]);
-            }
-            return affected.Count > 0;
-        });
+                var affected = pins.Where(p => string.Equals(p, relative, PathComparison) ||
+                    p.StartsWith(relative + System.IO.Path.DirectorySeparatorChar, PathComparison)).ToList();
+                foreach (var pin in affected)
+                {
+                    pins.Remove(pin);
+                    if (target != null) pins.Add(System.IO.Path.GetRelativePath(Root, target) + pin[relative.Length..]);
+                }
+                return affected.Count > 0;
+            });
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // The file operation has already succeeded.
+            Warning?.Invoke(this, "The item was moved, but its pins could not be updated: " + error.Message);
+        }
     }
 
     public static string ValidateName(string name)
@@ -147,13 +162,20 @@ public sealed class NoteWorkspace
     public NoteSnapshot CreateNote(string parent, string name, string rtf = EmptyRtf)
     {
         var path = CheckPath(System.IO.Path.Combine(CheckPath(parent), ValidateName(name) + ".rtf"), false);
+        if (File.Exists(path) || Directory.Exists(path)) throw new IOException("An item with that name already exists.");
         var bytes = EncodeRtf(rtf);
-        using (var file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        var temp = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, $".create-{Guid.NewGuid():N}.tmp");
+        try
         {
-            file.Write(bytes);
-            file.Flush(true);
+            using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                file.Write(bytes);
+                file.Flush(true);
+            }
+            WriteRevision(path, bytes);
+            File.Move(temp, path);
         }
-        WriteRevision(path, bytes);
+        finally { if (File.Exists(temp)) File.Delete(temp); }
         return new(path, rtf, Hash(bytes));
     }
 

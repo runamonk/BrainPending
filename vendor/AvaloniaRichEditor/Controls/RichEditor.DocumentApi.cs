@@ -43,13 +43,17 @@ public partial class RichEditor
         // Keep the open document on failure — but only when there IS one. With no document loaded there
         // is nothing to protect, and bailing would leave the editor inert (null Document, no caret), so
         // an empty document is the better landing spot.
-        if (Formatters.RtfDocumentFormatter.TryParse(rtf, out var parsed, out _))
-        {
-            LoadDocument(parsed);
-            foreach (var paragraph in GetAllParagraphsInOrder()) ConvertLeadingTabsToIndent(paragraph);
-            InvalidateMeasure();
-        }
-        else if (Document == null) LoadDocument(new FlowDocument());
+        if (!TryLoadRtf(rtf, out _) && Document == null) LoadDocument(new FlowDocument());
+    }
+
+    /// <summary>Loads RTF once, leaving the document unchanged if parsing fails.</summary>
+    public bool TryLoadRtf(string rtf, out string? error)
+    {
+        if (!Formatters.RtfDocumentFormatter.TryParse(rtf, out var parsed, out error)) return false;
+        LoadDocument(parsed);
+        foreach (var paragraph in GetAllParagraphsInOrder()) ConvertLeadingTabsToIndent(paragraph);
+        InvalidateMeasure();
+        return true;
     }
 
     // Older Tab presses were saved as four spaces. Preserve their width as paragraph formatting.

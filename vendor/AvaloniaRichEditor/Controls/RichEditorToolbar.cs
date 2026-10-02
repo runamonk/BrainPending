@@ -850,7 +850,7 @@ public partial class RichEditorToolbar : UserControl
         var rt = Target;
         if (rt == null) return;
         var f = rt.GetCaretFormat();
-        var selectionFont = rt.GetSelectionFont();
+        var selectionFont = rt.GetSelectionFont(f);
 
         static void SetActive(Button? b, bool active)
         {
@@ -898,9 +898,7 @@ public partial class RichEditorToolbar : UserControl
         }
         if (_fontCombo != null)
         {
-            // Runs without an explicit font fall back to the editor's DefaultFontFamily for
-            // rendering, so the combo shows that effective default as placeholder text instead of
-            // faking a selection (selecting would suggest the run carries the font explicitly).
+            // Show the common font, or leave the dropdown blank for mixed fonts.
             if (selectionFont.Family == null)
             {
                 _fontCombo.SelectedItem = null;
@@ -916,7 +914,7 @@ public partial class RichEditorToolbar : UserControl
             }
             else
             {
-                // Unknown or implicit fonts use a placeholder in the effective font; selecting an item would imply explicit formatting.
+                // Fonts outside the list are shown as placeholder text.
                 _fontCombo.SelectedItem = null;
                 string eff = selectionFont.Family == FontFamily.DefaultFontFamilyName
                     ? EffectiveDefaultFamilyName(rt) : selectionFont.Family;

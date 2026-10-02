@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using AvaloniaRichEditor.Documents;
 using AvaloniaRichEditor.Formatters;
@@ -20,6 +21,7 @@ public partial class RichEditor
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard == null) return;
         string? text = await clipboard.TryGetTextAsync();
+        if (TryPasteUnhighlightedUrl(text)) return;
 
         // 1. Internal rich clipboard: if the system text still matches what we last copied
         //    in-app, paste the formatted version (blocks/tables when available, else runs).
@@ -29,9 +31,17 @@ public partial class RichEditor
         {
             PushUndo();
             if (_internalClipboardBlocks != null)
-                InsertBlocks(_internalClipboardBlocks);
+            {
+                var blocks = _internalClipboardBlocks.ConvertAll(b => (Block)b.Clone());
+                ClearPastedLinkFormatting(blocks);
+                InsertBlocks(blocks);
+            }
             else
-                InsertInlines(_internalClipboard!);
+            {
+                var paragraph = new Paragraph { Inlines = _internalClipboard!.ConvertAll(i => (Inline)i.Clone()) };
+                ClearPastedLinkFormatting(new[] { paragraph });
+                InsertInlines(paragraph.Inlines);
+            }
             ResetCaretBlink(); // caret sits at the end of the pasted content — scroll it into view
             return;
         }
@@ -50,6 +60,7 @@ public partial class RichEditor
                 if (!empty)
                 {
                     PushUndo();
+                    ClearPastedLinkFormatting(parsedRtf.Blocks);
                     InsertParsedDocument(parsedRtf);
                     ResetCaretBlink();
                     return;
@@ -72,6 +83,7 @@ public partial class RichEditor
                 if (parsed.Blocks.Count > 0)
                 {
                     PushUndo();
+                    ClearPastedLinkFormatting(parsed.Blocks);
                     InsertParsedDocument(parsed);
                     ResetCaretBlink(); // caret sits at the end of the pasted content — scroll it into view
                     return;
@@ -126,9 +138,50 @@ public partial class RichEditor
         try { text = await clipboard.TryGetTextAsync(); }
         catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
         if (string.IsNullOrEmpty(text)) return;
+        if (TryPasteUnhighlightedUrl(text)) return;
         PushUndo();
         InsertText(text);
         ResetCaretBlink();
+    }
+
+    private static void ClearPastedLinkFormatting(IEnumerable<Block> blocks)
+    {
+        foreach (var paragraph in ParagraphsInBlocks(blocks))
+            foreach (var inline in paragraph.Inlines)
+                if (inline is Run run && !string.IsNullOrEmpty(run.NavigateUri))
+                    ClearPastedLinkStyle(run);
+    }
+
+    private static void ClearPastedLinkStyle(Run run)
+    {
+        run.Background = null;
+        if (run.TextDecorations == null) return;
+        for (int i = run.TextDecorations.Count - 1; i >= 0; i--)
+            if (run.TextDecorations[i].Location == TextDecorationLocation.Underline)
+                run.TextDecorations.RemoveAt(i);
+    }
+
+    private bool TryPasteUnhighlightedUrl(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || _caretPosition.Paragraph == null) return false;
+        string token = text.Trim();
+        foreach (char c in token)
+            if (char.IsWhiteSpace(c)) return false;
+        string url = token.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "https://" + token : token;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            || string.IsNullOrEmpty(uri.Host)) return false;
+
+        PushUndo();
+        if (_selectionStart != _selectionEnd) DeleteSelection();
+        var start = new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset);
+        // Clear the pasted URL's highlight and underline.
+        (_pendingCaretStyles ??= new List<Action<Run>>()).Add(ClearPastedLinkStyle);
+        InsertText(token);
+        new TextRange(start, new TextPointer(_caretPosition.Paragraph, _caretPosition.Offset))
+            .ApplyPropertyValue(r => r.NavigateUri = url);
+        ResetCaretBlink();
+        return true;
     }
 
     // Heuristic for "this plain text is a copied spreadsheet grid". Every non-empty line must

@@ -595,7 +595,7 @@ public partial class RichEditor : Control
             run?.FontStyle == FontStyle.Italic,
             HasDeco(run, TextDecorationLocation.Underline),
             HasDeco(run, TextDecorationLocation.Strikethrough),
-            run != null && run.FontSize > 0 ? run.FontSize : BodyFontSizePt,
+            run != null && run.FontSize > 0 ? run.FontSize : DefaultFontSize,
             run?.FontFamily,
             p?.TextAlignment ?? TextAlignment.Left,
             p?.ListType ?? ListKind.None,
@@ -1726,7 +1726,7 @@ public partial class RichEditor : Control
         if (idx < 0) return;
         var sourceRun = RunAtOffset(p, Math.Max(0, _caretPosition.Offset - 1))
             ?? p.Inlines.OfType<Run>().FirstOrDefault();
-        var nextRun = sourceRun != null ? (Run)sourceRun.Clone() : new Run { FontSize = BodyFontSizePt };
+        var nextRun = sourceRun != null ? (Run)sourceRun.Clone() : new Run { FontSize = DefaultFontSize };
         nextRun.Text = "";
         nextRun.NavigateUri = null;
         if (_pendingCaretStyles != null)
@@ -1750,7 +1750,8 @@ public partial class RichEditor : Control
             inl.Parent = np;
             np.Inlines.Add(inl);
         }
-        if (np.Inlines.Count == 0) np.Inlines.Add(nextRun);
+        // Start typing in the inherited format, even before existing or empty runs.
+        np.Inlines.Insert(0, nextRun);
         if (p.Inlines.Count == 0) p.Inlines.Add((Run)nextRun.Clone());
         np.Parent = p.Parent;
         container.Insert(idx + 1, np);

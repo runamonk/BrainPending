@@ -202,11 +202,13 @@ public partial class RichEditorToolbar : UserControl
             if (change.OldValue is RichEditor old)
             {
                 old.StatusChanged -= OnTargetStatusChanged;
+                old.SelectionChanged -= OnTargetStatusChanged;
                 old.PropertyChanged -= OnTargetPropertyChanged;
             }
             if (change.NewValue is RichEditor rt)
             {
                 rt.StatusChanged += OnTargetStatusChanged;
+                rt.SelectionChanged += OnTargetStatusChanged;
                 rt.PropertyChanged += OnTargetPropertyChanged;
             }
             Build(); // font list comes from the target, so rebuild
@@ -345,6 +347,7 @@ public partial class RichEditorToolbar : UserControl
             {
                 if (_suppress || _fontCombo.SelectedItem is not string fam) return;
                 Target?.SetFontFamily(fam);
+                Sync();
             };
             Add(_fontCombo);
             
@@ -357,7 +360,10 @@ public partial class RichEditorToolbar : UserControl
                 if (_suppress || _sizeCombo.SelectedItem is not ComboBoxItem it) return;
                 if (double.TryParse(it.Content?.ToString(), System.Globalization.NumberStyles.Float,
                         System.Globalization.CultureInfo.InvariantCulture, out double size))
+                {
                     Target?.SetFontSize(size);
+                    Sync();
+                }
             };
             Add(_sizeCombo);
             Add(Div());
@@ -844,6 +850,7 @@ public partial class RichEditorToolbar : UserControl
         var rt = Target;
         if (rt == null) return;
         var f = rt.GetCaretFormat();
+        var selectionFont = rt.GetSelectionFont();
 
         static void SetActive(Button? b, bool active)
         {
@@ -884,15 +891,26 @@ public partial class RichEditorToolbar : UserControl
         ReflectPickerColor(highlight: true, f.Background ?? NoColorBrush);
 
         _suppress = true;
-        if (_sizeCombo != null) SelectByContent(_sizeCombo, SizeText(f.FontSize));
+        if (_sizeCombo != null)
+        {
+            _sizeCombo.SelectedItem = null;
+            if (selectionFont.Size is { } size) SelectByContent(_sizeCombo, SizeText(size));
+        }
         if (_fontCombo != null)
         {
             // Runs without an explicit font fall back to the editor's DefaultFontFamily for
             // rendering, so the combo shows that effective default as placeholder text instead of
             // faking a selection (selecting would suggest the run carries the font explicitly).
-            if (f.FontFamily != null && _fontCombo.Items.Contains(f.FontFamily))
+            if (selectionFont.Family == null)
             {
-                _fontCombo.SelectedItem = f.FontFamily;
+                _fontCombo.SelectedItem = null;
+                _fontCombo.PlaceholderText = "";
+                _fontCombo.ClearValue(TemplatedControl.FontFamilyProperty);
+            }
+            else if (_fontCombo.Items.Contains(selectionFont.Family))
+            {
+                _fontCombo.SelectedItem = selectionFont.Family;
+                _fontCombo.PlaceholderText = "";
                 // Selected items render through the item template's own font; drop any placeholder font.
                 _fontCombo.ClearValue(TemplatedControl.FontFamilyProperty);
             }
@@ -900,7 +918,8 @@ public partial class RichEditorToolbar : UserControl
             {
                 // Unknown or implicit fonts use a placeholder in the effective font; selecting an item would imply explicit formatting.
                 _fontCombo.SelectedItem = null;
-                string eff = f.FontFamily ?? EffectiveDefaultFamilyName(rt);
+                string eff = selectionFont.Family == FontFamily.DefaultFontFamilyName
+                    ? EffectiveDefaultFamilyName(rt) : selectionFont.Family;
                 _fontCombo.PlaceholderText = eff;
                 _fontCombo.FontFamily = string.IsNullOrEmpty(eff) ? FontFamily.Default : new FontFamily(eff);
             }

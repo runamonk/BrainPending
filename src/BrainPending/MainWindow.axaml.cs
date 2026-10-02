@@ -120,7 +120,8 @@ public partial class MainWindow : Window
         };
         Closing += (_, e) =>
         {
-            if (!SaveCurrent()) { e.Cancel = true; _closeAfterSave = _saveRetry.IsEnabled; return; }
+            _autosave.Stop();
+            if (!SaveCurrent(force: true)) { e.Cancel = true; _closeAfterSave = _saveRetry.IsEnabled; return; }
             SaveWindowBounds();
         };
         Closed += (_, _) => { _closed = true; _autosave.Stop(); _saveRetry.Stop(); _poll.Stop(); _watcher?.Dispose(); };
@@ -441,9 +442,10 @@ public partial class MainWindow : Window
         catch (Exception e) { ShowNotice("Could not load an incoming change: " + e.Message); }
     }
 
-    private bool SaveCurrent()
+    private bool SaveCurrent(bool force = false)
     {
-        if (_saveRetry.IsEnabled) return false;
+        if (force) _saveRetry.Stop();
+        else if (_saveRetry.IsEnabled) return false;
         if (_note == null || _workspace == null || (!_dirty && !EditorView.Editor.IsModified)) return true;
         try
         {
@@ -466,6 +468,7 @@ public partial class MainWindow : Window
         catch (Exception e) when (SaveRetryPolicy.IsTemporary(e) && _saveRetryCount < SaveRetryPolicy.Delays.Length)
         {
             SaveStatus.Text = "Saving… retrying shortly";
+            if (RetrySaveButton.IsVisible) { Notice.IsVisible = false; RetrySaveButton.IsVisible = false; }
             RetrySaveButton.IsEnabled = false;
             _saveRetry.Interval = SaveRetryPolicy.Delays[_saveRetryCount++];
             _saveRetry.Start();

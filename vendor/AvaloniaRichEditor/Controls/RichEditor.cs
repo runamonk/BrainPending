@@ -365,6 +365,8 @@ public partial class RichEditor : Control
         _cellSelMode = false;
         _cellSelTable = null;
         _pendingCaretStyles = null;
+        _lastTypingRun = null;
+        _persistedTypingRun = null;
 
         // A drag can only be in flight for a block of the old document.
         _isResizingColumn = false; _resizingTable = null;
@@ -581,6 +583,13 @@ public partial class RichEditor : Control
         {
             run = RunAtOffset(p, _caretPosition.Offset > 0 ? _caretPosition.Offset - 1 : 0);
             if (run == null) foreach (var inl in p.Inlines) if (inl is Run r0) { run = r0; break; }
+            if (GetParagraphLength(p) == 0 && _lastTypingRun != null)
+            {
+                run = run != null ? (Run)run.Clone() : new Run();
+                run.FontFamily = _lastTypingRun.FontFamily;
+                run.FontSize = _lastTypingRun.FontSize;
+                run.Foreground = _lastTypingRun.Foreground;
+            }
         }
         // A pending caret format (toggle at an empty position) shows in the toolbar before any
         // text is typed — preview it on a clone so the document stays untouched.
@@ -767,7 +776,7 @@ public partial class RichEditor : Control
         // Auto-link: typing whitespace right after a web URL turns the URL into a hyperlink.
         // Runs after the insertion so the space itself stays outside the linked range.
         if (AutoLinkOnType && (text == " " || text == "\t")) TryAutoLink(_caretPosition.Paragraph, preCaret);
-        TypingFormatChanged?.Invoke(this, GetCaretFormat());
+        NotifyTypingFormatChanged(GetCaretFormat(), persist: false);
         MarkTextChanged();
         // Typing scrolls directly; ResetCaretBlink would break the current undo group.
         _bringCaretIntoView = true;
@@ -895,6 +904,19 @@ public partial class RichEditor : Control
 
     private void TryInsertTextCore(Paragraph p, string text, int localIndex)
     {
+        if (GetParagraphLength(p) == 0 && _lastTypingRun != null)
+        {
+            var emptyRun = p.Inlines.OfType<Run>().FirstOrDefault();
+            if (emptyRun == null)
+            {
+                emptyRun = (Run)_lastTypingRun.Clone();
+                emptyRun.Parent = p;
+                p.Inlines.Add(emptyRun);
+            }
+            emptyRun.FontFamily = _lastTypingRun.FontFamily;
+            emptyRun.FontSize = _lastTypingRun.FontSize;
+            emptyRun.Foreground = _lastTypingRun.Foreground;
+        }
         int currentIndex = 0;
         for (int i = 0; i < p.Inlines.Count; i++)
         {
@@ -924,12 +946,18 @@ public partial class RichEditor : Control
             // run there (so typing right before a leading inline object lands in front of it, not appended).
             if (p.Inlines[i] is not Run && localIndex == currentIndex)
             {
-                p.Inlines.Insert(i, new Run { Text = text, Parent = p });
+                var inserted = _lastTypingRun != null ? (Run)_lastTypingRun.Clone() : new Run { FontSize = DefaultFontSize };
+                inserted.Text = text;
+                inserted.Parent = p;
+                p.Inlines.Insert(i, inserted);
                 return;
             }
             currentIndex += len;
         }
-        p.Inlines.Add(new Run { Text = text, Parent = p });
+        var appended = _lastTypingRun != null ? (Run)_lastTypingRun.Clone() : new Run { FontSize = DefaultFontSize };
+        appended.Text = text;
+        appended.Parent = p;
+        p.Inlines.Add(appended);
     }
 
     private const double DividerHeight = 18;
@@ -1727,6 +1755,12 @@ public partial class RichEditor : Control
         var sourceRun = RunAtOffset(p, Math.Max(0, _caretPosition.Offset - 1))
             ?? p.Inlines.OfType<Run>().FirstOrDefault();
         var nextRun = sourceRun != null ? (Run)sourceRun.Clone() : new Run { FontSize = DefaultFontSize };
+        if (GetParagraphLength(p) == 0 && _lastTypingRun != null)
+        {
+            nextRun.FontFamily = _lastTypingRun.FontFamily;
+            nextRun.FontSize = _lastTypingRun.FontSize;
+            nextRun.Foreground = _lastTypingRun.Foreground;
+        }
         nextRun.Text = "";
         nextRun.NavigateUri = null;
         if (_pendingCaretStyles != null)
@@ -1758,6 +1792,12 @@ public partial class RichEditor : Control
         _caretPosition = new TextPointer(np, 0);
         _selectionStart = new TextPointer(np, 0);
         _selectionEnd = new TextPointer(np, 0);
+        NotifyTypingFormatChanged(GetCaretFormat() with
+        {
+            FontFamily = nextRun.FontFamily,
+            FontSize = nextRun.FontSize,
+            Foreground = nextRun.Foreground
+        }, persist: false);
     }
 
     private List<Paragraph> GetAllParagraphsInOrder()

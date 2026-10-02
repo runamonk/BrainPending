@@ -57,8 +57,68 @@ public partial class RichEditor
     public void ToggleItalic() { ApplyStyleToSelection(r => r.FontStyle = r.FontStyle == FontStyle.Italic ? FontStyle.Normal : FontStyle.Italic); }
     public event EventHandler<CaretFormat>? TypingFormatChanged;
 
+    private Run? _lastTypingRun;
+    private Run? _persistedTypingRun;
+
+    internal (string? Family, double? Size) GetSelectionFont()
+    {
+        var caret = GetCaretFormat();
+        string? family = caret.FontFamily ?? DefaultFontFamily.Name;
+        double? size = caret.FontSize;
+        bool cells = SelectedCellsBlock() != null;
+        if (!cells && _selectionStart == _selectionEnd) return (family, size);
+
+        var range = new TextRange(_selectionStart, _selectionEnd);
+        bool found = false;
+        foreach (var paragraph in SelectedParagraphsInOrder())
+        {
+            int start = !cells && paragraph == range.Start.Paragraph ? range.Start.Offset : 0;
+            int end = !cells && paragraph == range.End.Paragraph ? range.End.Offset : GetParagraphLength(paragraph);
+            int offset = 0;
+            foreach (var inline in paragraph.Inlines)
+            {
+                int length = InlineLen(inline);
+                if (inline is Run run && offset < end && offset + length > start)
+                {
+                    string runFamily = string.IsNullOrEmpty(run.FontFamily) ? DefaultFontFamily.Name : run.FontFamily;
+                    double runSize = run.FontSize > 0 ? run.FontSize : DefaultFontSize;
+                    if (!found)
+                    {
+                        family = runFamily;
+                        size = runSize;
+                        found = true;
+                    }
+                    else
+                    {
+                        if (!string.Equals(family, runFamily, StringComparison.OrdinalIgnoreCase)) family = null;
+                        if (size != runSize) size = null;
+                    }
+                }
+                offset += length;
+            }
+        }
+        return (family, size);
+    }
+
+    private void NotifyTypingFormatChanged(CaretFormat format, bool persist = true)
+    {
+        _lastTypingRun = new Run
+        {
+            FontFamily = format.FontFamily,
+            FontSize = format.FontSize,
+            Foreground = format.Foreground
+        };
+        if (persist)
+        {
+            _persistedTypingRun = (Run)_lastTypingRun.Clone();
+            TypingFormatChanged?.Invoke(this, format);
+        }
+    }
+
     public void RestoreTypingFormat(string? family, double size, IBrush? foreground)
     {
+        _lastTypingRun = new Run { FontFamily = family, FontSize = size, Foreground = foreground };
+        _persistedTypingRun = (Run)_lastTypingRun.Clone();
         (_pendingCaretStyles ??= new List<Action<Run>>()).Add(r =>
         {
             r.FontFamily = family;
@@ -72,7 +132,8 @@ public partial class RichEditor
     {
         if (IsReadOnly) return;
         ApplyStyleToSelection(r => r.FontSize = size);
-        TypingFormatChanged?.Invoke(this, GetCaretFormat() with { FontSize = size });
+        NotifyTypingFormatChanged(GetCaretFormat() with { FontSize = size },
+            _selectionStart == _selectionEnd && _pendingCaretStyles is { Count: > 0 });
     }
 
     private static readonly double[] FontSizeLadder =
@@ -103,13 +164,15 @@ public partial class RichEditor
     {
         if (IsReadOnly) return;
         ApplyStyleToSelection(r => r.Foreground = brush);
-        TypingFormatChanged?.Invoke(this, GetCaretFormat() with { Foreground = brush });
+        NotifyTypingFormatChanged(GetCaretFormat() with { Foreground = brush },
+            _selectionStart == _selectionEnd && _pendingCaretStyles is { Count: > 0 });
     }
     public void SetFontFamily(string family)
     {
         if (IsReadOnly) return;
         ApplyStyleToSelection(r => r.FontFamily = family);
-        TypingFormatChanged?.Invoke(this, GetCaretFormat() with { FontFamily = family });
+        NotifyTypingFormatChanged(GetCaretFormat() with { FontFamily = family },
+            _selectionStart == _selectionEnd && _pendingCaretStyles is { Count: > 0 });
     }
     /// <summary>Sets the highlight (background) brush of the current selection; pass <see langword="null"/> to clear.</summary>
     public void SetHighlight(IBrush? brush) { ApplyStyleToSelection(r => r.Background = brush); }

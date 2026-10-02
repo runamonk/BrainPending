@@ -1355,8 +1355,8 @@ public partial class RichEditor
                     ResetCaretBlink(); InvalidateVisual(); e.Handled = true; return;
                 }
                 var p = _caretPosition.Paragraph;
-                // Enter splits the paragraph at the caret into a new paragraph. On an empty list item it
-                // exits the list instead. A table cell now hosts sibling paragraphs (P3), so a cell
+                // Enter on an empty list item or indented paragraph returns to an unindented line.
+                // A table cell now hosts sibling paragraphs (P3), so a cell
                 // paragraph splits within the cell's block list — the table grows to fit (InvalidateMeasure).
                 bool topLevel = p?.Parent is FlowDocument;
                 bool inCell = p?.Parent is TableCell;
@@ -1369,10 +1369,31 @@ public partial class RichEditor
                     p = _caretPosition.Paragraph!;
                     // Auto-link a trailing URL token before the split, so the link lands in the left paragraph.
                     if (AutoLinkOnType) TryAutoLink(p, _caretPosition.Offset);
-                    if (p.ListType != ListKind.None && GetParagraphLength(p) == 0)
-                        p.ListType = ListKind.None; // empty list item -> leave the list, stay put
+                    bool leavingBlock = GetParagraphLength(p) == 0;
+                    if (leavingBlock && (p.ListType != ListKind.None || p.Indent > 0))
+                    {
+                        p.ListType = ListKind.None;
+                        p.ListMarker = ListMarkerStyle.Default;
+                        p.ListLevel = 0;
+                        p.ListStart = null;
+                        p.Indent = 0;
+                        InvalidateMeasure();
+                    }
                     else
                         SplitParagraphAtCaret();
+                    if (leavingBlock)
+                    {
+                        _pendingCaretStyles = null;
+                        _lastTypingRun = _persistedTypingRun != null
+                            ? (Run)_persistedTypingRun.Clone()
+                            : new Run { FontFamily = DefaultFontFamily.Name, FontSize = DefaultFontSize };
+                        var paragraph = _caretPosition.Paragraph!;
+                        paragraph.Inlines.Clear();
+                        var run = (Run)_lastTypingRun.Clone();
+                        run.Parent = paragraph;
+                        paragraph.Inlines.Add(run);
+                        InvalidateMeasure();
+                    }
                     UpdateParents(Document);
                     if (inCell) InvalidateMeasure(); // a taller cell reflows the table's row height
                     ResetCaretBlink(); InvalidateVisual(); e.Handled = true; return;

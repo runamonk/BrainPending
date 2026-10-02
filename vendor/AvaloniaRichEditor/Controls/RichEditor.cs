@@ -1805,28 +1805,8 @@ public partial class RichEditor : Control
     private List<Paragraph> GetAllParagraphsInOrder()
         => Document == null ? new List<Paragraph>() : ParagraphsInBlocks(Document.Blocks).ToList();
 
-    // Navigation, find, and select-all include paragraphs inside nested and inline tables.
-    private static System.Collections.Generic.IEnumerable<Paragraph> ParagraphsInBlocks(System.Collections.Generic.IEnumerable<Block> blocks)
-    {
-        foreach (var block in blocks)
-        {
-            if (block is Paragraph p)
-            {
-                yield return p;
-                // An inline table's cell paragraphs are reachable too, ordered right after their host
-                // paragraph (they have no block-list home of their own).
-                foreach (var inl in p.Inlines)
-                    if (inl is InlineTable it)
-                        foreach (var (_, _, cell) in it.Table.LogicalCells())
-                            foreach (var q in ParagraphsInBlocks(cell.Blocks))
-                                yield return q;
-            }
-            else if (block is TableBlock tb)
-                foreach (var (_, _, cell) in tb.LogicalCells())
-                    foreach (var q in ParagraphsInBlocks(cell.Blocks))
-                        yield return q;
-        }
-    }
+    private static IEnumerable<Paragraph> ParagraphsInBlocks(IEnumerable<Block> blocks)
+        => DocumentTraversal.Paragraphs(blocks);
 
     // Linear traversal skips inline-table cells because the host text continues after the table.
     // MoveCaretRight/Left handle explicit entry and exit; block-table cells remain sequential.

@@ -360,8 +360,7 @@ public class TextRange
     // Coalesce imported runs so source-node boundaries do not change the model on each import/export cycle.
     internal static void CoalesceAll(FlowDocument doc)
     {
-        var all = new List<Paragraph>();
-        CollectParagraphs(doc.Blocks, all);
+        var all = new List<Paragraph>(DocumentTraversal.Paragraphs(doc.Blocks));
         foreach (var p in all) CoalesceRuns(p);
     }
 
@@ -489,30 +488,5 @@ public class TextRange
     }
 
     private List<Paragraph> GetAllParagraphsInOrder(FlowDocument doc)
-    {
-        var result = new List<Paragraph>();
-        CollectParagraphs(doc.Blocks, result);
-        return result;
-    }
-
-    // Mirror of the control's ParagraphsInBlocks: fully recursive through table cells (nested tables) and
-    // through inline tables hanging off a paragraph's inlines, using logical (anchor) cells only so the
-    // index-based range loops agree with the control's order on merged tables.
-    private static void CollectParagraphs(IEnumerable<Block> blocks, List<Paragraph> result)
-    {
-        foreach (var block in blocks)
-        {
-            if (block is Paragraph p)
-            {
-                result.Add(p);
-                foreach (var inl in p.Inlines)
-                    if (inl is InlineTable it)
-                        foreach (var (_, _, cell) in it.Table.LogicalCells())
-                            CollectParagraphs(cell.Blocks, result);
-            }
-            else if (block is TableBlock tb)
-                foreach (var (_, _, cell) in tb.LogicalCells())
-                    CollectParagraphs(cell.Blocks, result);
-        }
-    }
+        => new List<Paragraph>(DocumentTraversal.Paragraphs(doc.Blocks));
 }

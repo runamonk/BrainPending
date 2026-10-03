@@ -916,10 +916,18 @@ public partial class MainWindow : Window
     {
         if (_workspace == null) return;
         var dialog = new NoteSwitcherDialog(_workspace, _recentNotes, _note?.Path);
-        var selected = await ShowOwnedDialogAsync<string?>(dialog);
-        if (selected == null || !SaveCurrent()) return;
-        LoadNote(_workspace.Read(selected));
-        _folder = Path.GetDirectoryName(selected)!;
+        var selected = await ShowOwnedDialogAsync<NoteSwitchItem?>(dialog);
+        if (selected == null) return;
+        if (selected.IsFolder)
+        {
+            await Navigate(selected.Path);
+            ShowSidebar();
+            Browser.Focus();
+            return;
+        }
+        if (!SaveCurrent()) return;
+        LoadNote(_workspace.Read(selected.Path));
+        _folder = Path.GetDirectoryName(selected.Path)!;
         SearchBox.Text = "";
         RefreshBrowser(true);
         EditorView.Editor.Focus();

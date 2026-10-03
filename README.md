@@ -42,6 +42,9 @@ dotnet run --project src/BrainPending -- --notes ./Notes
   it. Select text before inserting a link to use that text as the label.
 - Autosave after a short typing pause; save on note switch and close.
 - Search note/folder titles recursively in the current folder (Ctrl+Shift+F).
+- Quick switch (Ctrl+Shift+O) searches thoughts and clusters across the notebook,
+  with the previous thought selected first. Open a cluster, then use Ctrl+N to
+  add a thought there. Thought bubbles and connected nodes distinguish the two.
 - Ctrl+F opens a slide-down find panel above the editor and focuses its input.
   Matches are highlighted as you type, with a match counter. F3 / Shift+F3
   (or Enter / Shift+Enter in the input) move between matches with wrap-around;

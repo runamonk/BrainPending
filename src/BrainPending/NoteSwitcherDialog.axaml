@@ -2,23 +2,26 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:BrainPending"
         x:Class="BrainPending.NoteSwitcherDialog"
-        Title="Switch thought" Width="540" Height="520" MinWidth="360" MinHeight="300"
+        Title="Quick switch" Width="540" Height="520" MinWidth="360" MinHeight="300"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource AppSurfaceBrush}">
   <Grid Margin="20" RowDefinitions="Auto,*,Auto">
-    <TextBox x:Name="Query" PlaceholderText="Search all thoughts…" TextChanged="Query_Changed" AutomationProperties.Name="Search all thoughts" />
+    <TextBox x:Name="Query" PlaceholderText="Search thoughts and clusters…" TextChanged="Query_Changed" AutomationProperties.Name="Search thoughts and clusters" />
     <Grid Grid.Row="1" Margin="0,12,0,12">
-      <ListBox x:Name="Results" Background="Transparent" DoubleTapped="Results_DoubleTapped" AutomationProperties.Name="Matching thoughts">
+      <ListBox x:Name="Results" Background="Transparent" DoubleTapped="Results_DoubleTapped" AutomationProperties.Name="Matching thoughts and clusters">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="local:NoteSwitchItem">
-            <StackPanel Spacing="3" Margin="2,4">
-              <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-              <TextBlock Text="{Binding Location}" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis" />
-            </StackPanel>
+            <Grid ColumnDefinitions="28,*" Margin="2,4">
+              <Path Data="{Binding IconData}" Width="20" Height="20" Stroke="{DynamicResource AppIconBrush}" StrokeThickness="1.5" VerticalAlignment="Center" />
+              <StackPanel Grid.Column="1" Spacing="3">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Location}" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+            </Grid>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
-      <TextBlock x:Name="EmptyMessage" Text="No matching thoughts" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Opacity="0.6" />
+      <TextBlock x:Name="EmptyMessage" Text="No matching thoughts or clusters" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Opacity="0.6" />
     </Grid>
     <TextBlock Grid.Row="2" Text="↑ ↓ to select · Enter to open · Esc to cancel" FontSize="12" Opacity="0.6" />
   </Grid>

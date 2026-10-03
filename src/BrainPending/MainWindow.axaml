@@ -14,16 +14,16 @@
             <Path Width="20" Height="20" Stroke="{DynamicResource AppTextBrush}" StrokeThickness="1.5" Data="M 2,3 L 18,3 L 18,17 L 2,17 Z M 7,3 L 7,17" />
           </Button>
             <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New thought (Ctrl+N)" AutomationProperties.Name="New thought" Click="NewNote_Click">
-              <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 12,18 L 4,18 L 4,2 L 12,2 L 16,6 L 16,10 M 12,2 L 12,6 L 16,6 M 11,15 L 19,15 M 15,11 L 15,19" />
+              <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 5,13 C 2,13 1,11 1,9 C 1,7 2,5 5,5 C 5,1 11,1 12,4 C 16,2 19,5 19,8 C 19,11 17,13 14,13 Z M 8,15.5 A 1.5,1.5 0 1 0 5,15.5 A 1.5,1.5 0 1 0 8,15.5 M 3,18.5 A 0.5,0.5 0 1 0 2,18.5 A 0.5,0.5 0 1 0 3,18.5 M 12,16 L 18,16 M 15,13 L 15,19" />
             </Button>
             <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New cluster (Ctrl+D)" AutomationProperties.Name="New cluster" Click="NewFolder_Click">
-              <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 10,17 L 2,17 L 2,4 L 8,4 L 10,7 L 18,7 L 18,10 M 11,15 L 19,15 M 15,11 L 15,19" />
+              <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 8,8 L 5.5,5.5 M 12,8 L 14.5,5.5 M 8,12 L 5.5,14.5 M 13,10 A 3,3 0 1 0 7,10 A 3,3 0 1 0 13,10 M 6,4 A 2,2 0 1 0 2,4 A 2,2 0 1 0 6,4 M 18,4 A 2,2 0 1 0 14,4 A 2,2 0 1 0 18,4 M 6,16 A 2,2 0 1 0 2,16 A 2,2 0 1 0 6,16 M 13,16 L 19,16 M 16,13 L 16,19" />
             </Button>
             <Button x:Name="MiniImportNotesButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Import thoughts" AutomationProperties.Name="Import thoughts" Click="ImportNotes_Click">
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 10,1 L 10,13 M 5,8 L 10,13 L 15,8 M 2,13 L 2,19 L 18,19 L 18,13" />
             </Button>
-            <Button x:Name="MiniSwitchNoteButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Switch thought (Ctrl+Shift+O)" AutomationProperties.Name="Switch thought" Click="SwitchNote_Click">
-              <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 9,18 L 3,18 L 3,2 L 15,2 L 15,7 M 6,2 L 6,18 M 14,9 A 4,4 0 1 0 14,17 A 4,4 0 1 0 14,9 M 17,16 L 20,19" />
+            <Button x:Name="MiniSwitchNoteButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Quick switch (Ctrl+Shift+O)" AutomationProperties.Name="Quick switch" Click="SwitchNote_Click">
+              <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 3,6 L 17,6 M 13,2 L 17,6 L 13,10 M 17,14 L 3,14 M 7,10 L 3,14 L 7,18" />
             </Button>
         </StackPanel>
       </Border>
@@ -37,16 +37,16 @@
               </Button>
               <StackPanel x:Name="SidebarPinnedActions" Orientation="Horizontal" Spacing="6">
                 <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New thought (Ctrl+N)" AutomationProperties.Name="New thought" Click="NewNote_Click">
-                  <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 12,18 L 4,18 L 4,2 L 12,2 L 16,6 L 16,10 M 12,2 L 12,6 L 16,6 M 11,15 L 19,15 M 15,11 L 15,19" />
+                  <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 5,13 C 2,13 1,11 1,9 C 1,7 2,5 5,5 C 5,1 11,1 12,4 C 16,2 19,5 19,8 C 19,11 17,13 14,13 Z M 8,15.5 A 1.5,1.5 0 1 0 5,15.5 A 1.5,1.5 0 1 0 8,15.5 M 3,18.5 A 0.5,0.5 0 1 0 2,18.5 A 0.5,0.5 0 1 0 3,18.5 M 12,16 L 18,16 M 15,13 L 15,19" />
                 </Button>
                 <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New cluster (Ctrl+D)" AutomationProperties.Name="New cluster" Click="NewFolder_Click">
-                  <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 10,17 L 2,17 L 2,4 L 8,4 L 10,7 L 18,7 L 18,10 M 11,15 L 19,15 M 15,11 L 15,19" />
+                  <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 8,8 L 5.5,5.5 M 12,8 L 14.5,5.5 M 8,12 L 5.5,14.5 M 13,10 A 3,3 0 1 0 7,10 A 3,3 0 1 0 13,10 M 6,4 A 2,2 0 1 0 2,4 A 2,2 0 1 0 6,4 M 18,4 A 2,2 0 1 0 14,4 A 2,2 0 1 0 18,4 M 6,16 A 2,2 0 1 0 2,16 A 2,2 0 1 0 6,16 M 13,16 L 19,16 M 16,13 L 16,19" />
                 </Button>
                 <Button x:Name="ImportNotesButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Import thoughts" AutomationProperties.Name="Import thoughts" Click="ImportNotes_Click">
                   <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 10,1 L 10,13 M 5,8 L 10,13 L 15,8 M 2,13 L 2,19 L 18,19 L 18,13" />
                 </Button>
-                <Button x:Name="SwitchNoteButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Switch thought (Ctrl+Shift+O)" AutomationProperties.Name="Switch thought" Click="SwitchNote_Click">
-                  <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 9,18 L 3,18 L 3,2 L 15,2 L 15,7 M 6,2 L 6,18 M 14,9 A 4,4 0 1 0 14,17 A 4,4 0 1 0 14,9 M 17,16 L 20,19" />
+                <Button x:Name="SwitchNoteButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Quick switch (Ctrl+Shift+O)" AutomationProperties.Name="Quick switch" Click="SwitchNote_Click">
+                  <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 3,6 L 17,6 M 13,2 L 17,6 L 13,10 M 17,14 L 3,14 M 7,10 L 3,14 L 7,18" />
                 </Button>
               </StackPanel>
             </StackPanel>

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
@@ -21,12 +22,23 @@ internal sealed class AttachmentDialog : Window
         var save = new Button { Content = "Save As…" };
         var close = new Button { Content = "Close" };
         close.Click += (_, _) => Close();
+        var confirmed = false;
         open.Click += async (_, _) =>
         {
             try
             {
+                // Notebooks can be shared; ask before running programs or scripts from one.
+                if (!confirmed && IsDangerous(attachment.Name))
+                {
+                    confirmed = true;
+                    open.Content = "Open anyway";
+                    error.Text = $"“{attachment.Name}” can run programs on this computer. Only open it if you trust where it came from.";
+                    return;
+                }
                 // Open a disposable copy so external editors cannot change the stored original.
-                var folder = Path.Combine(Path.GetTempPath(), "BrainPending-attachments", Guid.NewGuid().ToString("N"));
+                var copies = Path.Combine(Path.GetTempPath(), "BrainPending-attachments");
+                RemoveOldCopies(copies);
+                var folder = Path.Combine(copies, Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(folder);
                 var path = Path.Combine(folder, attachment.Name);
                 await Task.Run(() => File.Copy(attachment.Path, path));
@@ -61,5 +73,24 @@ internal sealed class AttachmentDialog : Window
                 new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Children = { open, save, close } }
             }
         };
+    }
+
+    // Uses Windows' own list of file types that can run code.
+    internal static bool IsDangerous(string name) =>
+        OperatingSystem.IsWindows() && Path.GetExtension(name) is { Length: > 1 } extension && AssocIsDangerous(extension);
+
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AssocIsDangerous(string association);
+
+    // Copies from earlier sessions; ones still open in another app stay until next time.
+    private static void RemoveOldCopies(string copies)
+    {
+        if (!Directory.Exists(copies)) return;
+        foreach (var folder in Directory.EnumerateDirectories(copies))
+        {
+            try { if (Directory.GetCreationTimeUtc(folder) < DateTime.UtcNow.AddDays(-1)) Directory.Delete(folder, true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+        }
     }
 }

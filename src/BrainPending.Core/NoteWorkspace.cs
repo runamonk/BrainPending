@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Enumeration;
 using System.Security.Cryptography;
 using System.Text;
@@ -87,18 +88,30 @@ public sealed class NoteWorkspace
 
     private string PinsPath => System.IO.Path.Combine(MetadataPath, "pins.json");
 
-    private HashSet<string> ReadPins()
+    private bool _pinsWarned;
+
+    // Pins are cosmetic: a damaged or busy file must not stop the notebook from opening.
+    // Updates still fail on read errors, so a briefly locked file is not overwritten.
+    private HashSet<string> ReadPins(bool forUpdate = false)
     {
         if (!File.Exists(PinsPath)) return new(PathRules.Comparer);
         try { return new(JsonSerializer.Deserialize<string[]>(File.ReadAllText(PinsPath)) ?? [], PathRules.Comparer); }
-        catch (JsonException e) { throw new IOException("Could not read pinned thoughts.", e); }
+        catch (Exception e) when (e is JsonException || (!forUpdate && e is IOException or UnauthorizedAccessException))
+        {
+            if (e is JsonException && !_pinsWarned)
+            {
+                _pinsWarned = true;
+                Warning?.Invoke(this, "Pinned thoughts could not be read, so they are shown unpinned. Pin them again to repair the list.");
+            }
+            return new(PathRules.Comparer);
+        }
     }
 
     private void UpdatePins(Func<HashSet<string>, bool> update)
     {
         Directory.CreateDirectory(System.IO.Path.Combine(MetadataPath, "locks"));
         using var lease = AcquireLock(PinsPath);
-        var pins = ReadPins();
+        var pins = ReadPins(forUpdate: true);
         if (!update(pins)) return;
         AtomicFile.WriteAllText(PinsPath, JsonSerializer.Serialize(pins.Order(StringComparer.Ordinal)));
     }
@@ -227,22 +240,31 @@ public sealed class NoteWorkspace
     {
         var key = OperatingSystem.IsWindows() ? path.ToUpperInvariant() : path;
         var lockPath = System.IO.Path.Combine(MetadataPath, "locks", Hash(Encoding.UTF8.GetBytes(key)) + ".lock");
+        // Windows can delete the lock on close safely because no one else can open it meanwhile.
+        // A file being deleted briefly reports access denied, so retry that too.
+        var options = OperatingSystem.IsWindows() ? FileOptions.DeleteOnClose : FileOptions.None;
         for (var attempt = 0; ; attempt++)
         {
-            try { return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
-            catch (IOException) when (attempt < 20) { Thread.Sleep(25); }
+            try { return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 1, options); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException && attempt < 20) { Thread.Sleep(25); }
         }
     }
+
+    // Last revision this instance archived per note, so unchanged disk content is not stored twice.
+    private readonly ConcurrentDictionary<string, string> _archived = new(PathRules.Comparer);
 
     private void WriteRevision(string path, byte[] bytes)
     {
         var relative = System.IO.Path.GetRelativePath(Root, path);
+        var hash = Hash(bytes);
+        if (_archived.TryGetValue(relative, out var last) && last == hash) return;
         var key = Hash(Encoding.UTF8.GetBytes(relative));
         var directory = System.IO.Path.Combine(MetadataPath, "history", key);
         Directory.CreateDirectory(directory);
         var revision = System.IO.Path.Combine(directory, $"{DateTime.UtcNow:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.rtf");
         File.WriteAllBytes(revision, bytes);
         File.WriteAllText(revision + ".json", JsonSerializer.Serialize(new { OriginalPath = relative, SavedUtc = DateTime.UtcNow }));
+        _archived[relative] = hash;
     }
 
     public string Rename(string path, string name)
@@ -250,8 +272,10 @@ public sealed class NoteWorkspace
         path = CheckPath(path, false);
         var isFolder = Directory.Exists(path);
         var target = CheckPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, ValidateName(name) + (isFolder ? "" : ".rtf")), false);
-        if (PathRules.AreEqual(path, target)) return path;
-        if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists.");
+        if (string.Equals(path, target, StringComparison.Ordinal)) return path;
+        // A case-only rename targets the same item on Windows, so it is not a name clash.
+        if (!PathRules.AreEqual(path, target) && (File.Exists(target) || Directory.Exists(target)))
+            throw new IOException("An item with that name already exists.");
         if (isFolder) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
         return target;
@@ -280,10 +304,18 @@ public sealed class NoteWorkspace
         Directory.CreateDirectory(TrashPath);
         CheckPath(TrashPath);
         var target = AvailableTrashPath(path);
-        var record = System.IO.Path.Combine(MetadataPath, "trash", $"{Guid.NewGuid():N}.json");
-        File.WriteAllText(record, JsonSerializer.Serialize(new { OriginalPath = System.IO.Path.GetRelativePath(Root, path), TrashedPath = System.IO.Path.GetRelativePath(TrashPath, target) }));
         if (Directory.Exists(path)) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
+        // Write the record after the move so a failed move leaves no orphan record.
+        try
+        {
+            var record = System.IO.Path.Combine(MetadataPath, "trash", $"{Guid.NewGuid():N}.json");
+            File.WriteAllText(record, JsonSerializer.Serialize(new { OriginalPath = System.IO.Path.GetRelativePath(Root, path), TrashedPath = System.IO.Path.GetRelativePath(TrashPath, target) }));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            Warning?.Invoke(this, "The item was moved to Trash, but its original location could not be recorded: " + error.Message);
+        }
         return target;
     }
 

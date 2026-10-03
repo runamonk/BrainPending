@@ -104,6 +104,98 @@ public sealed class WindowTests : IDisposable
         Assert.False(window.FindControl<Border>("Notice")!.IsVisible);
     }
 
+    [AvaloniaFact]
+    public async Task PersistentSaveFailureClosesWithRecoveryCopyAndRestoresOnNextLaunch()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Locked");
+        var window = OpenWindow();
+        Select(window, note.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        editor.InsertText("Keep this");
+        var recovery = Path.Combine(_root, ".mynotes", "recovery");
+        using (var locked = new FileStream(note.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
+            for (var i = 0; i < 50 && !window.FindControl<Border>("Notice")!.IsVisible; i++)
+            {
+                await Task.Delay(100, TestContext.Current.CancellationToken);
+                Dispatcher.UIThread.RunJobs();
+            }
+            Assert.Contains("recovery copy", window.FindControl<TextBlock>("NoticeText")!.Text);
+            Assert.Single(Directory.GetFiles(recovery, "*.json"));
+            window.Close();
+            for (var i = 0; i < 50 && window.IsVisible; i++)
+            {
+                await Task.Delay(100, TestContext.Current.CancellationToken);
+                Dispatcher.UIThread.RunJobs();
+            }
+            Assert.False(window.IsVisible);
+        }
+        Assert.DoesNotContain("Keep this", workspace.Read(note.Path).Rtf);
+
+        var reopened = OpenWindow();
+        Assert.Contains("Keep this", workspace.Read(note.Path).Rtf);
+        Assert.Empty(Directory.GetFiles(recovery, "*.json"));
+        Assert.Contains("Recovered unsaved changes to ‘Locked’", reopened.FindControl<TextBlock>("NoticeText")!.Text);
+    }
+
+    [AvaloniaFact]
+    public async Task OtherNoticesKeepAnUnresolvedSaveFailureVisible()
+    {
+        var workspace = new NoteWorkspace(_root);
+        var note = workspace.CreateNote(_root, "Locked");
+        var window = OpenWindow();
+        Select(window, note.Path);
+        window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Keep this");
+        using (new FileStream(note.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        {
+            window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
+            for (var i = 0; i < 50 && !window.FindControl<Button>("RetrySaveButton")!.IsVisible; i++)
+            {
+                await Task.Delay(100, TestContext.Current.CancellationToken);
+                Dispatcher.UIThread.RunJobs();
+            }
+            Assert.True(window.FindControl<Button>("RetrySaveButton")!.IsVisible);
+            // The next listing raises an unrelated warning.
+            File.WriteAllText(Path.Combine(_root, ".mynotes", "pins.json"), "{ not json");
+            window.FindControl<TextBox>("SearchBox")!.Text = "Lock";
+            Dispatcher.UIThread.RunJobs();
+        }
+        var notice = window.FindControl<TextBlock>("NoticeText")!.Text;
+        Assert.Contains("Could not save", notice);
+        Assert.Contains("Pinned thoughts could not be read", notice);
+        Assert.True(window.FindControl<Button>("RetrySaveButton")!.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void DamagedPinsFileStillOpensNotebook()
+    {
+        new NoteWorkspace(_root).CreateNote(_root, "Ideas");
+        File.WriteAllText(Path.Combine(_root, ".mynotes", "pins.json"), "{ not json");
+        var window = OpenWindow();
+        Assert.Equal(_root, window.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.Contains("Pinned thoughts could not be read", window.FindControl<TextBlock>("NoticeText")!.Text);
+        Assert.True(window.FindControl<Border>("Notice")!.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void FailedExplicitNotebookKeepsRememberedNotebook()
+    {
+        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
+        new NoteWorkspace(_root);
+        new NotebookSettings().RememberNotebook(_root).Save(settingsPath);
+        var notAFolder = Path.Combine(_root, "not a folder.txt");
+        File.WriteAllText(notAFolder, "");
+        var window = new MainWindow(notAFolder, settingsPath);
+        _windows.Add(window);
+        window.Show();
+        Assert.Equal("Choose a notebook", window.FindControl<TextBlock>("SaveStatus")!.Text);
+        var settings = NotebookSettings.Read(settingsPath);
+        Assert.Equal(_root, settings.NotebookPath);
+        Assert.False(settings.SkipAutomaticNotebook);
+    }
+
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]

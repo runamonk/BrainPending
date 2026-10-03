@@ -31,14 +31,28 @@ public sealed class AttachmentStore(string notebookRoot)
                 cancellation.ThrowIfCancellationRequested();
                 output.Flush(true);
             }
+            CopyZoneIdentifier(source, path);
             return new(name, path, new FileInfo(path).Length, Scheme + id + "/" + Uri.EscapeDataString(name));
         }
         catch
         {
-            if (File.Exists(path)) File.Delete(path);
-            Directory.Delete(System.IO.Path.GetDirectoryName(path)!);
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+                Directory.Delete(System.IO.Path.GetDirectoryName(path)!);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { } // Report the original error.
             throw;
         }
+    }
+
+    // A stream copy drops the downloaded-from-the-internet mark. Keep it so Windows
+    // still warns when a copy of the attachment is opened.
+    private static void CopyZoneIdentifier(string source, string destination)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try { File.WriteAllBytes(destination + ":Zone.Identifier", File.ReadAllBytes(source + ":Zone.Identifier")); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or NotSupportedException) { }
     }
 
     public StoredAttachment Resolve(string link)

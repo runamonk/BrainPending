@@ -37,10 +37,15 @@ dotnet run --project src/BrainPending -- --notes ./Notes
   it; drag its corner to resize while retaining its proportions.
 - **Attach file…** copies files into notebook storage and inserts attachment links.
   Follow a link to see its filename and size, **Open copy**, or **Save As…**.
-  Opening a copy never changes the stored original.
+  Opening a copy never changes the stored original. Programs and scripts ask for
+  confirmation before opening, and downloaded files keep Windows' downloaded-file warning.
 - Insert/edit links from the toolbar; right-click an existing link to edit/remove
   it. Select text before inserting a link to use that text as the label.
 - Autosave after a short typing pause; save on note switch and close.
+- If a thought cannot be saved (for example, the notebook drive is disconnected), the
+  latest edits are kept in `%LOCALAPPDATA%/MyNotes/recovery` and the app can still close.
+  They are restored the next time that notebook opens; a thought that changed meanwhile
+  gets a conflict copy instead of being overwritten.
 - Search note/folder titles recursively in the current folder (Ctrl+Shift+F).
 - Quick switch (Ctrl+Shift+O) searches thoughts and clusters across the notebook,
   with the previous thought selected first. Open a cluster, then use Ctrl+N to

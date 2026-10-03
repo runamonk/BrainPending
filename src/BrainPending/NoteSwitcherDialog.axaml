@@ -8,7 +8,7 @@
   <Grid Margin="20" RowDefinitions="Auto,*,Auto">
     <TextBox x:Name="Query" PlaceholderText="Search thoughts and clusters…" TextChanged="Query_Changed" AutomationProperties.Name="Search thoughts and clusters" />
     <Grid Grid.Row="1" Margin="0,12,0,12">
-      <ListBox x:Name="Results" Background="Transparent" DoubleTapped="Results_DoubleTapped" AutomationProperties.Name="Matching thoughts and clusters">
+      <ListBox x:Name="Results" Background="Transparent" Tapped="Results_Tapped" AutomationProperties.Name="Matching thoughts and clusters">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="local:NoteSwitchItem">
             <Grid ColumnDefinitions="28,*" Margin="2,4">

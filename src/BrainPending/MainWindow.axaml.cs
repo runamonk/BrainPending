@@ -41,6 +41,11 @@ public partial class MainWindow : Window
     private bool _closed;
     private string? _titleEditingPath;
     private ThoughtFormatting? _thoughtFormatting;
+    private readonly SaveRecovery _recovery;
+    private string? _recoveryFile;
+    private bool _recoveryCurrent, _closeConfirmed;
+    private string _saveFailureNotice = "";
+    private (string Path, string Revision, long Length, DateTime Modified) _checkedStamp;
 
     public MainWindow() : this(null) { }
 
@@ -50,6 +55,7 @@ public partial class MainWindow : Window
         _settingsPath = settingsPath;
         _settings = NotebookSettings.Read(settingsPath);
         _themes = new ThemeCatalog(settingsPath);
+        _recovery = new SaveRecovery(settingsPath);
         string? themeError = null;
         try { _themes.Reload(); }
         catch (Exception error) { themeError = "Could not load themes; using defaults. " + error.Message; }
@@ -89,7 +95,12 @@ public partial class MainWindow : Window
         _saveRetry.Tick += (_, _) =>
         {
             _saveRetry.Stop();
-            if (SaveCurrent() && _closeAfterSave) Close();
+            var closing = _closeAfterSave;
+            var saved = SaveCurrent();
+            if (!closing || _saveRetry.IsEnabled) return;
+            _closeAfterSave = false;
+            if (saved || _recoveryCurrent) { _closeConfirmed = true; Close(); }
+            else _ = ConfirmDiscardAndClose();
         };
         _poll.Tick += (_, _) => CheckExternalChanges();
         Opened += (_, _) =>
@@ -114,7 +125,17 @@ public partial class MainWindow : Window
         Closing += (_, e) =>
         {
             _autosave.Stop();
-            if (!SaveCurrent(force: true)) { e.Cancel = true; _closeAfterSave = _saveRetry.IsEnabled; return; }
+            if (!_closeConfirmed && !SaveCurrent(force: true))
+            {
+                // Finish retrying first; after that, a recovery copy is enough to close.
+                if (_saveRetry.IsEnabled) { e.Cancel = true; _closeAfterSave = true; return; }
+                if (!_recoveryCurrent)
+                {
+                    e.Cancel = true;
+                    Dispatcher.UIThread.Post(() => _ = ConfirmDiscardAndClose());
+                    return;
+                }
+            }
             SaveWindowBounds();
         };
         Closed += (_, _) => { _closed = true; _autosave.Stop(); _saveRetry.Stop(); _poll.Stop(); _watcher?.Dispose(); };
@@ -192,9 +213,12 @@ public partial class MainWindow : Window
         var path = explicitPath ?? _settings.NotebookPath ?? adjacent;
         try
         {
-            // Persist before loading: a crash during startup must not cause a retry loop.
-            _settings = NotebookSettings.Read(_settingsPath) with { SkipAutomaticNotebook = true };
-            _settings.Save(_settingsPath);
+            if (explicitPath == null)
+            {
+                // Persist before loading: a crash during startup must not cause a retry loop.
+                _settings = NotebookSettings.Read(_settingsPath) with { SkipAutomaticNotebook = true };
+                _settings.Save(_settingsPath);
+            }
             if (remembered && !Directory.Exists(path))
                 throw new IOException("The last notebook is no longer available: " + path);
             SetWorkspace(path);
@@ -210,20 +234,45 @@ public partial class MainWindow : Window
             NotebookPath.Text = "Open notebook";
             ClearNote();
             SaveStatus.Text = "Choose a notebook";
+            // A failed --notes path says nothing about the remembered notebook; leave it alone.
+            if (explicitPath != null)
+            {
+                ShowNotice("Could not open the notebook: " + e.Message + " Use Open notebook to choose a notebook." + PendingRecoveryNotice());
+                return;
+            }
             _settings = NotebookSettings.Read(_settingsPath) with { NotebookPath = null, SkipAutomaticNotebook = true };
             try { _settings.Save(_settingsPath); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             { System.Diagnostics.Trace.TraceWarning("Could not remember startup failure: " + error.Message); }
-            ShowNotice("Could not open the notebook: " + e.Message + " Automatic reopening is paused. Use Open notebook to choose a notebook.");
+            ShowNotice("Could not open the notebook: " + e.Message + " Automatic reopening is paused. Use Open notebook to choose a notebook." + PendingRecoveryNotice());
         }
     }
 
     private void SetWorkspace(string path)
     {
+        // Prepare everything that can fail before replacing the open notebook.
         var workspace = new NoteWorkspace(path);
+        workspace.Warning += (_, warning) =>
+        {
+            if (Dispatcher.UIThread.CheckAccess()) ShowNotice(warning);
+            else Dispatcher.UIThread.Post(() => ShowNotice(warning));
+        };
+        Notice.IsVisible = false;
+        workspace.List(workspace.Root);
+        var watcher = new FileSystemWatcher(workspace.Root)
+        {
+            IncludeSubdirectories = true,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+        };
+        watcher.Changed += WatcherChanged;
+        watcher.Created += WatcherChanged;
+        watcher.Deleted += WatcherChanged;
+        watcher.Renamed += WatcherChanged;
+        try { watcher.EnableRaisingEvents = true; }
+        catch { watcher.Dispose(); throw; }
         _watcher?.Dispose();
+        _watcher = watcher;
         _workspace = workspace;
-        workspace.Warning += (_, warning) => ShowNotice(warning);
         _recentNotes.Clear();
         _folder = workspace.Root;
         ClearNote(forget: false);
@@ -232,18 +281,7 @@ public partial class MainWindow : Window
         ToolTip.SetTip(NotebookPath, workspace.Root);
         _listingSignature = "";
         RefreshBrowser();
-        _watcher = new FileSystemWatcher(workspace.Root)
-        {
-            IncludeSubdirectories = true,
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
-        };
-        _watcher.Changed += WatcherChanged;
-        _watcher.Created += WatcherChanged;
-        _watcher.Deleted += WatcherChanged;
-        _watcher.Renamed += WatcherChanged;
-        _watcher.EnableRaisingEvents = true;
         _poll.Start();
-        Notice.IsVisible = false;
         SaveStatus.Text = "Watching for changes";
         try
         {
@@ -255,7 +293,48 @@ public partial class MainWindow : Window
             ShowNotice("Could not remember this notebook: " + e.Message);
         }
         RestoreLastNote();
+        RestoreRecoveredChanges();
         RefreshRecentNotebooks();
+    }
+
+    private void RestoreRecoveredChanges()
+    {
+        if (_workspace == null) return;
+        var restored = new List<string>();
+        var failed = new List<string>();
+        foreach (var (file, recovered) in _recovery.Pending(_workspace.Root))
+        {
+            var name = Path.GetFileNameWithoutExtension(recovered.RelativePath);
+            try
+            {
+                var path = _workspace.CheckPath(Path.Combine(_workspace.Root, recovered.RelativePath), false);
+                var result = _workspace.Save(new NoteSnapshot(path, "", recovered.Revision), recovered.Rtf);
+                restored.Add(result.IsConflict ? $"‘{name}’ (as a conflict copy)" : $"‘{name}’");
+                try { SaveRecovery.Delete(file); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                { System.Diagnostics.Trace.TraceWarning("Could not remove a restored recovery copy: " + e.Message); }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { failed.Add($"‘{name}’: {e.Message}"); }
+        }
+        if (restored.Count == 0 && failed.Count == 0)
+        {
+            if (PendingRecoveryNotice() is { Length: > 0 } pending) ShowNotice(pending.Trim());
+            return;
+        }
+        // Reload the open note if a recovered copy just replaced it.
+        CheckExternalChanges();
+        ShowNotice((restored.Count > 0 ? "Recovered unsaved changes to " + string.Join(", ", restored) + ". " : "")
+            + (failed.Count > 0 ? "Some unsaved changes could not be restored yet and will be tried again next time: " + string.Join("; ", failed) : "")
+            + PendingRecoveryNotice());
+    }
+
+    // Mentions recovery copies that belong to other notebooks, which wait until those are opened.
+    private string PendingRecoveryNotice()
+    {
+        var others = _recovery.Pending().Select(p => p.Note.Notebook)
+            .Where(n => _workspace == null || !PathRules.AreEqual(n, _workspace.Root))
+            .Distinct(PathRules.Comparer).ToList();
+        return others.Count == 0 ? "" : " Unsaved changes are waiting for " + string.Join(", ", others) + "; open that notebook to restore them.";
     }
 
     private void RememberOpenNote(string? path)
@@ -410,8 +489,13 @@ public partial class MainWindow : Window
         {
             if (_note != null)
             {
-                var revision = _workspace.Revision(_note.Path);
-                if (revision != _note.Revision)
+                // Hash only when size or time changed. The stamp is taken before hashing,
+                // so a write during the hash changes it and is checked on the next poll.
+                var info = new FileInfo(_note.Path);
+                var stamp = (_note.Path, _note.Revision, info.Exists ? info.Length : -1, info.Exists ? info.LastWriteTimeUtc : default);
+                var revision = stamp == _checkedStamp ? _note.Revision : _workspace.Revision(_note.Path);
+                if (revision == _note.Revision) _checkedStamp = stamp;
+                else
                 {
                     if (_dirty || EditorView.Editor.IsModified)
                     {
@@ -450,15 +534,17 @@ public partial class MainWindow : Window
         else if (_saveRetry.IsEnabled) return false;
         if (_note == null || _workspace == null || (!_dirty && !EditorView.Editor.IsModified)) return true;
         SaveResult result;
+        string? rtf = null;
         try
         {
-            var rtf = EditorView.Editor.ToRtf();
+            rtf = EditorView.Editor.ToRtf();
             if (_thoughtFormatting != null) rtf = _thoughtFormatting.Write(rtf);
             result = _workspace.Save(_note, rtf);
             EditorView.FileSizeBytes = new FileInfo(result.Note.Path).Length;
         }
         catch (Exception e) when (SaveRetryPolicy.IsTemporary(e) && _saveRetryCount < SaveRetryPolicy.Delays.Length)
         {
+            WriteRecovery(rtf);
             SaveStatus.Text = "Saving… retrying shortly";
             if (RetrySaveButton.IsVisible) { Notice.IsVisible = false; RetrySaveButton.IsVisible = false; }
             RetrySaveButton.IsEnabled = false;
@@ -468,10 +554,15 @@ public partial class MainWindow : Window
         }
         catch (Exception e)
         {
+            WriteRecovery(rtf);
             _saveRetryCount = 0;
             _closeAfterSave = false;
             SaveStatus.Text = "Not saved";
-            ShowNotice("Your changes are still in the editor. Click Save again or press Ctrl+S to retry. Could not save: " + e.Message);
+            _saveFailureNotice = "Your changes are still in the editor"
+                + (_recoveryCurrent ? ", and a recovery copy is kept on this computer until they are saved" : "")
+                + ". Click Save again or press Ctrl+S to retry. Could not save: " + e.Message;
+            NoticeText.Text = _saveFailureNotice;
+            Notice.IsVisible = true;
             RetrySaveButton.IsVisible = true;
             RetrySaveButton.IsEnabled = true;
             return false;
@@ -479,6 +570,7 @@ public partial class MainWindow : Window
         if (!PathRules.AreEqual(result.Note.Path, _note.Path)) RememberOpenNote(result.Note.Path);
         _note = result.Note;
         _saveRetryCount = 0;
+        DeleteRecovery();
         if (RetrySaveButton.IsVisible) { Notice.IsVisible = false; RetrySaveButton.IsVisible = false; }
         _dirty = false;
         EditorView.Editor.MarkSaved();
@@ -489,6 +581,39 @@ public partial class MainWindow : Window
         if (result.IsConflict)
             ShowNotice("This thought changed on disk while you were editing. Your work is saved in this conflict copy; the other version is unchanged.");
         return true;
+    }
+
+    // Keeps the latest unsaved text outside the notebook so closing cannot lose it.
+    private void WriteRecovery(string? rtf)
+    {
+        _recoveryCurrent = false;
+        if (rtf == null || _note == null || _workspace == null) return;
+        try
+        {
+            _recoveryFile = _recovery.Write(_recoveryFile, _workspace.Root, _note, rtf);
+            _recoveryCurrent = true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        { System.Diagnostics.Trace.TraceWarning("Could not write a recovery copy: " + e.Message); }
+    }
+
+    private void DeleteRecovery()
+    {
+        _recoveryCurrent = false;
+        if (_recoveryFile == null) return;
+        try { SaveRecovery.Delete(_recoveryFile); _recoveryFile = null; }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        { System.Diagnostics.Trace.TraceWarning("Could not remove a recovery copy: " + e.Message); }
+    }
+
+    private async Task ConfirmDiscardAndClose()
+    {
+        if (_inDialog) return;
+        if (!await Confirm("Close without saving?",
+            "Your changes could not be saved to the notebook or to a recovery copy on this computer. Closing now discards them.",
+            "Discard and close")) return;
+        _closeConfirmed = true;
+        Close();
     }
 
     private readonly List<string> _recentNotes = [];
@@ -903,7 +1028,12 @@ public partial class MainWindow : Window
         AppThemes.ApplyTitleBar(this, theme);
     }
     private void Dismiss_Click(object? sender, RoutedEventArgs e) => Notice.IsVisible = false;
-    private void ShowNotice(string text) { RetrySaveButton.IsVisible = false; NoticeText.Text = text; Notice.IsVisible = true; }
+    private void ShowNotice(string text)
+    {
+        // Keep an unresolved save failure and its Retry button visible.
+        NoticeText.Text = RetrySaveButton.IsVisible ? _saveFailureNotice + "\n" + text : text;
+        Notice.IsVisible = true;
+    }
     private void RetrySave_Click(object? sender, RoutedEventArgs e)
     {
         SaveCurrent();
@@ -1041,7 +1171,7 @@ public partial class MainWindow : Window
 
     private bool HandleAttachmentLink(string link)
     {
-        if (!link.StartsWith(AttachmentStore.Scheme, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!link.StartsWith(AttachmentStore.Scheme, StringComparison.Ordinal)) return false;
         _ = Run(async () =>
         {
             if (_workspace == null || _inDialog) return;

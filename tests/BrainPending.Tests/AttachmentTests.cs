@@ -67,5 +67,28 @@ public sealed class AttachmentTests : IDisposable
         Assert.Empty(Directory.GetFileSystemEntries(_root));
     }
 
+    [Fact]
+    public void KeepsDownloadedFileMarkOnWindows()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Zone identifiers are a Windows feature.");
+        Directory.CreateDirectory(_root);
+        var source = Path.Combine(_root, "downloaded.pdf");
+        File.WriteAllBytes(source, [1, 2, 3]);
+        File.WriteAllText(source + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n");
+        var attachment = new AttachmentStore(_root).Add(source, "downloaded.pdf", TestContext.Current.CancellationToken);
+        Assert.Contains("ZoneId=3", File.ReadAllText(attachment.Path + ":Zone.Identifier"));
+        Assert.Equal(3, attachment.Size);
+    }
+
+    [Fact]
+    public void ProgramAttachmentsAreTreatedAsDangerousOnWindows()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Uses the Windows list of dangerous file types.");
+        Assert.True(AttachmentDialog.IsDangerous("setup.exe"));
+        Assert.True(AttachmentDialog.IsDangerous("run.bat"));
+        Assert.False(AttachmentDialog.IsDangerous("notes.txt"));
+        Assert.False(AttachmentDialog.IsDangerous("no extension"));
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }

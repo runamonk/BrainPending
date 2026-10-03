@@ -93,7 +93,7 @@ public partial class MoveFolderDialog : Window
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Error.Text = "Could not move here. Check that the cluster is available and does not already contain an item with this name.";
+            Error.Text = "Could not move here: " + error.Message;
         }
     }
 }

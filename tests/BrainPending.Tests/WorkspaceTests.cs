@@ -260,6 +260,54 @@ public sealed class WorkspaceTests : IDisposable
         Assert.Contains("Keep", w.Read(original.Path).Rtf);
     }
 
+    [Fact]
+    public void DamagedPinsFileDoesNotBlockListingAndWarnsOnce()
+    {
+        var w = Workspace;
+        var note = w.CreateNote(w.Root, "Ideas");
+        File.WriteAllText(Path.Combine(w.MetadataPath, "pins.json"), "{ not json");
+        var warnings = new List<string>();
+        w.Warning += (_, warning) => warnings.Add(warning);
+        Assert.False(Assert.Single(w.List(w.Root)).IsPinned);
+        w.List(w.Root);
+        Assert.Single(warnings);
+        w.SetPinned(note.Path, true);
+        Assert.True(Assert.Single(w.List(w.Root)).IsPinned);
+    }
+
+    [Fact]
+    public void RepeatedSavesArchiveEachRevisionOnce()
+    {
+        var w = Workspace;
+        var note = w.CreateNote(w.Root, "History");
+        note = w.Save(note, NoteWorkspace.PlainTextRtf("First")).Note;
+        w.Save(note, NoteWorkspace.PlainTextRtf("Second"));
+        // Created, first and second: the content on disk is not archived again before each save.
+        Assert.Equal(3, Directory.GetFiles(Path.Combine(w.MetadataPath, "history"), "*.rtf", SearchOption.AllDirectories).Length);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CaseOnlyRenameChangesTheName(bool folder)
+    {
+        var w = Workspace;
+        var path = folder ? w.CreateFolder(w.Root, "shopping list") : w.CreateNote(w.Root, "shopping list").Path;
+        var renamed = w.Rename(path, "Shopping List");
+        Assert.Equal("Shopping List", Assert.Single(w.List(w.Root)).Name);
+        Assert.Equal(Path.Combine(w.Root, folder ? "Shopping List" : "Shopping List.rtf"), renamed);
+    }
+
+    [Fact]
+    public void SavingLeavesNoLockFilesOnWindows()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Lock files are only deleted on close on Windows.");
+        var w = Workspace;
+        var note = w.CreateNote(w.Root, "Locked");
+        w.Save(note, NoteWorkspace.PlainTextRtf("Saved"));
+        Assert.Empty(Directory.GetFiles(Path.Combine(w.MetadataPath, "locks")));
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_temp)) Directory.Delete(_temp, true);

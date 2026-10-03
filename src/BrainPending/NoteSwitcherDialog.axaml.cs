@@ -1,6 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using BrainPending.Core;
 
 namespace BrainPending;
@@ -53,7 +55,11 @@ public partial class NoteSwitcherDialog : Window
         if (Results.SelectedItem is NoteSwitchItem item) Close(item);
     }
 
-    private void Results_DoubleTapped(object? sender, TappedEventArgs e) => OpenSelected();
+    // Only open when an item was clicked, not the scrollbar or empty space.
+    private void Results_Tapped(object? sender, TappedEventArgs e)
+    {
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) != null) OpenSelected();
+    }
 
     private void OnKey(object? sender, KeyEventArgs e)
     {

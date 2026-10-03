@@ -79,7 +79,17 @@ public class RichEditorView : UserControl
         set => SetValue(ShowFileActionsProperty, value);
     }
 
-    private TextBlock _statusInfo = null!, _pageInfo = null!, _limitInfo = null!, _zoomInfo = null!;
+    public static readonly StyledProperty<long?> FileSizeBytesProperty =
+        AvaloniaProperty.Register<RichEditorView, long?>(nameof(FileSizeBytes));
+
+    /// <summary>The saved file size shown in the status bar, or null to hide it.</summary>
+    public long? FileSizeBytes
+    {
+        get => GetValue(FileSizeBytesProperty);
+        set => SetValue(FileSizeBytesProperty, value);
+    }
+
+    private TextBlock _statusInfo = null!, _pageInfo = null!, _limitInfo = null!, _zoomInfo = null!, _fileSizeInfo = null!;
     private Border _statusBar = null!;
 
     private EventHandler? _printRequested;
@@ -253,6 +263,10 @@ public class RichEditorView : UserControl
             if (FitToWidth) ApplyFitWidth();
             Toolbar.RefreshPageControls();
         }
+        else if (change.Property == FileSizeBytesProperty)
+        {
+            UpdateFileSizeStatus();
+        }
         else if (change.Property == ShowStatusBarProperty)
         {
             if (_statusBar != null) _statusBar.IsVisible = ShowStatusBar;
@@ -303,20 +317,29 @@ public class RichEditorView : UserControl
         };
         _statusInfo = Tb("#444444");
         _pageInfo = Tb("#444444");
-        _pageInfo.Margin = new Thickness(0, 0, 12, 0);
         _limitInfo = Tb("#CC6600");
         _limitInfo.Margin = new Thickness(0, 0, 12, 0);
         _zoomInfo = Tb("#444444");
+        _fileSizeInfo = Tb("#444444");
+        ToolTip.SetTip(_fileSizeInfo, "Saved file size");
+        UpdateFileSizeStatus();
         ToolTip.SetTip(_zoomInfo, Loc("ZoomTip"));
         UpdateZoomStatus();
 
+        var documentInfo = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+        };
+        documentInfo.Children.Add(_pageInfo);
+        documentInfo.Children.Add(_fileSizeInfo);
+        documentInfo.Children.Add(_zoomInfo);
+
         var panel = new DockPanel();
-        DockPanel.SetDock(_zoomInfo, Dock.Right);
+        DockPanel.SetDock(documentInfo, Dock.Right);
         DockPanel.SetDock(_limitInfo, Dock.Right);
-        DockPanel.SetDock(_pageInfo, Dock.Right);
-        panel.Children.Add(_zoomInfo);
+        panel.Children.Add(documentInfo);
         panel.Children.Add(_limitInfo);
-        panel.Children.Add(_pageInfo);
         panel.Children.Add(_statusInfo);
 
         _statusBar = new Border
@@ -328,6 +351,20 @@ public class RichEditorView : UserControl
             Child = panel,
             IsVisible = ShowStatusBar,
         };
+    }
+
+    private void UpdateFileSizeStatus()
+    {
+        if (_fileSizeInfo == null) return;
+        _fileSizeInfo.IsVisible = FileSizeBytes.HasValue;
+        if (FileSizeBytes is not { } bytes) return;
+        _fileSizeInfo.Text = bytes >= 1_073_741_824
+            ? $"{bytes / 1_073_741_824d:0.##} gb"
+            : bytes >= 1_048_576
+                ? $"{bytes / 1_048_576d:0.##} mb"
+                : bytes >= 1_024
+                    ? $"{bytes / 1_024d:0.##} kb"
+                    : $"{bytes:N0} bytes";
     }
 
     private void UpdateZoomStatus()

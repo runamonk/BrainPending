@@ -455,6 +455,7 @@ public partial class MainWindow : Window
             var rtf = EditorView.Editor.ToRtf();
             if (_thoughtFormatting != null) rtf = _thoughtFormatting.Write(rtf);
             result = _workspace.Save(_note, rtf);
+            EditorView.FileSizeBytes = new FileInfo(result.Note.Path).Length;
         }
         catch (Exception e) when (SaveRetryPolicy.IsTemporary(e) && _saveRetryCount < SaveRetryPolicy.Delays.Length)
         {
@@ -512,6 +513,7 @@ public partial class MainWindow : Window
             _thoughtFormatting = ThoughtFormatting.Read(note.Rtf);
             EditorView.ScrollToTop();
             _note = note;
+            EditorView.FileSizeBytes = new FileInfo(note.Path).Length;
             _dirty = false;
             _autosave.Stop();
             NoteTitle.Text = Path.GetFileNameWithoutExtension(note.Path);
@@ -544,6 +546,7 @@ public partial class MainWindow : Window
         CancelTitleEditing();
         if (forget && _note != null) RememberOpenNote(null);
         _note = null;
+        EditorView.FileSizeBytes = null;
         _dirty = false;
         _autosave.Stop();
         EditorView.IsVisible = false;

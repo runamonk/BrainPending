@@ -128,7 +128,7 @@ public static class RichEditorLocalization
             ["MatchCase"] = "Match Case",
             ["NotFound"] = "Not found",
             ["ReplacedFormat"] = "Replaced {0}",
-            ["StatusFormat"] = "Chars {0}   Words {1}   Ln {2}, Col {3}",
+            ["StatusFormat"] = "chars {0}   words {1}   ln {2}, col {3}",
             ["Fit"] = "Fit",
             ["ZoomTip"] = "View zoom (Ctrl+wheel, Ctrl+0 = fit)",
             ["PaperContinuous"] = "Continuous",

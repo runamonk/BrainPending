@@ -436,8 +436,23 @@ public partial class ThoughtSearchDialog : Window
         };
         if (group == null) return;
         RememberQuery();
+        var focused = FocusManager?.GetFocusedElement() as IInputElement;
         var error = _owner.OpenSearchMatch(group.Path, _pattern, ordinal);
         if (error != null) Status.Text = error;
+        // Opening a thought can activate the main window; stay here to browse more matches.
+        Dispatcher.UIThread.Post(() =>
+        {
+            Activate();
+            focused?.Focus();
+        });
+    }
+
+    private void FocusSelectedResult()
+    {
+        if (Results.SelectedIndex < 0) return;
+        Results.ScrollIntoView(Results.SelectedIndex);
+        Results.UpdateLayout();
+        Results.ContainerFromIndex(Results.SelectedIndex)?.Focus();
     }
 
     // Only open when an item was clicked, not the expand button, scrollbar or empty space.
@@ -456,12 +471,18 @@ public partial class ThoughtSearchDialog : Window
         else if (e.Key == Key.Enter && e.Source is not NumericUpDown) { e.Handled = true; OpenSelected(); }
         else if (e.Key is Key.Up or Key.Down && Query.IsFocused)
         {
+            // Move into the list so arrows expand and collapse instead of moving the caret.
             e.Handled = true;
             if (Results.ItemCount == 0) return;
             Results.SelectedIndex = Math.Clamp(Results.SelectedIndex + (e.Key == Key.Down ? 1 : -1), 0, Results.ItemCount - 1);
-            Results.ScrollIntoView(Results.SelectedItem!);
+            FocusSelectedResult();
         }
-        else if (e.Key is Key.Right or Key.Left && !Query.IsFocused && e.Source is not NumericUpDown)
+        else if (e.Key == Key.Up && Results.IsKeyboardFocusWithin && Results.SelectedIndex == 0)
+        {
+            e.Handled = true;
+            Query.Focus();
+        }
+        else if (e.Key is Key.Right or Key.Left && Results.IsKeyboardFocusWithin)
         {
             if (Results.SelectedItem is SearchGroupRow group)
             {
@@ -473,6 +494,7 @@ public partial class ThoughtSearchDialog : Window
                 e.Handled = true;
                 SetExpanded(row.Group, false);
                 Results.SelectedItem = row.Group;
+                FocusSelectedResult();
             }
         }
     }

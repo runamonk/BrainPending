@@ -827,8 +827,11 @@ public sealed class WindowTests : IDisposable
 
         var second = Assert.IsType<SearchGroupRow>(results.Items[1]);
         Assert.Equal("Projects", second.Location);
-        results.SelectedItem = second;
-        results.ContainerFromItem(second)!.Focus();
+        // Down from the search box moves into the list, where arrows expand.
+        Assert.True(dialog.FindControl<TextBox>("Query")!.IsFocused);
+        dialog.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.ArrowDown, null);
+        Assert.Same(second, results.SelectedItem);
+        Assert.True(results.IsKeyboardFocusWithin);
         dialog.KeyPress(Key.Right, RawInputModifiers.None, PhysicalKey.ArrowRight, null);
         var match = Assert.IsType<SearchMatchRow>(results.Items[3]);
         Assert.Equal("Line 5", match.LineLabel);
@@ -841,6 +844,12 @@ public sealed class WindowTests : IDisposable
         dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
         Assert.Equal("Second", window.FindControl<TextBlock>("ThoughtTitle")!.Text);
         Assert.True(dialog.IsVisible);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(results.IsKeyboardFocusWithin);
+        dialog.KeyPress(Key.Left, RawInputModifiers.None, PhysicalKey.ArrowLeft, null);
+        Assert.Same(second, results.SelectedItem);
+        Assert.Equal(2, results.ItemCount);
+        Assert.True(results.IsKeyboardFocusWithin);
         Assert.DoesNotContain("no longer", status.Text);
 
         dialog.FindControl<CheckBox>("WholeWord")!.IsChecked = true;

@@ -202,6 +202,13 @@ public partial class MainWindow
         CollapseSidebarFromButton();
     }
 
+    // Escape returns to the open thought; an auto-hiding sidebar also closes.
+    private void LeaveSidebar()
+    {
+        if (_thought != null) EditorView.Editor.Focus();
+        if (!_settings.SidebarPinned) CollapseSidebarFromButton();
+    }
+
     private void CollapseSidebarFromButton()
     {
         _sidebarHide.Stop();

@@ -1122,6 +1122,8 @@ public partial class MainWindow : Window
     private async void OnShortcut(object? sender, KeyEventArgs e)
     {
         if (_inDialog || _titleEditingPath != null) return;
+        if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.Escape && Sidebar.IsKeyboardFocusWithin && !_sidebarMenuOpen)
+        { e.Handled = true; LeaveSidebar(); return; }
         if (HandleFindShortcut(e)) return;
         if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.S) { e.Handled = true; SaveCurrent(); }
         else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.N) { e.Handled = true; await NewThought(); }

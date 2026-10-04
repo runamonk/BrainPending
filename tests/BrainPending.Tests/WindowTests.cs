@@ -294,6 +294,31 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void EscapeLeavesSidebarOpenedFromShortcut()
+    {
+        var thought = new BrainWorkspace(_root).CreateThought(_root, "Open");
+        var window = OpenWindow();
+        Select(window, thought.Path);
+        var sidebar = window.FindControl<Border>("Sidebar")!;
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        window.FindControl<Button>("SidebarPin")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        editor.Focus();
+        window.KeyPress(Key.F, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.F, "f");
+        Assert.True(sidebar.IsVisible);
+        Assert.True(window.FindControl<TextBox>("SearchBox")!.IsFocused);
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.True(editor.IsFocused);
+        Assert.Equal("Show sidebar", ToolTip.GetTip(window.FindControl<Button>("SidebarReveal")!));
+
+        // A pinned sidebar stays put and only hands focus back.
+        window.FindControl<Button>("SidebarPin")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        window.KeyPress(Key.F, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.F, "f");
+        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.True(sidebar.IsVisible);
+        Assert.True(editor.IsFocused);
+    }
+
+    [AvaloniaFact]
     public async Task SidebarCanAutoHideRevealAndRememberPinPreference()
     {
         var window = OpenWindow();

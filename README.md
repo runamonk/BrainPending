@@ -24,6 +24,7 @@ dotnet run --project src/BrainPending -- --brain ./Brain
 - Two primary panels, no tabs. Clusters and thoughts share the left panel. Clusters are folders on disk.
 - Use the pin at the right end of the left panel's toolbar to auto-hide the panel;
   click the mini sidebar’s toggle to reveal it over the editor, or use Ctrl+Shift+F.
+  Escape hides it again and returns to the open thought.
   Pin it again to keep it visible. The pin preference is remembered across launches.
 - Nested folders, sliding folder navigation, an Up entry, and brain-home button.
 - Individual `.rtf` files in real folders.

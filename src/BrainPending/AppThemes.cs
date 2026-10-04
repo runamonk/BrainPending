@@ -40,7 +40,7 @@ internal static class AppThemes
         return System.Text.Json.JsonSerializer.Deserialize<AppColorTheme[]>(stream)!;
     }
 
-    public static AppColorTheme Resolve(NotebookSettings settings, bool? systemDark = null)
+    public static AppColorTheme Resolve(BrainSettings settings, bool? systemDark = null)
     {
         var dark = settings.DarkTheme ?? systemDark
             ?? (Application.Current?.PlatformSettings?.GetColorValues().ThemeVariant == Avalonia.Platform.PlatformThemeVariant.Dark);

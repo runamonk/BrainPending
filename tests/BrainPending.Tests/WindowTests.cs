@@ -27,7 +27,7 @@ public sealed class WindowTests : IDisposable
 
     private MainWindow OpenWindow()
     {
-        var window = new MainWindow(_root, Path.Combine(_root, ".mynotes", "settings.json"));
+        var window = new MainWindow(_root, Path.Combine(_root, ".brainpending", "settings.json"));
         _windows.Add(window);
         window.Show();
         window.UpdateLayout();
@@ -46,13 +46,13 @@ public sealed class WindowTests : IDisposable
     [InlineData(true)]
     public async Task TemporaryFileLockRetriesWithoutNoticeAndKeepsLatestEdits(bool close)
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Locked");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Locked");
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
         editor.InsertText("First edit ");
-        using (var locked = new FileStream(note.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        using (var locked = new FileStream(thought.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             if (close) window.Close();
             else window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
@@ -67,11 +67,11 @@ public sealed class WindowTests : IDisposable
             Dispatcher.UIThread.RunJobs();
         }
         Assert.False(editor.IsModified);
-        Assert.Contains("First edit", workspace.Read(note.Path).Rtf);
+        Assert.Contains("First edit", workspace.Read(thought.Path).Rtf);
         if (close) Assert.False(window.IsVisible);
         else
         {
-            Assert.Contains("Latest edit", workspace.Read(note.Path).Rtf);
+            Assert.Contains("Latest edit", workspace.Read(thought.Path).Rtf);
             Assert.False(window.FindControl<Border>("Notice")!.IsVisible);
         }
     }
@@ -79,13 +79,13 @@ public sealed class WindowTests : IDisposable
     [AvaloniaFact]
     public async Task PersistentFileLockEventuallyReportsFailureWithoutDiscardingEdits()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Locked");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Locked");
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
         editor.InsertText("Keep this");
-        using (var locked = new FileStream(note.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        using (var locked = new FileStream(thought.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
             for (var i = 0; i < 50 && !window.FindControl<Border>("Notice")!.IsVisible; i++)
@@ -100,21 +100,21 @@ public sealed class WindowTests : IDisposable
         Assert.True(window.FindControl<Button>("RetrySaveButton")!.IsVisible);
         Assert.Contains("Ctrl+S", window.FindControl<TextBlock>("NoticeText")!.Text);
         window.FindControl<Button>("RetrySaveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Contains("Keep this", workspace.Read(note.Path).Rtf);
+        Assert.Contains("Keep this", workspace.Read(thought.Path).Rtf);
         Assert.False(window.FindControl<Border>("Notice")!.IsVisible);
     }
 
     [AvaloniaFact]
     public async Task PersistentSaveFailureClosesWithRecoveryCopyAndRestoresOnNextLaunch()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Locked");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Locked");
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
         editor.InsertText("Keep this");
-        var recovery = Path.Combine(_root, ".mynotes", "recovery");
-        using (var locked = new FileStream(note.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        var recovery = Path.Combine(_root, ".brainpending", "recovery");
+        using (var locked = new FileStream(thought.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
             for (var i = 0; i < 50 && !window.FindControl<Border>("Notice")!.IsVisible; i++)
@@ -132,10 +132,10 @@ public sealed class WindowTests : IDisposable
             }
             Assert.False(window.IsVisible);
         }
-        Assert.DoesNotContain("Keep this", workspace.Read(note.Path).Rtf);
+        Assert.DoesNotContain("Keep this", workspace.Read(thought.Path).Rtf);
 
         var reopened = OpenWindow();
-        Assert.Contains("Keep this", workspace.Read(note.Path).Rtf);
+        Assert.Contains("Keep this", workspace.Read(thought.Path).Rtf);
         Assert.Empty(Directory.GetFiles(recovery, "*.json"));
         Assert.Contains("Recovered unsaved changes to ‘Locked’", reopened.FindControl<TextBlock>("NoticeText")!.Text);
     }
@@ -143,12 +143,12 @@ public sealed class WindowTests : IDisposable
     [AvaloniaFact]
     public async Task OtherNoticesKeepAnUnresolvedSaveFailureVisible()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Locked");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Locked");
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Keep this");
-        using (new FileStream(note.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+        using (new FileStream(thought.Path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
             for (var i = 0; i < 50 && !window.FindControl<Button>("RetrySaveButton")!.IsVisible; i++)
@@ -158,7 +158,7 @@ public sealed class WindowTests : IDisposable
             }
             Assert.True(window.FindControl<Button>("RetrySaveButton")!.IsVisible);
             // The next listing raises an unrelated warning.
-            File.WriteAllText(Path.Combine(_root, ".mynotes", "pins.json"), "{ not json");
+            File.WriteAllText(Path.Combine(_root, ".brainpending", "pins.json"), "{ not json");
             window.FindControl<TextBox>("SearchBox")!.Text = "Lock";
             Dispatcher.UIThread.RunJobs();
         }
@@ -169,61 +169,61 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void DamagedPinsFileStillOpensNotebook()
+    public void DamagedPinsFileStillOpensBrain()
     {
-        new NoteWorkspace(_root).CreateNote(_root, "Ideas");
-        File.WriteAllText(Path.Combine(_root, ".mynotes", "pins.json"), "{ not json");
+        new BrainWorkspace(_root).CreateThought(_root, "Ideas");
+        File.WriteAllText(Path.Combine(_root, ".brainpending", "pins.json"), "{ not json");
         var window = OpenWindow();
-        Assert.Equal(_root, window.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.Equal(_root, window.FindControl<TextBlock>("BrainPath")!.Text);
         Assert.Contains("Pinned thoughts could not be read", window.FindControl<TextBlock>("NoticeText")!.Text);
         Assert.True(window.FindControl<Border>("Notice")!.IsVisible);
     }
 
     [AvaloniaFact]
-    public void FailedExplicitNotebookKeepsRememberedNotebook()
+    public void FailedExplicitBrainKeepsRememberedBrain()
     {
-        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
-        new NoteWorkspace(_root);
-        new NotebookSettings().RememberNotebook(_root).Save(settingsPath);
-        var notAFolder = Path.Combine(_root, "not a folder.txt");
-        File.WriteAllText(notAFolder, "");
-        var window = new MainWindow(notAFolder, settingsPath);
+        var settingsPath = Path.Combine(_root, ".brainpending", "settings.json");
+        new BrainWorkspace(_root);
+        new BrainSettings().RememberBrain(_root).Save(settingsPath);
+        var notACluster = Path.Combine(_root, "not a folder.txt");
+        File.WriteAllText(notACluster, "");
+        var window = new MainWindow(notACluster, settingsPath);
         _windows.Add(window);
         window.Show();
         Assert.Equal("Choose a brain", window.FindControl<TextBlock>("SaveStatus")!.Text);
-        var settings = NotebookSettings.Read(settingsPath);
-        Assert.Equal(_root, settings.NotebookPath);
-        Assert.False(settings.SkipAutomaticNotebook);
+        var settings = BrainSettings.Read(settingsPath);
+        Assert.Equal(_root, settings.BrainPath);
+        Assert.False(settings.SkipAutomaticBrain);
     }
 
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task EscapeCancelsNewNoteAndFolderAndAllowsReopening(bool folder)
+    public async Task EscapeCancelsNewThoughtAndClusterAndAllowsReopening(bool cluster)
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "First");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "First");
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         window.FindControl<RichEditorView>("EditorView")!.Editor.Focus();
-        var key = folder ? Key.D : Key.N;
-        var physical = folder ? PhysicalKey.D : PhysicalKey.N;
+        var key = cluster ? Key.D : Key.N;
+        var physical = cluster ? PhysicalKey.D : PhysicalKey.N;
         window.KeyPress(key, RawInputModifiers.Control, physical, null);
         var dialog = Assert.Single(window.OwnedWindows);
-        Assert.Equal(folder ? "New cluster" : "New thought", dialog.Title);
+        Assert.Equal(cluster ? "New cluster" : "New thought", dialog.Title);
         dialog.GetVisualDescendants().OfType<TextBox>().Single().Text = "Cancelled";
         dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
         await Task.Yield();
         Assert.Empty(window.OwnedWindows);
         Assert.False(File.Exists(Path.Combine(_root, "Cancelled.rtf")));
         Assert.False(Directory.Exists(Path.Combine(_root, "Cancelled")));
-        Assert.Equal("First", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Equal("First", window.FindControl<TextBlock>("ThoughtTitle")!.Text);
         window.KeyPress(key, RawInputModifiers.Control, physical, null);
         dialog = Assert.Single(window.OwnedWindows);
         dialog.GetVisualDescendants().OfType<TextBox>().Single().Text = "Created";
         dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
         await Task.Yield();
-        Assert.True(folder ? Directory.Exists(Path.Combine(_root, "Created"))
+        Assert.True(cluster ? Directory.Exists(Path.Combine(_root, "Created"))
             : File.Exists(Path.Combine(_root, "Created.rtf")));
     }
 
@@ -242,10 +242,10 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public async Task ControlNCreatesNoteFromFocusedEditorAndSavesCurrentNote()
+    public async Task ControlNCreatesThoughtFromFocusedEditorAndSavesCurrentThought()
     {
-        var workspace = new NoteWorkspace(_root);
-        var first = workspace.CreateNote(_root, "First");
+        var workspace = new BrainWorkspace(_root);
+        var first = workspace.CreateThought(_root, "First");
         var window = OpenWindow();
         Select(window, first.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
@@ -257,23 +257,23 @@ public sealed class WindowTests : IDisposable
         dialog.GetVisualDescendants().OfType<TextBox>().Single().Text = "Created by shortcut";
         dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
         await Task.Yield();
-        Assert.Equal("Created by shortcut", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Equal("Created by shortcut", window.FindControl<TextBlock>("ThoughtTitle")!.Text);
         Assert.True(File.Exists(Path.Combine(_root, "Created by shortcut.rtf")));
         Assert.Contains("Keep these edits", workspace.Read(first.Path).Rtf);
         Assert.True(editor.IsFocused);
     }
 
     [AvaloniaFact]
-    public void FirstSidebarRevealDisplaysAllVisibleRowsAfterRestoringNote()
+    public void FirstSidebarRevealDisplaysAllVisibleRowsAfterRestoringThought()
     {
-        var workspace = new NoteWorkspace(_root);
-        var folder = workspace.CreateFolder(_root, "Projects");
-        for (var i = 0; i < 7; i++) workspace.CreateNote(folder, $"Note {i}");
-        workspace.CreateFolder(folder, "First folder");
-        workspace.CreateFolder(folder, "Second folder");
-        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
-        (new NotebookSettings().RememberNotebook(_root)
-            .RememberNote(_root, Path.Combine("Projects", "Note 0.rtf")) with { SidebarPinned = false }).Save(settingsPath);
+        var workspace = new BrainWorkspace(_root);
+        var cluster = workspace.CreateCluster(_root, "Projects");
+        for (var i = 0; i < 7; i++) workspace.CreateThought(cluster, $"Note {i}");
+        workspace.CreateCluster(cluster, "First folder");
+        workspace.CreateCluster(cluster, "Second folder");
+        var settingsPath = Path.Combine(_root, ".brainpending", "settings.json");
+        (new BrainSettings().RememberBrain(_root)
+            .RememberThought(_root, Path.Combine("Projects", "Note 0.rtf")) with { SidebarPinned = false }).Save(settingsPath);
         var window = OpenWindow();
         var browser = window.FindControl<ListBox>("Browser")!;
         Assert.Equal(10, browser.Items.Count);
@@ -362,24 +362,24 @@ public sealed class WindowTests : IDisposable
         Assert.True(reopened.FindControl<Grid>("SidebarToolbar")!.IsVisible);
         Assert.True(reopened.FindControl<Button>("SidebarPin")!.IsVisible);
         Assert.True(reopened.FindControl<StackPanel>("SidebarPinnedActions")!.IsVisible);
-        Assert.True(NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json")).SidebarPinned);
+        Assert.True(BrainSettings.Read(Path.Combine(_root, ".brainpending", "settings.json")).SidebarPinned);
     }
 
     [AvaloniaTheory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
-    public async Task ClickingNoteCollapsesOnlyUnpinnedSidebar(bool pinned, bool alreadySelected)
+    public async Task ClickingThoughtCollapsesOnlyUnpinnedSidebar(bool pinned, bool alreadySelected)
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Select me");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Select me");
         var window = OpenWindow();
-        if (alreadySelected) Select(window, note.Path);
+        if (alreadySelected) Select(window, thought.Path);
         if (!pinned)
             window.FindControl<Button>("SidebarPin")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         window.UpdateLayout();
         var browser = window.FindControl<ListBox>("Browser")!;
-        var item = browser.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == note.Path);
+        var item = browser.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == thought.Path);
         var row = (ListBoxItem)browser.ContainerFromItem(item)!;
         var point = row.TranslatePoint(new Point(30, row.Bounds.Height / 2), window)!.Value;
         window.MouseMove(point);
@@ -387,7 +387,7 @@ public sealed class WindowTests : IDisposable
         window.MouseUp(point, MouseButton.Left);
         await Task.Delay(700, TestContext.Current.CancellationToken);
         Assert.Equal(pinned, window.FindControl<Border>("Sidebar")!.IsVisible);
-        Assert.Equal(note.Path, Assert.IsType<BrowserItem>(browser.SelectedItem).Path);
+        Assert.Equal(thought.Path, Assert.IsType<BrowserItem>(browser.SelectedItem).Path);
     }
 
     [AvaloniaFact]
@@ -448,11 +448,11 @@ public sealed class WindowTests : IDisposable
     [AvaloniaFact]
     public void FindShortcutsFocusInputNavigateWrapAndClearHighlightsWithoutEditing()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Find me");
-        workspace.Save(note, NoteWorkspace.PlainTextRtf("Apple pear apple"));
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Find me");
+        workspace.Save(thought, BrainWorkspace.PlainTextRtf("Apple pear apple"));
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
         var input = window.FindControl<TextBox>("FindInput")!;
         editor.Focus();
@@ -480,12 +480,12 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void SwitchingNotesRestoresEachSelectionAndIndependentScrollPosition()
+    public void SwitchingThoughtsRestoresEachSelectionAndIndependentScrollPosition()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var text = string.Join("\n", Enumerable.Range(1, 100).Select(i => $"Line {i}"));
-        var first = workspace.CreateNote(_root, "First", NoteWorkspace.PlainTextRtf(text));
-        var second = workspace.CreateNote(_root, "Second", NoteWorkspace.PlainTextRtf("Short note"));
+        var first = workspace.CreateThought(_root, "First", BrainWorkspace.PlainTextRtf(text));
+        var second = workspace.CreateThought(_root, "Second", BrainWorkspace.PlainTextRtf("Short note"));
         var window = OpenWindow();
         Select(window, first.Path);
         var view = window.FindControl<RichEditorView>("EditorView")!;
@@ -522,13 +522,13 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void ClickingVisibleTextInNewNoteDoesNotScroll()
+    public void ClickingVisibleTextInNewThoughtDoesNotScroll()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var text = string.Join("\n", Enumerable.Range(1, 100).Select(i => $"Line {i}"));
-        var note = workspace.CreateNote(_root, "Click me", NoteWorkspace.PlainTextRtf(text));
+        var thought = workspace.CreateThought(_root, "Click me", BrainWorkspace.PlainTextRtf(text));
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
         var scroller = editor.FindAncestorOfType<ScrollViewer>()!;
         using var bitmap = new RenderTargetBitmap(new PixelSize(1240, 820));
@@ -554,12 +554,12 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void SwitchingToUnopenedNoteStartsAtTopAfterPreviousNoteWasScrolled()
+    public void SwitchingToUnopenedThoughtStartsAtTopAfterPreviousThoughtWasScrolled()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var text = string.Join("\n", Enumerable.Range(1, 100).Select(i => $"Line {i}"));
-        var first = workspace.CreateNote(_root, "First", NoteWorkspace.PlainTextRtf(text));
-        var second = workspace.CreateNote(_root, "Second", NoteWorkspace.PlainTextRtf(text));
+        var first = workspace.CreateThought(_root, "First", BrainWorkspace.PlainTextRtf(text));
+        var second = workspace.CreateThought(_root, "Second", BrainWorkspace.PlainTextRtf(text));
         var window = OpenWindow();
         Select(window, first.Path);
         var view = window.FindControl<RichEditorView>("EditorView")!;
@@ -585,223 +585,223 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void InlineTitleRenameSavesEditsAndUpdatesRememberedNote()
+    public void InlineTitleRenameSavesEditsAndUpdatesRememberedThought()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Original");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Original");
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Keep this edit");
         window.BeginTitleEditing();
-        var input = window.FindControl<TextBox>("NoteTitleInput")!;
+        var input = window.FindControl<TextBox>("ThoughtTitleInput")!;
         input.Text = "Renamed";
         input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
-        Assert.False(File.Exists(note.Path));
+        Assert.False(File.Exists(thought.Path));
         var target = Path.Combine(_root, "Renamed.rtf");
         Assert.Contains("Keep this edit", workspace.Read(target).Rtf);
-        Assert.Equal("Renamed", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Equal("Renamed", window.FindControl<TextBlock>("ThoughtTitle")!.Text);
         Assert.False(input.IsVisible);
-        Assert.Equal("Renamed.rtf", NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json")).LastNote(_root));
+        Assert.Equal("Renamed.rtf", BrainSettings.Read(Path.Combine(_root, ".brainpending", "settings.json")).LastThought(_root));
         window.Close();
     }
 
     [AvaloniaFact]
     public void InlineTitleRenameRejectsDuplicatesAndEscapeCancels()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Original");
-        var other = workspace.CreateNote(_root, "Existing");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Original");
+        var other = workspace.CreateThought(_root, "Existing");
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         window.BeginTitleEditing();
-        var input = window.FindControl<TextBox>("NoteTitleInput")!;
+        var input = window.FindControl<TextBox>("ThoughtTitleInput")!;
         input.Text = "Existing";
         input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
-        Assert.True(window.FindControl<TextBlock>("NoteTitleError")!.IsVisible);
+        Assert.True(window.FindControl<TextBlock>("ThoughtTitleError")!.IsVisible);
         Assert.True(input.IsVisible);
         Assert.Equal(other.Revision, workspace.Read(other.Path).Revision);
         input.Text = "Cancelled";
         input.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Escape });
-        Assert.Equal("Original", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Equal("Original", window.FindControl<TextBlock>("ThoughtTitle")!.Text);
         Assert.False(File.Exists(Path.Combine(_root, "Cancelled.rtf")));
         window.Close();
     }
 
     [AvaloniaFact]
-    public void LastOpenNoteRestoresItsFolderAndSelection()
+    public void LastOpenThoughtRestoresItsClusterAndSelection()
     {
-        var workspace = new NoteWorkspace(_root);
-        var folder = workspace.CreateFolder(_root, "Projects");
-        var note = workspace.CreateNote(folder, "Resume here");
+        var workspace = new BrainWorkspace(_root);
+        var cluster = workspace.CreateCluster(_root, "Projects");
+        var thought = workspace.CreateThought(cluster, "Resume here");
         var first = OpenWindow();
         first.FindControl<TextBox>("SearchBox")!.Text = "Resume here";
         Dispatcher.UIThread.RunJobs();
-        Select(first, note.Path);
+        Select(first, thought.Path);
         first.Close();
         var reopened = OpenWindow();
-        Assert.Equal("Resume here", reopened.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Equal("Resume here", reopened.FindControl<TextBlock>("ThoughtTitle")!.Text);
         Assert.Contains(reopened.FindControl<ListBox>("Browser")!.ItemsSource!.Cast<BrowserItem>(), i => i.IsUp && i.Path == _root);
-        Assert.Equal(note.Path, ((BrowserItem)reopened.FindControl<ListBox>("Browser")!.SelectedItem!).Path);
+        Assert.Equal(thought.Path, ((BrowserItem)reopened.FindControl<ListBox>("Browser")!.SelectedItem!).Path);
         Assert.True(reopened.FindControl<RichEditorView>("EditorView")!.IsVisible);
-        Assert.Equal(note.Revision, workspace.Read(note.Path).Revision);
+        Assert.Equal(thought.Revision, workspace.Read(thought.Path).Revision);
         reopened.Close();
     }
 
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
-    public void MissingOrInvalidLastNoteDoesNotPreventNotebookOpening(bool corrupt)
+    public void MissingOrInvalidLastThoughtDoesNotPreventBrainOpening(bool corrupt)
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Unavailable");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Unavailable");
         var first = OpenWindow();
-        Select(first, note.Path);
+        Select(first, thought.Path);
         first.Close();
-        if (corrupt) File.WriteAllText(note.Path, "Not RTF");
-        else File.Delete(note.Path);
+        if (corrupt) File.WriteAllText(thought.Path, "Not RTF");
+        else File.Delete(thought.Path);
         var reopened = OpenWindow();
-        Assert.Equal(_root, reopened.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.Equal(_root, reopened.FindControl<TextBlock>("BrainPath")!.Text);
         Assert.False(reopened.FindControl<RichEditorView>("EditorView")!.IsVisible);
-        var settings = NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json"));
-        Assert.Null(settings.LastNote(_root));
-        Assert.False(settings.SkipAutomaticNotebook);
+        var settings = BrainSettings.Read(Path.Combine(_root, ".brainpending", "settings.json"));
+        Assert.Null(settings.LastThought(_root));
+        Assert.False(settings.SkipAutomaticBrain);
         reopened.Close();
     }
 
     [Fact]
-    public void LastOpenNotesAreRememberedSeparatelyForEachNotebook()
+    public void LastOpenThoughtsAreRememberedSeparatelyForEachBrain()
     {
         var other = Path.Combine(_root, "Other");
-        var settings = new NotebookSettings().RememberNote(_root, "One.rtf").RememberNote(other, "Two.rtf");
-        Assert.Equal("One.rtf", settings.LastNote(_root));
-        Assert.Equal("Two.rtf", settings.LastNote(other));
-        settings = settings.RememberNote(_root, null);
-        Assert.Null(settings.LastNote(_root));
-        Assert.Equal("Two.rtf", settings.LastNote(other));
+        var settings = new BrainSettings().RememberThought(_root, "One.rtf").RememberThought(other, "Two.rtf");
+        Assert.Equal("One.rtf", settings.LastThought(_root));
+        Assert.Equal("Two.rtf", settings.LastThought(other));
+        settings = settings.RememberThought(_root, null);
+        Assert.Null(settings.LastThought(_root));
+        Assert.Equal("Two.rtf", settings.LastThought(other));
     }
 
     [AvaloniaFact]
-    public void StartupReopensLastNotebookWithoutAnExplicitPath()
+    public void StartupReopensLastBrainWithoutAnExplicitPath()
     {
-        var workspace = new NoteWorkspace(_root);
-        workspace.CreateNote(_root, "Remembered");
-        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
-        new NotebookSettings().RememberNotebook(_root).Save(settingsPath);
+        var workspace = new BrainWorkspace(_root);
+        workspace.CreateThought(_root, "Remembered");
+        var settingsPath = Path.Combine(_root, ".brainpending", "settings.json");
+        new BrainSettings().RememberBrain(_root).Save(settingsPath);
         var window = new MainWindow(null, settingsPath);
         _windows.Add(window);
         window.Show();
-        Assert.Equal(_root, window.FindControl<TextBlock>("NotebookPath")!.Text);
-        Assert.False(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
+        Assert.Equal(_root, window.FindControl<TextBlock>("BrainPath")!.Text);
+        Assert.False(BrainSettings.Read(settingsPath).SkipAutomaticBrain);
         window.Close();
     }
 
     [AvaloniaFact]
-    public void FailedStartupPausesRetriesUntilUserOpensAnotherNotebook()
+    public void FailedStartupPausesRetriesUntilUserOpensAnotherBrain()
     {
-        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
-        var missing = Path.Combine(_root, "Disconnected notebook");
-        new NotebookSettings().RememberNotebook(_root).RememberNotebook(missing).Save(settingsPath);
+        var settingsPath = Path.Combine(_root, ".brainpending", "settings.json");
+        var missing = Path.Combine(_root, "Disconnected brain");
+        new BrainSettings().RememberBrain(_root).RememberBrain(missing).Save(settingsPath);
         var first = new MainWindow(null, settingsPath);
         _windows.Add(first);
         first.Show();
         Assert.False(Directory.Exists(missing));
-        Assert.True(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
-        Assert.Null(NotebookSettings.Read(settingsPath).NotebookPath);
+        Assert.True(BrainSettings.Read(settingsPath).SkipAutomaticBrain);
+        Assert.Null(BrainSettings.Read(settingsPath).BrainPath);
         first.Close();
 
         var second = new MainWindow(null, settingsPath);
         _windows.Add(second);
         second.Show();
         Assert.Equal("Choose a brain", second.FindControl<TextBlock>("SaveStatus")!.Text);
-        var menu = (Flyout)second.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
+        var menu = (Flyout)second.FindControl<SplitButton>("OpenBrainButton")!.Flyout!;
         RecentButtons(menu).Single(i => Equals(i.Tag, _root))
             .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Equal(_root, second.FindControl<TextBlock>("NotebookPath")!.Text);
-        Assert.False(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
+        Assert.Equal(_root, second.FindControl<TextBlock>("BrainPath")!.Text);
+        Assert.False(BrainSettings.Read(settingsPath).SkipAutomaticBrain);
         Assert.False(second.FindControl<Border>("Notice")!.IsVisible);
         second.Close();
     }
 
     [AvaloniaFact]
-    public void InterruptedStartupDoesNotRetryEvenWhenRememberedFolderExists()
+    public void InterruptedStartupDoesNotRetryEvenWhenRememberedBrainExists()
     {
-        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
-        (new NotebookSettings().RememberNotebook(_root) with { SkipAutomaticNotebook = true }).Save(settingsPath);
+        var settingsPath = Path.Combine(_root, ".brainpending", "settings.json");
+        (new BrainSettings().RememberBrain(_root) with { SkipAutomaticBrain = true }).Save(settingsPath);
         var window = new MainWindow(null, settingsPath);
         _windows.Add(window);
         window.Show();
         Assert.Equal("Choose a brain", window.FindControl<TextBlock>("SaveStatus")!.Text);
-        Assert.True(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
+        Assert.True(BrainSettings.Read(settingsPath).SkipAutomaticBrain);
         window.Close();
     }
 
     [AvaloniaFact]
-    public async Task RecentNotebookTrashButtonRequiresConfirmationAndRemovesOnlyTheMenuEntry()
+    public async Task RecentBrainTrashButtonRequiresConfirmationAndRemovesOnlyTheMenuEntry()
     {
-        var second = Path.Combine(_root, "Other notebook");
-        var other = new NoteWorkspace(second);
-        var note = other.CreateNote(second, "Keep me");
-        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
-        new NotebookSettings().RememberNotebook(second).Save(settingsPath);
+        var second = Path.Combine(_root, "Other brain");
+        var other = new BrainWorkspace(second);
+        var thought = other.CreateThought(second, "Keep me");
+        var settingsPath = Path.Combine(_root, ".brainpending", "settings.json");
+        new BrainSettings().RememberBrain(second).Save(settingsPath);
         var window = OpenWindow();
-        var menu = (Flyout)window.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
+        var menu = (Flyout)window.FindControl<SplitButton>("OpenBrainButton")!.Flyout!;
         var item = RecentButtons(menu).Single(i => Equals(i.Tag, second));
-        menu.ShowAt(window.FindControl<SplitButton>("OpenNotebookButton")!);
+        menu.ShowAt(window.FindControl<SplitButton>("OpenBrainButton")!);
         window.UpdateLayout();
         item = RecentButtons(menu).Single(i => Equals(i.Tag, second));
-        var remove = ((Grid)item.Parent!).Children.OfType<Button>().Single(b => b.Name == "RemoveRecentNotebookButton");
+        var remove = ((Grid)item.Parent!).Children.OfType<Button>().Single(b => b.Name == "RemoveRecentBrainButton");
         ClickControl(remove);
         var dialog = Assert.Single(window.OwnedWindows);
-        Assert.Contains(second, NotebookSettings.Read(settingsPath).RecentNotebooks!);
+        Assert.Contains(second, BrainSettings.Read(settingsPath).RecentBrains!);
         ClickControl(dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Cancel")));
         await Task.Yield();
-        Assert.Contains(second, NotebookSettings.Read(settingsPath).RecentNotebooks!);
-        menu.ShowAt(window.FindControl<SplitButton>("OpenNotebookButton")!);
+        Assert.Contains(second, BrainSettings.Read(settingsPath).RecentBrains!);
+        menu.ShowAt(window.FindControl<SplitButton>("OpenBrainButton")!);
         window.UpdateLayout();
         item = RecentButtons(menu).Single(i => Equals(i.Tag, second));
-        remove = ((Grid)item.Parent!).Children.OfType<Button>().Single(b => b.Name == "RemoveRecentNotebookButton");
+        remove = ((Grid)item.Parent!).Children.OfType<Button>().Single(b => b.Name == "RemoveRecentBrainButton");
         ClickControl(remove);
         dialog = Assert.Single(window.OwnedWindows);
         ClickControl(dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, "Remove")));
         await Task.Yield();
-        Assert.DoesNotContain(second, NotebookSettings.Read(settingsPath).RecentNotebooks!);
+        Assert.DoesNotContain(second, BrainSettings.Read(settingsPath).RecentBrains!);
         Assert.DoesNotContain(RecentButtons(menu), i => Equals(i.Tag, second));
-        Assert.Equal(_root, window.FindControl<TextBlock>("NotebookPath")!.Text);
-        Assert.Equal(note.Revision, other.Read(note.Path).Revision);
+        Assert.Equal(_root, window.FindControl<TextBlock>("BrainPath")!.Text);
+        Assert.Equal(thought.Revision, other.Read(thought.Path).Revision);
         window.Close();
     }
 
     [AvaloniaFact]
-    public async Task NoteSwitcherSearchesNotebookAndTogglesPreviousNote()
+    public async Task ThoughtSwitcherSearchesBrainAndTogglesPreviousThought()
     {
-        var workspace = new NoteWorkspace(_root);
-        var first = workspace.CreateNote(_root, "First");
-        var folder = workspace.CreateFolder(_root, "Projects");
-        var second = workspace.CreateNote(folder, "Second");
-        var trashed = workspace.CreateNote(workspace.TrashPath, "Deleted");
+        var workspace = new BrainWorkspace(_root);
+        var first = workspace.CreateThought(_root, "First");
+        var cluster = workspace.CreateCluster(_root, "Projects");
+        var second = workspace.CreateThought(cluster, "Second");
+        var trashed = workspace.CreateThought(workspace.TrashPath, "Deleted");
         var window = OpenWindow();
         Select(window, first.Path);
         window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Keep these edits");
         window.KeyPress(Key.O, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.O, "o");
-        var dialog = Assert.IsType<NoteSwitcherDialog>(Assert.Single(window.OwnedWindows));
+        var dialog = Assert.IsType<ThoughtSwitcherDialog>(Assert.Single(window.OwnedWindows));
         var results = dialog.FindControl<ListBox>("Results")!;
-        Assert.DoesNotContain(results.Items.OfType<NoteSwitchItem>(), n => n.Path == trashed.Path);
+        Assert.DoesNotContain(results.Items.OfType<ThoughtSwitchItem>(), n => n.Path == trashed.Path);
         dialog.FindControl<TextBox>("Query")!.Text = "projects second";
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal(second.Path, Assert.IsType<NoteSwitchItem>(results.SelectedItem).Path);
+        Assert.Equal(second.Path, Assert.IsType<ThoughtSwitchItem>(results.SelectedItem).Path);
         dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
         await Task.Yield();
-        Assert.Equal("Second", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Equal("Second", window.FindControl<TextBlock>("ThoughtTitle")!.Text);
         Assert.Contains("Keep these edits", workspace.Read(first.Path).Rtf);
         window.KeyPress(Key.O, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.O, "o");
-        dialog = Assert.IsType<NoteSwitcherDialog>(Assert.Single(window.OwnedWindows));
-        Assert.Equal(first.Path, Assert.IsType<NoteSwitchItem>(dialog.FindControl<ListBox>("Results")!.SelectedItem).Path);
+        dialog = Assert.IsType<ThoughtSwitcherDialog>(Assert.Single(window.OwnedWindows));
+        Assert.Equal(first.Path, Assert.IsType<ThoughtSwitchItem>(dialog.FindControl<ListBox>("Results")!.SelectedItem).Path);
         dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
         await Task.Yield();
-        Assert.Equal("First", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Equal("First", window.FindControl<TextBlock>("ThoughtTitle")!.Text);
         window.KeyPress(Key.O, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.O, "o");
-        dialog = Assert.IsType<NoteSwitcherDialog>(Assert.Single(window.OwnedWindows));
-        Assert.Equal(second.Path, Assert.IsType<NoteSwitchItem>(dialog.FindControl<ListBox>("Results")!.SelectedItem).Path);
+        dialog = Assert.IsType<ThoughtSwitcherDialog>(Assert.Single(window.OwnedWindows));
+        Assert.Equal(second.Path, Assert.IsType<ThoughtSwitchItem>(dialog.FindControl<ListBox>("Results")!.SelectedItem).Path);
         dialog.FindControl<TextBox>("Query")!.Text = "no such note";
         Dispatcher.UIThread.RunJobs();
         Assert.Null(dialog.FindControl<ListBox>("Results")!.SelectedItem);
@@ -809,7 +809,7 @@ public sealed class WindowTests : IDisposable
         Assert.True(dialog.IsVisible);
         dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
         await Task.Yield();
-        Assert.Equal("First", window.FindControl<TextBlock>("NoteTitle")!.Text);
+        Assert.Equal("First", window.FindControl<TextBlock>("ThoughtTitle")!.Text);
         window.Close();
     }
 
@@ -836,7 +836,7 @@ public sealed class WindowTests : IDisposable
             Assert.Equal(Avalonia.Media.Color.Parse(theme.Line), Assert.IsType<Avalonia.Media.SolidColorBrush>(presenter.BorderBrush).Color);
             Assert.Equal(Avalonia.Media.Color.Parse(theme.Text), Assert.IsType<Avalonia.Media.SolidColorBrush>(row.Foreground).Color);
             menu.Hide();
-            Assert.Equal(theme.Name, NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json")).ColorTheme);
+            Assert.Equal(theme.Name, BrainSettings.Read(Path.Combine(_root, ".brainpending", "settings.json")).ColorTheme);
             Assert.Equal(Avalonia.Media.Color.Parse(theme.Surface), Assert.IsType<Avalonia.Media.SolidColorBrush>(window.Background).Color);
             Assert.Equal(Avalonia.Media.Color.Parse(theme.Text), Assert.IsType<Avalonia.Media.SolidColorBrush>(window.FindControl<RichEditorView>("EditorView")!.Editor.ThemeForeground).Color);
         }
@@ -844,7 +844,7 @@ public sealed class WindowTests : IDisposable
         var reopened = OpenWindow();
         Assert.Equal(Avalonia.Media.Color.Parse(AppThemes.All.Last().Surface), Assert.IsType<Avalonia.Media.SolidColorBrush>(reopened.Background).Color);
         reopened.Close();
-        Assert.Equal("Default Dark", AppThemes.Resolve(new NotebookSettings(DarkTheme: true)).Name);
+        Assert.Equal("Default Dark", AppThemes.Resolve(new BrainSettings(DarkTheme: true)).Name);
     }
 
     private static IEnumerable<Button> RecentButtons(Flyout menu) =>
@@ -867,62 +867,62 @@ public sealed class WindowTests : IDisposable
     public void RemovingRecentEntryPreservesStartupChoiceAndDoesNotReinsertItWhenOpeningAnother()
     {
         var other = Path.Combine(_root, "Other");
-        var settings = new NotebookSettings().RememberNotebook(_root).RemoveRecentNotebook(_root);
-        Assert.Equal(_root, settings.NotebookPath);
-        Assert.Empty(settings.RecentNotebooks!);
-        settings = settings.RememberNotebook(other);
-        Assert.Equal(other, Assert.Single(settings.RecentNotebooks!));
+        var settings = new BrainSettings().RememberBrain(_root).RemoveRecentBrain(_root);
+        Assert.Equal(_root, settings.BrainPath);
+        Assert.Empty(settings.RecentBrains!);
+        settings = settings.RememberBrain(other);
+        Assert.Equal(other, Assert.Single(settings.RecentBrains!));
     }
 
     [AvaloniaFact]
-    public void RecentNotebookSwitchSavesEditsAndRemembersMostRecentFirst()
+    public void RecentBrainSwitchSavesEditsAndRemembersMostRecentFirst()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Unsaved note");
-        var second = Path.Combine(_root, "Second notebook");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Unsaved note");
+        var second = Path.Combine(_root, "Second brain");
         Directory.CreateDirectory(second);
-        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
-        new NotebookSettings().RememberNotebook(second).Save(settingsPath);
+        var settingsPath = Path.Combine(_root, ".brainpending", "settings.json");
+        new BrainSettings().RememberBrain(second).Save(settingsPath);
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Saved before switching");
-        var button = window.FindControl<SplitButton>("OpenNotebookButton")!;
+        var button = window.FindControl<SplitButton>("OpenBrainButton")!;
         var menu = Assert.IsType<Flyout>(button.Flyout);
         var entry = RecentButtons(menu).Single(i => Equals(i.Tag, second));
         entry.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        Assert.Equal(second, window.FindControl<TextBlock>("NotebookPath")!.Text);
-        Assert.Contains("Saved before switching", workspace.Read(note.Path).Rtf);
+        Assert.Equal(second, window.FindControl<TextBlock>("BrainPath")!.Text);
+        Assert.Contains("Saved before switching", workspace.Read(thought.Path).Rtf);
         window.Close();
-        Assert.Equal(new[] { second, _root }, NotebookSettings.Read(settingsPath).RecentNotebooks);
+        Assert.Equal(new[] { second, _root }, BrainSettings.Read(settingsPath).RecentBrains);
     }
 
     [AvaloniaFact]
-    public void MissingRecentNotebookDoesNotCreateAnEmptyReplacement()
+    public void MissingRecentBrainDoesNotCreateAnEmptyReplacement()
     {
-        var missing = Path.Combine(_root, "Missing notebook");
-        new NotebookSettings().RememberNotebook(missing)
-            .Save(Path.Combine(_root, ".mynotes", "settings.json"));
+        var missing = Path.Combine(_root, "Missing brain");
+        new BrainSettings().RememberBrain(missing)
+            .Save(Path.Combine(_root, ".brainpending", "settings.json"));
         var window = OpenWindow();
-        var menu = (Flyout)window.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
+        var menu = (Flyout)window.FindControl<SplitButton>("OpenBrainButton")!.Flyout!;
         RecentButtons(menu).Single(i => Equals(i.Tag, missing))
             .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.False(Directory.Exists(missing));
-        Assert.Equal(_root, window.FindControl<TextBlock>("NotebookPath")!.Text);
+        Assert.Equal(_root, window.FindControl<TextBlock>("BrainPath")!.Text);
         Assert.Contains("no longer available", window.FindControl<TextBlock>("NoticeText")!.Text);
         window.Close();
     }
 
     [Fact]
-    public void RecentNotebooksDeduplicateAndKeepTenNewest()
+    public void RecentBrainsDeduplicateAndKeepTenNewest()
     {
-        var settings = new NotebookSettings();
-        for (var i = 0; i < 12; i++) settings = settings.RememberNotebook(Path.Combine(_root, i.ToString()));
+        var settings = new BrainSettings();
+        for (var i = 0; i < 12; i++) settings = settings.RememberBrain(Path.Combine(_root, i.ToString()));
         var revisited = Path.Combine(_root, "5");
-        settings = settings.RememberNotebook(revisited + Path.DirectorySeparatorChar);
-        Assert.Equal(10, settings.RecentNotebooks!.Length);
-        Assert.Equal(revisited, settings.RecentNotebooks[0]);
-        Assert.Single(settings.RecentNotebooks, p => p == revisited);
-        Assert.DoesNotContain(Path.Combine(_root, "0"), settings.RecentNotebooks);
+        settings = settings.RememberBrain(revisited + Path.DirectorySeparatorChar);
+        Assert.Equal(10, settings.RecentBrains!.Length);
+        Assert.Equal(revisited, settings.RecentBrains[0]);
+        Assert.Single(settings.RecentBrains, p => p == revisited);
+        Assert.DoesNotContain(Path.Combine(_root, "0"), settings.RecentBrains);
     }
 
     [AvaloniaFact]
@@ -935,7 +935,7 @@ public sealed class WindowTests : IDisposable
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
         window.Close();
-        var settings = NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json"));
+        var settings = BrainSettings.Read(Path.Combine(_root, ".brainpending", "settings.json"));
         Assert.Equal(120, settings.WindowX);
         Assert.Equal(90, settings.WindowY);
         Assert.Equal(1000, settings.WindowWidth);
@@ -958,7 +958,7 @@ public sealed class WindowTests : IDisposable
         window.UpdateLayout();
         window.WindowState = WindowState.Maximized;
         window.Close();
-        var settings = NotebookSettings.Read(Path.Combine(_root, ".mynotes", "settings.json"));
+        var settings = BrainSettings.Read(Path.Combine(_root, ".brainpending", "settings.json"));
         Assert.True(settings.WindowMaximized);
         Assert.Equal(1000, settings.WindowWidth);
         Assert.Equal(650, settings.WindowHeight);
@@ -970,8 +970,8 @@ public sealed class WindowTests : IDisposable
     [AvaloniaFact]
     public void SavedPositionOnDisconnectedMonitorIsMovedIntoWorkingArea()
     {
-        new NotebookSettings(WindowX: 100000, WindowY: 100000)
-            .Save(Path.Combine(_root, ".mynotes", "settings.json"));
+        new BrainSettings(WindowX: 100000, WindowY: 100000)
+            .Save(Path.Combine(_root, ".brainpending", "settings.json"));
         var window = OpenWindow();
         var screen = window.Screens.Primary;
         Assert.NotNull(screen);
@@ -980,17 +980,17 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void MovingFolderFromSearchKeepsOpenNoteAndUnsavedEdits()
+    public void MovingClusterFromSearchKeepsOpenThoughtAndUnsavedEdits()
     {
-        var workspace = new NoteWorkspace(_root);
-        var parent = workspace.CreateFolder(_root, "Projects");
-        var child = workspace.CreateFolder(parent, "Website");
-        var note = workspace.CreateNote(child, "Ideas");
+        var workspace = new BrainWorkspace(_root);
+        var parent = workspace.CreateCluster(_root, "Projects");
+        var child = workspace.CreateCluster(parent, "Website");
+        var thought = workspace.CreateThought(child, "Ideas");
         var window = OpenWindow();
         var search = window.FindControl<TextBox>("SearchBox")!;
         search.Text = "Ideas";
         Dispatcher.UIThread.RunJobs();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
         editor.InsertText("Before move. ");
         search.Text = "Website";
@@ -1010,10 +1010,10 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void RightClickingFolderDoesNotNavigateAndRootItemsCannotMoveUp()
+    public void RightClickingClusterDoesNotNavigateAndRootItemsCannotMoveUp()
     {
-        var workspace = new NoteWorkspace(_root);
-        workspace.CreateFolder(_root, "Projects");
+        var workspace = new BrainWorkspace(_root);
+        workspace.CreateCluster(_root, "Projects");
         var window = OpenWindow();
         var browser = window.FindControl<ListBox>("Browser")!;
         var item = Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => !i.IsTrash);
@@ -1030,49 +1030,49 @@ public sealed class WindowTests : IDisposable
     [AvaloniaFact]
     public void OpeningAndClosingDoesNotRewriteRtfAndImmediateEditsAreSaved()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Original", @"{\rtf1\ansi Keep this source intact}");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Original", @"{\rtf1\ansi Keep this source intact}");
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         Dispatcher.UIThread.RunJobs();
         window.Close();
-        Assert.Equal(note.Revision, workspace.Read(note.Path).Revision);
+        Assert.Equal(thought.Revision, workspace.Read(thought.Path).Revision);
 
         window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("An immediate edit. ");
         window.Close(); // before a render or the autosave timer can report TextChanged
-        Assert.Contains("An immediate edit.", workspace.Read(note.Path).Rtf);
+        Assert.Contains("An immediate edit.", workspace.Read(thought.Path).Rtf);
     }
 
     [AvaloniaFact]
     public void TwoOpenWindowsKeepBothEditsOnClose()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Shared");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Shared");
         var first = OpenWindow();
         var second = OpenWindow();
-        Select(first, note.Path);
-        Select(second, note.Path);
+        Select(first, thought.Path);
+        Select(second, thought.Path);
         first.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("First window");
         second.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Second window");
         first.Close();
         second.Close();
-        var files = workspace.List(_root).Where(e => !e.IsFolder).ToList();
+        var files = workspace.List(_root).Where(e => !e.IsCluster).ToList();
         Assert.Equal(2, files.Count);
         Assert.Contains(files, e => workspace.Read(e.Path).Rtf.Contains("First window"));
         Assert.Contains(files, e => workspace.Read(e.Path).Rtf.Contains("Second window"));
     }
 
     [AvaloniaFact]
-    public async Task OpenWindowReloadsExternalChangesAndShowsNewNotes()
+    public async Task OpenWindowReloadsExternalChangesAndShowsNewThoughts()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Live", NoteWorkspace.PlainTextRtf("Before"));
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Live", BrainWorkspace.PlainTextRtf("Before"));
         var window = OpenWindow();
-        Select(window, note.Path);
-        workspace.Save(note, NoteWorkspace.PlainTextRtf("From another machine"));
-        var added = workspace.CreateNote(_root, "New arrival");
+        Select(window, thought.Path);
+        workspace.Save(thought, BrainWorkspace.PlainTextRtf("From another machine"));
+        var added = workspace.CreateThought(_root, "New arrival");
         await Task.Delay(3500, TestContext.Current.CancellationToken);
         Dispatcher.UIThread.RunJobs();
         Assert.Contains("From another machine", window.FindControl<RichEditorView>("EditorView")!.Editor.GetPlainText());
@@ -1081,12 +1081,12 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public async Task FolderNavigationSlidesIntoNestedFolderAndProvidesUpEntry()
+    public async Task ClusterNavigationSlidesIntoNestedClusterAndProvidesUpEntry()
     {
-        var workspace = new NoteWorkspace(_root);
-        var parent = workspace.CreateFolder(_root, "Projects");
-        var child = workspace.CreateFolder(parent, "Website");
-        workspace.CreateNote(child, "Ideas");
+        var workspace = new BrainWorkspace(_root);
+        var parent = workspace.CreateCluster(_root, "Projects");
+        var child = workspace.CreateCluster(parent, "Website");
+        workspace.CreateThought(child, "Ideas");
         var window = OpenWindow();
         Select(window, parent);
         await Task.Delay(180, TestContext.Current.CancellationToken);
@@ -1103,34 +1103,34 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void NoteMenuPinsAndUnpinsWithoutChangingTheOpenNote()
+    public void ThoughtMenuPinsAndUnpinsWithoutChangingTheOpenThought()
     {
-        var workspace = new NoteWorkspace(_root);
-        workspace.CreateFolder(_root, "Folder");
-        var note = workspace.CreateNote(_root, "Zulu");
+        var workspace = new BrainWorkspace(_root);
+        workspace.CreateCluster(_root, "Folder");
+        var thought = workspace.CreateThought(_root, "Zulu");
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         var browser = window.FindControl<ListBox>("Browser")!;
-        var item = browser.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == note.Path);
+        var item = browser.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == thought.Path);
         window.CreateItemMenu(item).Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Pin thought"))
             .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
         var pinned = browser.ItemsSource!.Cast<BrowserItem>().First();
-        Assert.Equal(note.Path, pinned.Path);
+        Assert.Equal(thought.Path, pinned.Path);
         Assert.True(pinned.IsPinned);
-        Assert.Equal(note.Path, ((BrowserItem)browser.SelectedItem!).Path);
+        Assert.Equal(thought.Path, ((BrowserItem)browser.SelectedItem!).Path);
         window.CreateItemMenu(pinned).Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Unpin thought"))
             .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-        Assert.True(browser.ItemsSource!.Cast<BrowserItem>().First().IsFolder);
-        Assert.Equal(note.Revision, workspace.Read(note.Path).Revision);
+        Assert.True(browser.ItemsSource!.Cast<BrowserItem>().First().IsCluster);
+        Assert.Equal(thought.Revision, workspace.Read(thought.Path).Revision);
         window.Close();
     }
 
     [AvaloniaFact]
-    public void TrashIsBrowsableProtectedAndSupportsMovingNotesBack()
+    public void TrashIsBrowsableProtectedAndSupportsMovingThoughtsBack()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Recover me");
-        var trashed = workspace.MoveToTrash(note.Path);
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Recover me");
+        var trashed = workspace.MoveToTrash(thought.Path);
         var window = OpenWindow();
         var browser = window.FindControl<ListBox>("Browser")!;
         var trash = Assert.Single(browser.ItemsSource!.Cast<BrowserItem>(), i => i.IsTrash);
@@ -1147,7 +1147,7 @@ public sealed class WindowTests : IDisposable
         Assert.Contains(menu.Items.OfType<MenuItem>(), i => Equals(i.Header, "Move to Recycle Bin…"));
         menu.Items.OfType<MenuItem>().Single(i => Equals(i.Header, "Move to parent"))
             .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-        Assert.True(File.Exists(note.Path));
+        Assert.True(File.Exists(thought.Path));
         Assert.False(File.Exists(trashed));
         Assert.False(Assert.Single(window.CreateItemMenu(trash).Items.OfType<MenuItem>()).IsEnabled);
         window.Close();
@@ -1156,14 +1156,14 @@ public sealed class WindowTests : IDisposable
     [AvaloniaFact]
     public void RenderTheWorkingEditorForVisualReview()
     {
-        var workspace = new NoteWorkspace(_root);
-        workspace.CreateFolder(_root, "Personal");
-        workspace.CreateFolder(_root, "Projects");
-        workspace.CreateNote(_root, "Ideas for later");
-        workspace.CreateNote(_root, "Reading list");
-        var note = workspace.CreateNote(_root, "A place for your thoughts", NoteWorkspace.PlainTextRtf("Welcome to Brain Pending. Your thoughts can finish loading here.\n\nA quiet place for the things you want to remember.\n\nCreate folders on the left, give your ideas a home, and make each note your own.\n\nYour notes are ordinary RTF files, ready to travel with your notebook."));
+        var workspace = new BrainWorkspace(_root);
+        workspace.CreateCluster(_root, "Personal");
+        workspace.CreateCluster(_root, "Projects");
+        workspace.CreateThought(_root, "Ideas for later");
+        workspace.CreateThought(_root, "Reading list");
+        var thought = workspace.CreateThought(_root, "A place for your thoughts", BrainWorkspace.PlainTextRtf("Welcome to Brain Pending. Your thoughts can finish loading here.\n\nA quiet place for the things you want to remember.\n\nCreate clusters on the left, give your ideas a home, and make each thought your own.\n\nYour thoughts are ordinary RTF files, ready to travel with your brain."));
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         using var bitmap = new RenderTargetBitmap(new PixelSize(1240, 820));
         bitmap.Render(window);
         var root = new DirectoryInfo(AppContext.BaseDirectory);
@@ -1182,10 +1182,10 @@ public sealed class WindowTests : IDisposable
         Assert.False(editor.IsModified);
         Assert.True(window.FindControl<RichEditorView>("EditorView")!.IsVisible);
         window.Close();
-        var settingsPath = Path.Combine(_root, ".mynotes", "settings.json");
-        (NotebookSettings.Read(settingsPath) with { SidebarPinned = false }).Save(settingsPath);
+        var settingsPath = Path.Combine(_root, ".brainpending", "settings.json");
+        (BrainSettings.Read(settingsPath) with { SidebarPinned = false }).Save(settingsPath);
         var compactWindow = OpenWindow();
-        Select(compactWindow, note.Path);
+        Select(compactWindow, thought.Path);
         compactWindow.UpdateLayout();
         bitmap.Render(compactWindow);
         bitmap.Save(Path.Combine(output, "editor-mini-sidebar.png"), PngBitmapEncoderOptions.Default);
@@ -1196,14 +1196,14 @@ public sealed class WindowTests : IDisposable
     [AvaloniaFact]
     public void AttachmentLinkOpensFileActionsWithoutLaunchingExternalApp()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var source = Path.Combine(_root, "sample.txt");
         File.WriteAllText(source, "Attached content");
         var attachment = new AttachmentStore(_root).Add(source, "sample.txt", TestContext.Current.CancellationToken);
         var document = AvaloniaRichEditor.Formatters.HtmlDocumentFormatter.ParseHtml($"<p><a href='{attachment.Link}'>sample.txt</a></p>");
-        var note = workspace.CreateNote(_root, "With attachment", AvaloniaRichEditor.Formatters.RtfDocumentFormatter.Write(document));
+        var thought = workspace.CreateThought(_root, "With attachment", AvaloniaRichEditor.Formatters.RtfDocumentFormatter.Write(document));
         var window = OpenWindow();
-        Select(window, note.Path);
+        Select(window, thought.Path);
         var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
         var toolbar = window.FindControl<RichEditorView>("EditorView")!.Toolbar;
         var attachButton = Assert.Single(toolbar.GetVisualDescendants().OfType<Button>(), button => button.Name == "AttachFileButton");

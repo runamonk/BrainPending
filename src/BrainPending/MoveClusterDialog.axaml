@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="using:BrainPending"
-        x:Class="BrainPending.MoveFolderDialog"
+        x:Class="BrainPending.MoveClusterDialog"
         Title="Move to cluster" Width="460" Height="480" MinWidth="360" MinHeight="360"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource AppSurfaceBrush}">
@@ -14,7 +14,7 @@
       <TextBlock x:Name="Location" Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
     </Grid>
     <Grid Grid.Row="2">
-      <ListBox x:Name="Folders" Background="Transparent" SelectionChanged="Folders_SelectionChanged" AutomationProperties.Name="Destination clusters">
+      <ListBox x:Name="Clusters" Background="Transparent" SelectionChanged="Clusters_SelectionChanged" AutomationProperties.Name="Destination clusters">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="local:BrowserItem">
             <Grid ColumnDefinitions="28,*" MinHeight="28">

@@ -16,7 +16,7 @@ The workspace recommends the optional Avalonia extension for XAML editing.
 Or run from a terminal:
 
 ```powershell
-dotnet run --project src/BrainPending -- --notes ./Notes
+dotnet run --project src/BrainPending -- --brain ./Brain
 ```
 
 ## What works
@@ -43,7 +43,7 @@ dotnet run --project src/BrainPending -- --notes ./Notes
   it. Select text before inserting a link to use that text as the label.
 - Autosave after a short typing pause; save on note switch and close.
 - If a thought cannot be saved (for example, the drive holding the brain is disconnected), the
-  latest edits are kept in `%LOCALAPPDATA%/MyNotes/recovery` and the app can still close.
+  latest edits are kept in `%LOCALAPPDATA%/BrainPending/recovery` and the app can still close.
   They are restored the next time that brain opens; a thought that changed meanwhile
   gets a conflict copy instead of being overwritten.
 - Search note/folder titles recursively in the current folder (Ctrl+Shift+F).
@@ -89,15 +89,15 @@ dotnet publish src/BrainPending -c Release -r win-x64 --self-contained true -o a
 Copy the **whole output folder** to your synced location. Run `BrainPending.exe`.
 No .NET SDK or IDE is needed on the destination computer.
 
-Brain selection order: `--notes <folder>`, the last successfully opened brain
-on this computer, then an adjacent `Notes` folder (created on first use).
+Brain selection order: `--brain <folder>`, the last successfully opened brain
+on this computer, then an adjacent `Brain` folder (created on first use).
 If automatic reopening fails or is interrupted, startup leaves the app ready for
 you to choose a brain instead of retrying on every launch. Opening a brain
 successfully enables automatic reopening again. A missing remembered folder is
 never silently recreated. **Open brain** can select any other writable folder.
 
-Preferences are per computer, under `%LOCALAPPDATA%/MyNotes`. They are not shared
-with the notes. Use `--notes` to open multiple independent brains/instances.
+Preferences are per computer, under `%LOCALAPPDATA%/BrainPending`. They are not shared
+with the thoughts. Use `--brain` to open multiple independent brains/instances.
 
 ## Shared-folder behaviour
 
@@ -109,16 +109,16 @@ Your existing sync service transfers the files; Brain Pending reacts when they a
   separate conflict copy and preserves the other version.
 - Same-filesystem instances serialize their writes with a short exclusive lock.
   This lock is **not** a distributed lock between cloud replicas.
-- Immutable RTF revisions are stored in `Notes/.mynotes/history`, with JSON files
-  identifying their original paths. Deleted items live in `.mynotes/trash/items`
-  and appear in the brain's Trash folder. Earlier trash entries migrate into this view.
+- Immutable RTF revisions are stored in `Brain/.brainpending/history`, with JSON files
+  identifying their original paths. Deleted items live in `.brainpending/trash/items`
+  and appear in the brain's Trash folder.
   Recover deleted items with Move to cluster or Move to parent; history recovery
   still requires copying an RTF from the history directory.
 
 This is eventual file synchronization, not collaborative live editing. Offline
 edits reaching the sync provider simultaneously can still produce provider-level
 conflicts. History preserves local save revisions, but automated reconciliation
-of those conflicts is not implemented. Do not exclude `.mynotes/history` from
+of those conflicts is not implemented. Do not exclude `.brainpending/history` from
 sync if you want those revisions on another computer. History has no retention
 limit yet; image-heavy notes can consume substantial space.
 
@@ -171,7 +171,7 @@ in the preview list, then edit its colors or copy an entry with a unique `Name`.
 Escape discards edits. Invalid JSON keeps the last valid preview and disables
 Save. Previewing does not change the app's active theme.
 
-The file lives at `%LOCALAPPDATA%\MyNotes\themes.json` and is created on first
+The file lives at `%LOCALAPPDATA%\BrainPending\themes.json` and is created on first
 launch. External edits can still be applied with **Reload themes**; themes also
 load on startup. `Dark` selects light/dark control styling; `Surface`, `Text`, `Accent`,
 `Selection`, `Icon`, `Line`, and `Link` define the palette colors (for example,
@@ -213,15 +213,15 @@ The progress bar counts processed pages, including failures, and shows imported
 and failed counts. Notebook discovery uses an indeterminate bar. Stopping leaves
 the bar at the number of pages processed, rather than marking it complete.
 A report note summarizes skipped pages and conversion warnings. A JSON record in
-`.mynotes/imports` retains source page IDs and imported paths. OneNote calls run
+`.brainpending/imports` retains source page IDs and imported paths. OneNote calls run
 off the UI thread; an in-flight OneNote call may finish after cancellation, but
 its result is discarded. No remote or local-file image references are fetched
 by the converter.
 
-Attachment files live in `.mynotes/attachments` and use brain-relative links,
+Attachment files live in `.brainpending/attachments` and use brain-relative links,
 so renaming/moving notes or moving the whole brain preserves them. Duplicate
 filenames are stored separately. Copy/back up the **whole brain including
-`.mynotes`** to preserve attachments; an individual RTF export contains links,
+`.brainpending`** to preserve attachments; an individual RTF export contains links,
 not embedded attachment bytes. Files are retained for undo, history, and conflict
 copies even after their links are removed. Attachment previews and automatic
 cleanup of unreferenced files are not implemented.

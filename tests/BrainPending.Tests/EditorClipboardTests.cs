@@ -29,7 +29,7 @@ public sealed class EditorClipboardTests
     }
 
     [AvaloniaFact]
-    public async Task CopyToAnotherNotePreservesParagraphSpacing()
+    public async Task CopyToAnotherThoughtPreservesParagraphSpacing()
     {
         var editor = new RichEditor();
         editor.LoadHtml("<p>First line</p><p>Second line</p>");

@@ -26,7 +26,7 @@ public sealed class EditorTests
     public void AttachmentLinkActivationUsesHostHandler()
     {
         var editor = new RichEditor();
-        const string link = "mynotes-attachment:00000000000000000000000000000000/sample.txt";
+        const string link = "brainpending-attachment:00000000000000000000000000000000/sample.txt";
         editor.LoadHtml($"<p><a href='{link}'>Attachment</a></p>");
         var window = new Window { Content = editor, Width = 400, Height = 200 };
         string? activated = null;
@@ -309,10 +309,10 @@ public sealed class EditorTests
     }
 
     [AvaloniaFact]
-    public void LoadingDoesNotMarkNoteDirtyAndEditingDoes()
+    public void LoadingDoesNotMarkThoughtDirtyAndEditingDoes()
     {
         var editor = new RichEditor();
-        editor.LoadRtf(NoteWorkspace.PlainTextRtf("Existing"));
+        editor.LoadRtf(BrainWorkspace.PlainTextRtf("Existing"));
         Assert.False(editor.IsModified);
         editor.InsertText("New ");
         Assert.True(editor.IsModified);
@@ -366,7 +366,7 @@ public sealed class EditorTests
     {
         const string text = "Notes {draft} \\ café 😀 中文";
         var editor = new RichEditor();
-        editor.LoadRtf(NoteWorkspace.PlainTextRtf(text));
+        editor.LoadRtf(BrainWorkspace.PlainTextRtf(text));
         Assert.Equal(text, editor.GetPlainText().TrimEnd('\r', '\n'));
     }
 

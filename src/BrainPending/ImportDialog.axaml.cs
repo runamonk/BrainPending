@@ -12,8 +12,8 @@ namespace BrainPending;
 
 public partial class ImportDialog : Window
 {
-    private INoteImportSource _source = new OneNoteSource();
-    private NoteWorkspace? _workspace;
+    private IThoughtImportSource _source = new OneNoteSource();
+    private BrainWorkspace? _workspace;
     private IReadOnlyList<ImportPage> _pages = [];
     private CancellationTokenSource _operation = new();
     private CancellationTokenSource _preview = new();
@@ -37,7 +37,7 @@ public partial class ImportDialog : Window
         Closed += (_, _) => { _closed = true; _operation.Cancel(); _preview.Cancel(); _source.Dispose(); };
     }
 
-    internal ImportDialog(NoteWorkspace workspace, string destination, INoteImportSource? source = null) : this()
+    internal ImportDialog(BrainWorkspace workspace, string destination, IThoughtImportSource? source = null) : this()
     {
         _workspace = workspace;
         if (source != null) { _source.Dispose(); _source = source; }
@@ -106,8 +106,8 @@ public partial class ImportDialog : Window
     {
         try
         {
-            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose a cluster in the current brain" });
-            if (folders.FirstOrDefault()?.TryGetLocalPath() is not { } path || _workspace == null) return;
+            var clusters = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose a cluster in the current brain" });
+            if (clusters.FirstOrDefault()?.TryGetLocalPath() is not { } path || _workspace == null) return;
             path = _workspace.CheckPath(path);
             if (_workspace.IsInTrash(path)) throw new IOException("Choose a destination outside Trash.");
             Destination.ItemsSource = new[] { _workspace.Root, path }.Distinct().ToArray();
@@ -179,13 +179,13 @@ public partial class ImportDialog : Window
                 ProgressLabel.Text = $"{update.Completed} of {update.Total} pages processed ({(double)update.Completed / update.Total:P0}) — {update.Imported} imported, {update.Failed} failed";
                 Status.Text = update.Message;
             });
-            Result = await Task.Run(() => NoteImportService.ImportAsync(_source, selected, _workspace, destination, progress, _operation.Token));
+            Result = await Task.Run(() => ThoughtImportService.ImportAsync(_source, selected, _workspace, destination, progress, _operation.Token));
             ImportProgressBar.Value = Result.Processed;
             ProgressLabel.Text = $"{Result.Processed} of {Result.Total} pages processed ({(double)Result.Processed / Result.Total:P0}) — {Result.Pages.Count} imported, {Result.Failed} failed"
                 + (Result.Cancelled ? " — stopped" : "");
             _finished = true;
             Status.Text = $"{Result.Pages.Count} pages imported" + (Result.Cancelled ? " before stopping." : ".")
-                + $"\nSaved in {Result.Folder}\n" + (Result.Issues.Count == 0 ? "No conversion warnings." : string.Join("\n", Result.Issues));
+                + $"\nSaved in {Result.Cluster}\n" + (Result.Issues.Count == 0 ? "No conversion warnings." : string.Join("\n", Result.Issues));
         }
         catch (OperationCanceledException) { Status.Text = "Import cancelled."; }
         catch (Exception error) { Status.Text = "Import could not finish: " + error.Message; }

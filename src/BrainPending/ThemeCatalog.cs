@@ -18,12 +18,12 @@ internal sealed class ThemeCatalog
     public ThemeCatalog(string? settingsPath = null)
     {
         var directory = settingsPath == null
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MyNotes")
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BrainPending")
             : Path.GetDirectoryName(Path.GetFullPath(settingsPath))!;
         FilePath = Path.Combine(directory, "themes.json");
     }
 
-    public AppColorTheme Resolve(NotebookSettings settings, bool? systemDark = null)
+    public AppColorTheme Resolve(BrainSettings settings, bool? systemDark = null)
     {
         var fallback = AppThemes.Resolve(settings, systemDark);
         return Themes.FirstOrDefault(t => string.Equals(t.Name, settings.ColorTheme, StringComparison.OrdinalIgnoreCase))

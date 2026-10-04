@@ -9,7 +9,7 @@ public static class PathRules
 
     public static bool AreEqual(string? left, string? right) => Comparer.Equals(left, right);
 
-    // Callers normalize paths first. Notebook-relative paths work here too.
+    // Callers normalize paths first. Brain-relative paths work here too.
     public static bool IsSameOrDescendant(string? path, string directory)
     {
         if (path == null) return false;

@@ -13,16 +13,16 @@
           <Button x:Name="SidebarReveal" IsVisible="False" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Show sidebar" AutomationProperties.Name="Show sidebar" PointerExited="Sidebar_PointerExited" Click="SidebarReveal_Click">
             <Path Width="20" Height="20" Stroke="{DynamicResource AppTextBrush}" StrokeThickness="1.5" Data="M 2,3 L 18,3 L 18,17 L 2,17 Z M 7,3 L 7,17" />
           </Button>
-            <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New thought (Ctrl+N)" AutomationProperties.Name="New thought" Click="NewNote_Click">
+            <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New thought (Ctrl+N)" AutomationProperties.Name="New thought" Click="NewThought_Click">
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 5,13 C 2,13 1,11 1,9 C 1,7 2,5 5,5 C 5,1 11,1 12,4 C 16,2 19,5 19,8 C 19,11 17,13 14,13 Z M 8,15.5 A 1.5,1.5 0 1 0 5,15.5 A 1.5,1.5 0 1 0 8,15.5 M 3,18.5 A 0.5,0.5 0 1 0 2,18.5 A 0.5,0.5 0 1 0 3,18.5 M 12,16 L 18,16 M 15,13 L 15,19" />
             </Button>
-            <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New cluster (Ctrl+D)" AutomationProperties.Name="New cluster" Click="NewFolder_Click">
+            <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New cluster (Ctrl+D)" AutomationProperties.Name="New cluster" Click="NewCluster_Click">
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 8,8 L 5.5,5.5 M 12,8 L 14.5,5.5 M 8,12 L 5.5,14.5 M 13,10 A 3,3 0 1 0 7,10 A 3,3 0 1 0 13,10 M 6,4 A 2,2 0 1 0 2,4 A 2,2 0 1 0 6,4 M 18,4 A 2,2 0 1 0 14,4 A 2,2 0 1 0 18,4 M 6,16 A 2,2 0 1 0 2,16 A 2,2 0 1 0 6,16 M 13,16 L 19,16 M 16,13 L 16,19" />
             </Button>
-            <Button x:Name="MiniImportNotesButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Import thoughts" AutomationProperties.Name="Import thoughts" Click="ImportNotes_Click">
+            <Button x:Name="MiniImportThoughtsButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Import thoughts" AutomationProperties.Name="Import thoughts" Click="ImportThoughts_Click">
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 10,1 L 10,13 M 5,8 L 10,13 L 15,8 M 2,13 L 2,19 L 18,19 L 18,13" />
             </Button>
-            <Button x:Name="MiniSwitchNoteButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Quick switch (Ctrl+Shift+O)" AutomationProperties.Name="Quick switch" Click="SwitchNote_Click">
+            <Button x:Name="MiniSwitchThoughtButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Quick switch (Ctrl+Shift+O)" AutomationProperties.Name="Quick switch" Click="SwitchThought_Click">
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 3,6 L 17,6 M 13,2 L 17,6 L 13,10 M 17,14 L 3,14 M 7,10 L 3,14 L 7,18" />
             </Button>
         </StackPanel>
@@ -36,16 +36,16 @@
                 <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 1,9 L 10,2 L 19,9 M 4,7 L 4,18 L 8,18 L 8,12 L 12,12 L 12,18 L 16,18 L 16,7" />
               </Button>
               <StackPanel x:Name="SidebarPinnedActions" Orientation="Horizontal" Spacing="6">
-                <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New thought (Ctrl+N)" AutomationProperties.Name="New thought" Click="NewNote_Click">
+                <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New thought (Ctrl+N)" AutomationProperties.Name="New thought" Click="NewThought_Click">
                   <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 5,13 C 2,13 1,11 1,9 C 1,7 2,5 5,5 C 5,1 11,1 12,4 C 16,2 19,5 19,8 C 19,11 17,13 14,13 Z M 8,15.5 A 1.5,1.5 0 1 0 5,15.5 A 1.5,1.5 0 1 0 8,15.5 M 3,18.5 A 0.5,0.5 0 1 0 2,18.5 A 0.5,0.5 0 1 0 3,18.5 M 12,16 L 18,16 M 15,13 L 15,19" />
                 </Button>
-                <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New cluster (Ctrl+D)" AutomationProperties.Name="New cluster" Click="NewFolder_Click">
+                <Button Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="New cluster (Ctrl+D)" AutomationProperties.Name="New cluster" Click="NewCluster_Click">
                   <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 8,8 L 5.5,5.5 M 12,8 L 14.5,5.5 M 8,12 L 5.5,14.5 M 13,10 A 3,3 0 1 0 7,10 A 3,3 0 1 0 13,10 M 6,4 A 2,2 0 1 0 2,4 A 2,2 0 1 0 6,4 M 18,4 A 2,2 0 1 0 14,4 A 2,2 0 1 0 18,4 M 6,16 A 2,2 0 1 0 2,16 A 2,2 0 1 0 6,16 M 13,16 L 19,16 M 16,13 L 16,19" />
                 </Button>
-                <Button x:Name="ImportNotesButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Import thoughts" AutomationProperties.Name="Import thoughts" Click="ImportNotes_Click">
+                <Button x:Name="ImportThoughtsButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Import thoughts" AutomationProperties.Name="Import thoughts" Click="ImportThoughts_Click">
                   <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 10,1 L 10,13 M 5,8 L 10,13 L 15,8 M 2,13 L 2,19 L 18,19 L 18,13" />
                 </Button>
-                <Button x:Name="SwitchNoteButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Quick switch (Ctrl+Shift+O)" AutomationProperties.Name="Quick switch" Click="SwitchNote_Click">
+                <Button x:Name="SwitchThoughtButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Quick switch (Ctrl+Shift+O)" AutomationProperties.Name="Quick switch" Click="SwitchThought_Click">
                   <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 3,6 L 17,6 M 13,2 L 17,6 L 13,10 M 17,14 L 3,14 M 7,10 L 3,14 L 7,18" />
                 </Button>
               </StackPanel>
@@ -74,7 +74,7 @@
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-            <TextBlock x:Name="FolderEmpty" IsVisible="False" IsHitTestVisible="False" Opacity="0.5" Margin="12,50,50,30" TextWrapping="Wrap" />
+            <TextBlock x:Name="ClusterEmpty" IsVisible="False" IsHitTestVisible="False" Opacity="0.5" Margin="12,50,50,30" TextWrapping="Wrap" />
           </Grid>
           <TextBlock x:Name="ItemCount" Grid.Row="3" FontSize="11" Opacity="0.5" Margin="10,14,0,0" />
         </Grid>
@@ -89,12 +89,12 @@
         </GridSplitter.Template>
       </GridSplitter>
       <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto">
-        <Border x:Name="NoteHeader" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1" Padding="14,20,14,18">
+        <Border x:Name="ThoughtHeader" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1" Padding="14,20,14,18">
           <Grid RowDefinitions="Auto,Auto,Auto">
             <TextBlock x:Name="Breadcrumb" Text="Your brain" FontSize="12" Opacity="0.5" TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="NoteTitle" Grid.Row="1" Text="" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" TextTrimming="CharacterEllipsis" DoubleTapped="NoteTitle_DoubleTapped" ToolTip.Tip="Double-click to rename" />
-            <TextBox x:Name="NoteTitleInput" Grid.Row="1" IsVisible="False" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" Padding="0" Background="Transparent" BorderThickness="0,0,0,1" KeyDown="NoteTitleInput_KeyDown" LostFocus="NoteTitleInput_LostFocus" AutomationProperties.Name="Thought title" />
-            <TextBlock x:Name="NoteTitleError" Grid.Row="2" IsVisible="False" Foreground="{DynamicResource AppErrorBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
+            <TextBlock x:Name="ThoughtTitle" Grid.Row="1" Text="" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" TextTrimming="CharacterEllipsis" DoubleTapped="ThoughtTitle_DoubleTapped" ToolTip.Tip="Double-click to rename" />
+            <TextBox x:Name="ThoughtTitleInput" Grid.Row="1" IsVisible="False" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" Padding="0" Background="Transparent" BorderThickness="0,0,0,1" KeyDown="ThoughtTitleInput_KeyDown" LostFocus="ThoughtTitleInput_LostFocus" AutomationProperties.Name="Thought title" />
+            <TextBlock x:Name="ThoughtTitleError" Grid.Row="2" IsVisible="False" Foreground="{DynamicResource AppErrorBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
           </Grid>
         </Border>
         <DockPanel Grid.Row="1">
@@ -112,7 +112,7 @@
         <StackPanel x:Name="Welcome" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="440" Spacing="16" Margin="32">
           <TextBlock Text="" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" />
           <TextBlock Text="Pick a thought on the left, or start something new. " TextWrapping="Wrap" TextAlignment="Center" FontSize="15" Opacity="0.6" LineHeight="25" />
-          <Button Content="＋  Write a thought" Classes="action" HorizontalAlignment="Center" Background="{DynamicResource AppAccentBrush}" Foreground="{DynamicResource AppAccentTextBrush}" Click="NewNote_Click" Margin="0,8,0,0" />
+          <Button Content="＋  Write a thought" Classes="action" HorizontalAlignment="Center" Background="{DynamicResource AppAccentBrush}" Foreground="{DynamicResource AppAccentTextBrush}" Click="NewThought_Click" Margin="0,8,0,0" />
           <TextBlock Text="Ctrl+N  new thought     •     Ctrl+S  save" FontSize="12" Opacity="0.45" HorizontalAlignment="Center" />
         </StackPanel>
         <Border x:Name="Notice" Grid.Row="2" Background="{DynamicResource AppNoticeBrush}" Padding="16,12" IsVisible="False">
@@ -126,8 +126,8 @@
     </Grid>
     <Border Grid.Row="1" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,1,0,0" Padding="12,0">
       <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-        <SplitButton Grid.Column="1" x:Name="OpenNotebookButton" Click="OpenNotebook_Click" Background="Transparent" BorderThickness="0" CornerRadius="4" Height="30" Padding="8,3" FontSize="11" HorizontalAlignment="Left" HorizontalContentAlignment="Left" ToolTip.Tip="Open brain" AutomationProperties.Name="Open brain">
-          <TextBlock x:Name="NotebookPath" Text="Open brain" TextTrimming="CharacterEllipsis" />
+        <SplitButton Grid.Column="1" x:Name="OpenBrainButton" Click="OpenBrain_Click" Background="Transparent" BorderThickness="0" CornerRadius="4" Height="30" Padding="8,3" FontSize="11" HorizontalAlignment="Left" HorizontalContentAlignment="Left" ToolTip.Tip="Open brain" AutomationProperties.Name="Open brain">
+          <TextBlock x:Name="BrainPath" Text="Open brain" TextTrimming="CharacterEllipsis" />
         </SplitButton>
         <TextBlock x:Name="SaveStatus" Grid.Column="2" Text="Ready" FontSize="11" Opacity="0.7" VerticalAlignment="Center" Margin="16,0" />
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,6,0">

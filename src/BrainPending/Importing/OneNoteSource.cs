@@ -4,21 +4,21 @@ using System.Xml.Linq;
 
 namespace BrainPending.Importing;
 
-internal sealed record ImportFolder(string Id, string Name);
-internal sealed record ImportPage(string Id, string Title, ImportFolder[] Folders)
+internal sealed record ImportCluster(string Id, string Name);
+internal sealed record ImportPage(string Id, string Title, ImportCluster[] Clusters)
 {
-    public string Location => string.Join(" / ", Folders.Select(f => f.Name));
+    public string Location => string.Join(" / ", Clusters.Select(f => f.Name));
     public override string ToString() => Title + " — " + Location;
 }
 
-internal interface INoteImportSource : IDisposable
+internal interface IThoughtImportSource : IDisposable
 {
     Task<IReadOnlyList<ImportPage>> GetPagesAsync(string? sourceFile, CancellationToken cancellation);
     Task<string> GetPageAsync(string id, CancellationToken cancellation);
     void IDisposable.Dispose() { }
 }
 
-internal sealed class OneNoteSource : INoteImportSource
+internal sealed class OneNoteSource : IThoughtImportSource
 {
     private readonly BlockingCollection<Action> _requests = new();
     private readonly object _lifetime = new();
@@ -62,7 +62,7 @@ internal sealed class OneNoteSource : INoteImportSource
             .Select(e => new ImportPage((string?)e.Attribute("ID") ?? throw new InvalidDataException("A OneNote page has no ID."),
                 (string?)e.Attribute("name") ?? "Untitled page",
                 e.Ancestors().Reverse().Where(a => a.Name.LocalName is "Notebook" or "SectionGroup" or "Section")
-                    .Select(a => new ImportFolder((string?)a.Attribute("ID") ?? throw new InvalidDataException("A OneNote section has no ID."),
+                    .Select(a => new ImportCluster((string?)a.Attribute("ID") ?? throw new InvalidDataException("A OneNote section has no ID."),
                         (string?)a.Attribute("name") ?? "Untitled section")).ToArray())).ToArray();
     }
 

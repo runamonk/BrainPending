@@ -22,7 +22,7 @@ public partial class MainWindow
 
     private void OpenFind()
     {
-        if (_note == null) return;
+        if (_thought == null) return;
         _findOpen = true;
         FindPanel.IsVisible = true;
         FindPanel.Height = 52;
@@ -66,7 +66,7 @@ public partial class MainWindow
 
     private bool HandleFindShortcut(KeyEventArgs e)
     {
-        if (_note == null) return false;
+        if (_thought == null) return false;
         if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Control) OpenFind();
         else if (e.Key == Key.F3 && e.KeyModifiers is KeyModifiers.None or KeyModifiers.Shift)
         {

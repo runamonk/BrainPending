@@ -6,28 +6,27 @@ using System.Text.Json;
 
 namespace BrainPending.Core;
 
-public sealed record WorkspaceEntry(string Path, string Name, bool IsFolder, DateTime ModifiedUtc, bool IsPinned = false);
-public sealed record NoteSnapshot(string Path, string Rtf, string Revision);
-public sealed record SaveResult(NoteSnapshot Note, bool IsConflict);
+public sealed record WorkspaceEntry(string Path, string Name, bool IsCluster, DateTime ModifiedUtc, bool IsPinned = false);
+public sealed record ThoughtSnapshot(string Path, string Rtf, string Revision);
+public sealed record SaveResult(ThoughtSnapshot Thought, bool IsConflict);
 
-public sealed class NoteWorkspace
+public sealed class BrainWorkspace
 {
     public const string EmptyRtf = @"{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}\f0\fs24\pard }";
     public string Root { get; }
     public event EventHandler<string>? Warning;
-    public string MetadataPath => System.IO.Path.Combine(Root, ".mynotes");
+    public string MetadataPath => System.IO.Path.Combine(Root, ".brainpending");
     public string TrashPath => System.IO.Path.Combine(MetadataPath, "trash", "items");
     public bool IsTrash(string path) => PathRules.AreEqual(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path)), TrashPath);
     public bool IsInTrash(string path) => PathRules.IsSameOrDescendant(System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path)), TrashPath);
-    public string ParentFolder(string path) => IsTrash(path) ? Root : System.IO.Path.GetDirectoryName(path)!;
+    public string ParentCluster(string path) => IsTrash(path) ? Root : System.IO.Path.GetDirectoryName(path)!;
 
-    public NoteWorkspace(string root)
+    public BrainWorkspace(string root)
     {
         Root = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(root));
         Directory.CreateDirectory(Root);
         CheckPath(TrashPath);
         Directory.CreateDirectory(TrashPath);
-        MigrateLegacyTrash();
     }
 
     public string CheckPath(string path, bool allowRoot = true)
@@ -47,7 +46,7 @@ public sealed class NoteWorkspace
         var index = 0;
         foreach (var part in relative.Split(System.IO.Path.DirectorySeparatorChar))
         {
-            if (part.StartsWith('.') && !(inTrash && index == 0 && part == ".mynotes")) throw new IOException("Internal brain folders cannot be edited here.");
+            if (part.StartsWith('.') && !(inTrash && index == 0 && part == ".brainpending")) throw new IOException("Internal brain folders cannot be edited here.");
             index++;
             current = System.IO.Path.Combine(current, part);
             if ((File.Exists(current) || Directory.Exists(current)) &&
@@ -57,9 +56,9 @@ public sealed class NoteWorkspace
         return full;
     }
 
-    public IReadOnlyList<WorkspaceEntry> List(string folder, string search = "", bool recursive = false)
+    public IReadOnlyList<WorkspaceEntry> List(string cluster, string search = "", bool recursive = false)
     {
-        folder = CheckPath(folder);
+        cluster = CheckPath(cluster);
         var pins = ReadPins();
         var query = search?.Trim() ?? "";
         var options = new EnumerationOptions
@@ -68,7 +67,7 @@ public sealed class NoteWorkspace
             AttributesToSkip = FileAttributes.ReparsePoint | FileAttributes.Hidden | FileAttributes.System,
             IgnoreInaccessible = true
         };
-        var entries = new FileSystemEnumerable<WorkspaceEntry>(folder, (ref FileSystemEntry entry) =>
+        var entries = new FileSystemEnumerable<WorkspaceEntry>(cluster, (ref FileSystemEntry entry) =>
         {
             var path = entry.ToFullPath();
             var name = entry.FileName.ToString();
@@ -83,14 +82,14 @@ public sealed class NoteWorkspace
         };
         return entries
             .Where(e => query.Length == 0 || e.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(e => e.IsPinned).ThenByDescending(e => e.IsFolder).ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+            .OrderByDescending(e => e.IsPinned).ThenByDescending(e => e.IsCluster).ThenBy(e => e.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 
     private string PinsPath => System.IO.Path.Combine(MetadataPath, "pins.json");
 
     private bool _pinsWarned;
 
-    // Pins are cosmetic: a damaged or busy file must not stop the notebook from opening.
+    // Pins are cosmetic: a damaged or busy file must not stop the brain from opening.
     // Updates still fail on read errors, so a briefly locked file is not overwritten.
     private HashSet<string> ReadPins(bool forUpdate = false)
     {
@@ -160,7 +159,7 @@ public sealed class NoteWorkspace
         return name;
     }
 
-    public string CreateFolder(string parent, string name)
+    public string CreateCluster(string parent, string name)
     {
         var path = CheckPath(System.IO.Path.Combine(CheckPath(parent), ValidateName(name)), false);
         if (Directory.Exists(path) || File.Exists(path)) throw new IOException("An item with that name already exists.");
@@ -168,7 +167,7 @@ public sealed class NoteWorkspace
         return path;
     }
 
-    public NoteSnapshot CreateNote(string parent, string name, string rtf = EmptyRtf)
+    public ThoughtSnapshot CreateThought(string parent, string name, string rtf = EmptyRtf)
     {
         var path = CheckPath(System.IO.Path.Combine(CheckPath(parent), ValidateName(name) + ".rtf"), false);
         if (File.Exists(path) || Directory.Exists(path)) throw new IOException("An item with that name already exists.");
@@ -188,7 +187,7 @@ public sealed class NoteWorkspace
         return new(path, rtf, Hash(bytes));
     }
 
-    public NoteSnapshot Read(string path)
+    public ThoughtSnapshot Read(string path)
     {
         path = CheckPath(path, false);
         var bytes = File.ReadAllBytes(path);
@@ -201,7 +200,7 @@ public sealed class NoteWorkspace
 
     public string? Revision(string path) => File.Exists(CheckPath(path, false)) ? Hash(File.ReadAllBytes(path)) : null;
 
-    public SaveResult Save(NoteSnapshot original, string rtf)
+    public SaveResult Save(ThoughtSnapshot original, string rtf)
     {
         var path = CheckPath(original.Path, false);
         var bytes = EncodeRtf(rtf);
@@ -217,7 +216,7 @@ public sealed class NoteWorkspace
             var parent = Directory.Exists(System.IO.Path.GetDirectoryName(path)) ? System.IO.Path.GetDirectoryName(path)! : Root;
             var conflictName = System.IO.Path.GetFileNameWithoutExtension(path);
             conflictName = conflictName[..Math.Min(conflictName.Length, 50)];
-            var conflict = CreateNote(parent, $"{conflictName} (conflict {DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N})", rtf);
+            var conflict = CreateThought(parent, $"{conflictName} (conflict {DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N})", rtf);
             return new(conflict, true);
         }
         WriteRevision(path, disk);
@@ -250,7 +249,7 @@ public sealed class NoteWorkspace
         }
     }
 
-    // Last revision this instance archived per note, so unchanged disk content is not stored twice.
+    // Last revision this instance archived per thought, so unchanged disk content is not stored twice.
     private readonly ConcurrentDictionary<string, string> _archived = new(PathRules.Comparer);
 
     private void WriteRevision(string path, byte[] bytes)
@@ -270,29 +269,29 @@ public sealed class NoteWorkspace
     public string Rename(string path, string name)
     {
         path = CheckPath(path, false);
-        var isFolder = Directory.Exists(path);
-        var target = CheckPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, ValidateName(name) + (isFolder ? "" : ".rtf")), false);
+        var isCluster = Directory.Exists(path);
+        var target = CheckPath(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, ValidateName(name) + (isCluster ? "" : ".rtf")), false);
         if (string.Equals(path, target, StringComparison.Ordinal)) return path;
         // A case-only rename targets the same item on Windows, so it is not a name clash.
         if (!PathRules.AreEqual(path, target) && (File.Exists(target) || Directory.Exists(target)))
             throw new IOException("An item with that name already exists.");
-        if (isFolder) Directory.Move(path, target); else File.Move(path, target);
+        if (isCluster) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
         return target;
     }
 
-    public string Move(string path, string destinationFolder)
+    public string Move(string path, string destinationCluster)
     {
         path = CheckPath(path, false);
-        destinationFolder = CheckPath(destinationFolder);
-        if (!Directory.Exists(destinationFolder)) throw new IOException("The destination cluster no longer exists.");
-        var isFolder = Directory.Exists(path);
-        if (isFolder && PathRules.IsSameOrDescendant(destinationFolder, path))
+        destinationCluster = CheckPath(destinationCluster);
+        if (!Directory.Exists(destinationCluster)) throw new IOException("The destination cluster no longer exists.");
+        var isCluster = Directory.Exists(path);
+        if (isCluster && PathRules.IsSameOrDescendant(destinationCluster, path))
             throw new IOException("A cluster cannot be moved into itself or one of its subclusters.");
-        var target = CheckPath(System.IO.Path.Combine(destinationFolder, System.IO.Path.GetFileName(path)), false);
+        var target = CheckPath(System.IO.Path.Combine(destinationCluster, System.IO.Path.GetFileName(path)), false);
         if (PathRules.AreEqual(path, target)) return path;
         if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists in the destination cluster.");
-        if (isFolder) Directory.Move(path, target); else File.Move(path, target);
+        if (isCluster) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
         return target;
     }
@@ -321,30 +320,13 @@ public sealed class NoteWorkspace
 
     private string AvailableTrashPath(string path)
     {
-        var isFolder = Directory.Exists(path);
-        var name = isFolder ? System.IO.Path.GetFileName(path) : System.IO.Path.GetFileNameWithoutExtension(path);
-        var extension = isFolder ? "" : System.IO.Path.GetExtension(path);
+        var isCluster = Directory.Exists(path);
+        var name = isCluster ? System.IO.Path.GetFileName(path) : System.IO.Path.GetFileNameWithoutExtension(path);
+        var extension = isCluster ? "" : System.IO.Path.GetExtension(path);
         var target = System.IO.Path.Combine(TrashPath, name + extension);
         for (var suffix = 2; File.Exists(target) || Directory.Exists(target); suffix++)
             target = System.IO.Path.Combine(TrashPath, $"{name} ({suffix}){extension}");
         return target;
-    }
-
-    private void MigrateLegacyTrash()
-    {
-        var container = System.IO.Path.GetDirectoryName(TrashPath)!;
-        foreach (var batch in Directory.EnumerateDirectories(container))
-        {
-            if (IsTrash(batch) || (File.GetAttributes(batch) & FileAttributes.ReparsePoint) != 0 ||
-                !File.Exists(System.IO.Path.Combine(batch, "restore.json"))) continue;
-            foreach (var item in Directory.EnumerateFileSystemEntries(batch))
-            {
-                if ((File.GetAttributes(item) & FileAttributes.ReparsePoint) != 0 ||
-                    (!Directory.Exists(item) && !System.IO.Path.GetExtension(item).Equals(".rtf", StringComparison.OrdinalIgnoreCase))) continue;
-                var target = AvailableTrashPath(item);
-                if (Directory.Exists(item)) Directory.Move(item, target); else File.Move(item, target);
-            }
-        }
     }
 
     public void EmptyTrash(Action<string> recycle)

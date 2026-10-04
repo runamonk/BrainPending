@@ -7,9 +7,9 @@ public sealed class AttachmentTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "BrainPending-attachments-test-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
-    public void CopiesBytesAndKeepsDuplicateNamesSeparateAfterNotebookMove()
+    public void CopiesBytesAndKeepsDuplicateNamesSeparateAfterBrainMove()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var source = Path.Combine(_root, "source.bin");
         File.WriteAllBytes(source, [0, 1, 2, 255]);
         var store = new AttachmentStore(_root);
@@ -44,16 +44,16 @@ public sealed class AttachmentTests : IDisposable
         File.WriteAllText(source, "test");
         var store = new AttachmentStore(_root);
         var attachment = store.Add(source, name, TestContext.Current.CancellationToken);
-        Assert.Equal(attachment.Name, NoteWorkspace.ValidateName(attachment.Name));
+        Assert.Equal(attachment.Name, BrainWorkspace.ValidateName(attachment.Name));
         Assert.Equal(attachment, store.Resolve(attachment.Link));
-        Assert.StartsWith(Path.Combine(_root, ".mynotes", "attachments"), attachment.Path);
+        Assert.StartsWith(Path.Combine(_root, ".brainpending", "attachments"), attachment.Path);
     }
 
     [Theory]
     [InlineData("file:///C:/secret.txt")]
-    [InlineData("mynotes-attachment:../../secret")]
-    [InlineData("mynotes-attachment:00000000000000000000000000000000/%2e%2e%2fsecret")]
-    [InlineData("mynotes-attachment:00000000000000000000000000000000/file.txt:stream")]
+    [InlineData("brainpending-attachment:../../secret")]
+    [InlineData("brainpending-attachment:00000000000000000000000000000000/%2e%2e%2fsecret")]
+    [InlineData("brainpending-attachment:00000000000000000000000000000000/file.txt:stream")]
     public void RejectsMalformedAndEscapingLinks(string link) =>
         Assert.Throws<IOException>(() => new AttachmentStore(_root).Resolve(link));
 

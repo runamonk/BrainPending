@@ -173,7 +173,7 @@ public partial class MainWindow
     {
         if (_settings.SidebarPinned) _sidebarWidth = Math.Max(200, Sidebar.Bounds.Width);
         var pinned = !_settings.SidebarPinned;
-        _settings = NotebookSettings.Read(_settingsPath) with { SidebarPinned = pinned };
+        _settings = BrainSettings.Read(_settingsPath) with { SidebarPinned = pinned };
         try { _settings.Save(_settingsPath); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         { ShowNotice("Could not remember sidebar preference: " + error.Message); }
@@ -195,7 +195,7 @@ public partial class MainWindow
         else { ShowSidebar(); SearchBox.Focus(); }
     }
 
-    private void CollapseSidebarAfterNoteSelection()
+    private void CollapseSidebarAfterThoughtSelection()
     {
         if (_settings.SidebarPinned) return;
         EditorView.Editor.Focus();
@@ -206,7 +206,7 @@ public partial class MainWindow
     {
         _sidebarHide.Stop();
         _sidebarClosedByButton = true;
-        // Do not steal focus from an action's dialog or the newly opened note.
+        // Do not steal focus from an action's dialog or the newly opened thought.
         if (Sidebar.IsKeyboardFocusWithin) SidebarReveal.Focus();
         HideSidebar();
     }

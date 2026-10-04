@@ -2,12 +2,12 @@ namespace BrainPending.Core;
 
 public sealed record StoredAttachment(string Name, string Path, long Size, string Link);
 
-// References are relative to the notebook, so note/folder renames and notebook moves
+// References are relative to the brain, so thought/cluster renames and brain moves
 // do not invalidate them. Keep files for undo, history and conflict copies as well.
-public sealed class AttachmentStore(string notebookRoot)
+public sealed class AttachmentStore(string brainRoot)
 {
-    public const string Scheme = "mynotes-attachment:";
-    private readonly string _root = System.IO.Path.GetFullPath(notebookRoot);
+    public const string Scheme = "brainpending-attachment:";
+    private readonly string _root = System.IO.Path.GetFullPath(brainRoot);
 
     public StoredAttachment Add(string source, string name, CancellationToken cancellation = default)
     {
@@ -63,11 +63,11 @@ public sealed class AttachmentStore(string notebookRoot)
         var name = Uri.UnescapeDataString(parts[1]);
         if (name != SafeName(name)) throw new IOException("Invalid attachment filename.");
         var path = AttachmentPath(parts[0], name);
-        if (!File.Exists(path)) throw new IOException("This attachment is missing. Copy the complete brain, including its .mynotes folder.");
+        if (!File.Exists(path)) throw new IOException("This attachment is missing. Copy the complete brain, including its .brainpending folder.");
         return new(name, path, new FileInfo(path).Length, link);
     }
 
-    // Only call for new files whose note was never saved.
+    // Only call for new files whose thought was never saved.
     public void Discard(StoredAttachment attachment)
     {
         var stored = Resolve(attachment.Link);
@@ -78,7 +78,7 @@ public sealed class AttachmentStore(string notebookRoot)
     private string AttachmentPath(string id, string name)
     {
         var current = _root;
-        foreach (var part in new[] { ".mynotes", "attachments", id, name })
+        foreach (var part in new[] { ".brainpending", "attachments", id, name })
         {
             current = System.IO.Path.Combine(current, part);
             if ((File.Exists(current) || Directory.Exists(current)) &&
@@ -94,7 +94,7 @@ public sealed class AttachmentStore(string notebookRoot)
         name = new string(name.Select(c => char.IsControl(c) || "<>:\"/\\|?*".Contains(c) ? '_' : c).ToArray()).Trim().Trim('.');
         if (name.Length > 100) name = name[..80] + System.IO.Path.GetExtension(name)[..Math.Min(20, System.IO.Path.GetExtension(name).Length)];
         if (string.IsNullOrWhiteSpace(name)) name = "attachment.bin";
-        try { NoteWorkspace.ValidateName(name); }
+        try { BrainWorkspace.ValidateName(name); }
         catch (IOException) { name = "attachment-" + name; }
         return name;
     }

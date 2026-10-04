@@ -198,7 +198,7 @@ internal static class OneNoteConverter
             foreach (var child in element.Elements()) Render(child);
             html.Append("</").Append(tag).Append('>');
         }
-        // The page title becomes the note name and is already shown above the editor.
+        // The page title becomes the thought name and is already shown above the editor.
         // Exclude only title metadata; matching headings within outlines are content.
         foreach (var child in page.Elements().Where(e => e.Name.LocalName != "Title")
             .OrderBy(e => Position(e, "y")).ThenBy(e => Position(e, "x"))) Render(child);

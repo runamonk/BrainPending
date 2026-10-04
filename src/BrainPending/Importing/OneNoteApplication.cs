@@ -17,7 +17,7 @@ internal interface IOneNoteApplication
     void DeleteHierarchy([MarshalAs(UnmanagedType.BStr)] string id, DateTime expectedModified, bool permanently);
     void CreateNewPage([MarshalAs(UnmanagedType.BStr)] string section,
         [MarshalAs(UnmanagedType.BStr)] out string id, int style);
-    void CloseNotebook([MarshalAs(UnmanagedType.BStr)] string id, bool force);
+    void CloseBrain([MarshalAs(UnmanagedType.BStr)] string id, bool force);
     void GetHierarchyParent([MarshalAs(UnmanagedType.BStr)] string id, [MarshalAs(UnmanagedType.BStr)] out string parent);
     void GetPageContent([MarshalAs(UnmanagedType.BStr)] string id,
         [MarshalAs(UnmanagedType.BStr)] out string xml, int pageInfo, int schema);

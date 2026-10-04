@@ -20,9 +20,9 @@ namespace BrainPending;
 
 public partial class MainWindow : Window
 {
-    private NoteWorkspace? _workspace;
-    private string _folder = "";
-    private NoteSnapshot? _note;
+    private BrainWorkspace? _workspace;
+    private string _cluster = "";
+    private ThoughtSnapshot? _thought;
     private bool _loading, _dirty, _refreshing, _inDialog;
     private string _listingSignature = "";
     private readonly DispatcherTimer _autosave = new() { Interval = TimeSpan.FromMilliseconds(750) };
@@ -31,12 +31,12 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _saveRetry = new();
     private int _saveRetryCount;
     private bool _closeAfterSave;
-    private NotebookSettings _settings;
+    private BrainSettings _settings;
     private readonly string? _settingsPath;
     private readonly ThemeCatalog _themes;
     private PixelPoint? _normalPosition;
     private Size _normalSize;
-    private readonly Flyout _recentNotebooksMenu = new() { Placement = PlacementMode.Top };
+    private readonly Flyout _recentBrainsMenu = new() { Placement = PlacementMode.Top };
     private readonly string? _startupPath;
     private bool _closed;
     private string? _titleEditingPath;
@@ -49,11 +49,11 @@ public partial class MainWindow : Window
 
     public MainWindow() : this(null) { }
 
-    internal MainWindow(string? notebookPath, string? settingsPath = null)
+    internal MainWindow(string? brainPath, string? settingsPath = null)
     {
-        _startupPath = notebookPath;
+        _startupPath = brainPath;
         _settingsPath = settingsPath;
-        _settings = NotebookSettings.Read(settingsPath);
+        _settings = BrainSettings.Read(settingsPath);
         _themes = new ThemeCatalog(settingsPath);
         _recovery = new SaveRecovery(settingsPath);
         string? themeError = null;
@@ -62,9 +62,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         InitializeFind();
         InitializeSidebar();
-        OpenNotebookButton.Flyout = _recentNotebooksMenu;
-        _recentNotebooksMenu.Opening += (_, _) => RefreshRecentNotebooks();
-        RefreshRecentNotebooks();
+        OpenBrainButton.Flyout = _recentBrainsMenu;
+        _recentBrainsMenu.Opening += (_, _) => RefreshRecentBrains();
+        RefreshRecentBrains();
         RestoreWindowBounds();
         RichEditorLocalization.Language = "en";
         EditorView.Toolbar.ToolbarLevel = ToolbarLevel.Normal;
@@ -82,12 +82,12 @@ public partial class MainWindow : Window
         EditorView.Editor.LinkHandler = HandleAttachmentLink;
         EditorView.Editor.TextChanged += (_, _) =>
         {
-            if (_loading || _note == null || !EditorView.Editor.IsModified) return;
+            if (_loading || _thought == null || !EditorView.Editor.IsModified) return;
             ScheduleSave();
         };
         EditorView.Editor.TypingFormatChanged += (_, format) =>
         {
-            if (_loading || _note == null) return;
+            if (_loading || _thought == null) return;
             _thoughtFormatting = ThoughtFormatting.From(format);
             ScheduleSave();
         };
@@ -111,7 +111,7 @@ public partial class MainWindow : Window
                 _normalPosition = Position;
                 _normalSize = ClientSize;
             }
-            InitializeNotebook();
+            InitializeBrain();
             if (themeError != null) ShowNotice(themeError);
         };
         PositionChanged += (_, _) =>
@@ -183,7 +183,7 @@ public partial class MainWindow : Window
         {
             // Preserve preferences saved by another open instance.
             var size = WindowState == WindowState.Normal ? ClientSize : _normalSize;
-            _settings = NotebookSettings.Read(_settingsPath) with
+            _settings = BrainSettings.Read(_settingsPath) with
             {
                 WindowX = point.X, WindowY = point.Y,
                 WindowWidth = size.Width, WindowHeight = size.Height,
@@ -197,26 +197,26 @@ public partial class MainWindow : Window
         }
     }
 
-    private void InitializeNotebook()
+    private void InitializeBrain()
     {
         var args = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.Args ?? [];
-        var flag = Array.IndexOf(args, "--notes");
-        var adjacent = Path.Combine(AppContext.BaseDirectory, "Notes");
+        var flag = Array.IndexOf(args, "--brain");
+        var adjacent = Path.Combine(AppContext.BaseDirectory, "Brain");
         var explicitPath = _startupPath ?? (flag >= 0 && flag + 1 < args.Length ? args[flag + 1] : null);
-        if (explicitPath == null && _settings.SkipAutomaticNotebook)
+        if (explicitPath == null && _settings.SkipAutomaticBrain)
         {
             SaveStatus.Text = "Choose a brain";
             ShowNotice("Automatic reopening was paused after a brain failed to open. Use Open brain or choose a recent brain to continue.");
             return;
         }
-        var remembered = explicitPath == null && _settings.NotebookPath != null;
-        var path = explicitPath ?? _settings.NotebookPath ?? adjacent;
+        var remembered = explicitPath == null && _settings.BrainPath != null;
+        var path = explicitPath ?? _settings.BrainPath ?? adjacent;
         try
         {
             if (explicitPath == null)
             {
                 // Persist before loading: a crash during startup must not cause a retry loop.
-                _settings = NotebookSettings.Read(_settingsPath) with { SkipAutomaticNotebook = true };
+                _settings = BrainSettings.Read(_settingsPath) with { SkipAutomaticBrain = true };
                 _settings.Save(_settingsPath);
             }
             if (remembered && !Directory.Exists(path))
@@ -229,18 +229,18 @@ public partial class MainWindow : Window
             _watcher = null;
             _poll.Stop();
             _workspace = null;
-            _folder = "";
+            _cluster = "";
             Browser.ItemsSource = null;
-            NotebookPath.Text = "Open brain";
-            ClearNote();
+            BrainPath.Text = "Open brain";
+            ClearThought();
             SaveStatus.Text = "Choose a brain";
-            // A failed --notes path says nothing about the remembered notebook; leave it alone.
+            // A failed --brain path says nothing about the remembered brain; leave it alone.
             if (explicitPath != null)
             {
                 ShowNotice("Could not open the brain: " + e.Message + " Use Open brain to choose a brain." + PendingRecoveryNotice());
                 return;
             }
-            _settings = NotebookSettings.Read(_settingsPath) with { NotebookPath = null, SkipAutomaticNotebook = true };
+            _settings = BrainSettings.Read(_settingsPath) with { BrainPath = null, SkipAutomaticBrain = true };
             try { _settings.Save(_settingsPath); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             { System.Diagnostics.Trace.TraceWarning("Could not remember startup failure: " + error.Message); }
@@ -250,8 +250,8 @@ public partial class MainWindow : Window
 
     private void SetWorkspace(string path)
     {
-        // Prepare everything that can fail before replacing the open notebook.
-        var workspace = new NoteWorkspace(path);
+        // Prepare everything that can fail before replacing the open brain.
+        var workspace = new BrainWorkspace(path);
         workspace.Warning += (_, warning) =>
         {
             if (Dispatcher.UIThread.CheckAccess()) ShowNotice(warning);
@@ -273,28 +273,28 @@ public partial class MainWindow : Window
         _watcher?.Dispose();
         _watcher = watcher;
         _workspace = workspace;
-        _recentNotes.Clear();
-        _folder = workspace.Root;
-        ClearNote(forget: false);
+        _recentThoughts.Clear();
+        _cluster = workspace.Root;
+        ClearThought(forget: false);
         SearchBox.Text = "";
-        NotebookPath.Text = workspace.Root;
-        ToolTip.SetTip(NotebookPath, workspace.Root);
+        BrainPath.Text = workspace.Root;
+        ToolTip.SetTip(BrainPath, workspace.Root);
         _listingSignature = "";
         RefreshBrowser();
         _poll.Start();
         SaveStatus.Text = "Watching for changes";
         try
         {
-            _settings = NotebookSettings.Read(_settingsPath).RememberNotebook(workspace.Root);
+            _settings = BrainSettings.Read(_settingsPath).RememberBrain(workspace.Root);
             _settings.Save(_settingsPath);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             ShowNotice("Could not remember this brain: " + e.Message);
         }
-        RestoreLastNote();
+        RestoreLastThought();
         RestoreRecoveredChanges();
-        RefreshRecentNotebooks();
+        RefreshRecentBrains();
     }
 
     private void RestoreRecoveredChanges()
@@ -308,7 +308,7 @@ public partial class MainWindow : Window
             try
             {
                 var path = _workspace.CheckPath(Path.Combine(_workspace.Root, recovered.RelativePath), false);
-                var result = _workspace.Save(new NoteSnapshot(path, "", recovered.Revision), recovered.Rtf);
+                var result = _workspace.Save(new ThoughtSnapshot(path, "", recovered.Revision), recovered.Rtf);
                 restored.Add(result.IsConflict ? $"‘{name}’ (as a conflict copy)" : $"‘{name}’");
                 try { SaveRecovery.Delete(file); }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -321,61 +321,61 @@ public partial class MainWindow : Window
             if (PendingRecoveryNotice() is { Length: > 0 } pending) ShowNotice(pending.Trim());
             return;
         }
-        // Reload the open note if a recovered copy just replaced it.
+        // Reload the open thought if a recovered copy just replaced it.
         CheckExternalChanges();
         ShowNotice((restored.Count > 0 ? "Recovered unsaved changes to " + string.Join(", ", restored) + ". " : "")
             + (failed.Count > 0 ? "Some unsaved changes could not be restored yet and will be tried again next time: " + string.Join("; ", failed) : "")
             + PendingRecoveryNotice());
     }
 
-    // Mentions recovery copies that belong to other notebooks, which wait until those are opened.
+    // Mentions recovery copies that belong to other brains, which wait until those are opened.
     private string PendingRecoveryNotice()
     {
-        var others = _recovery.Pending().Select(p => p.Note.Notebook)
+        var others = _recovery.Pending().Select(p => p.Thought.Brain)
             .Where(n => _workspace == null || !PathRules.AreEqual(n, _workspace.Root))
             .Distinct(PathRules.Comparer).ToList();
         return others.Count == 0 ? "" : " Unsaved changes are waiting for " + string.Join(", ", others) + "; open that brain to restore them.";
     }
 
-    private void RememberOpenNote(string? path)
+    private void RememberOpenThought(string? path)
     {
         if (_workspace == null) return;
         try
         {
-            _settings = NotebookSettings.Read(_settingsPath).RememberNote(_workspace.Root,
+            _settings = BrainSettings.Read(_settingsPath).RememberThought(_workspace.Root,
                 path == null ? null : Path.GetRelativePath(_workspace.Root, path));
             _settings.Save(_settingsPath);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        { System.Diagnostics.Trace.TraceWarning("Could not remember the open note: " + e.Message); }
+        { System.Diagnostics.Trace.TraceWarning("Could not remember the open thought: " + e.Message); }
     }
 
-    private void RestoreLastNote()
+    private void RestoreLastThought()
     {
-        if (_workspace == null || _settings.LastNote(_workspace.Root) is not string relative) return;
+        if (_workspace == null || _settings.LastThought(_workspace.Root) is not string relative) return;
         // Clear first so an interrupted load is not retried on the next launch.
-        RememberOpenNote(null);
+        RememberOpenThought(null);
         try
         {
             var path = _workspace.CheckPath(Path.Combine(_workspace.Root, relative), false);
-            var note = _workspace.Read(path);
-            LoadNote(note);
-            _folder = Path.GetDirectoryName(path)!;
+            var thought = _workspace.Read(path);
+            LoadThought(thought);
+            _cluster = Path.GetDirectoryName(path)!;
             RefreshBrowser(true);
         }
         catch (Exception e)
         {
-            ClearNote();
-            _folder = _workspace.Root;
+            ClearThought();
+            _cluster = _workspace.Root;
             RefreshBrowser(true);
             ShowNotice("The last open thought could not be reopened. Choose another thought to continue. " + e.Message);
         }
     }
 
-    private void RefreshRecentNotebooks()
+    private void RefreshRecentBrains()
     {
-        var settings = NotebookSettings.Read(_settingsPath);
-        var paths = settings.RecentNotebooks ?? (settings.NotebookPath is string last ? new[] { last } : []);
+        var settings = BrainSettings.Read(_settingsPath);
+        var paths = settings.RecentBrains ?? (settings.BrainPath is string last ? new[] { last } : []);
         var items = new StackPanel { Spacing = 4 };
         foreach (var path in paths)
         {
@@ -388,7 +388,7 @@ public partial class MainWindow : Window
             removeIcon.Bind(Avalonia.Controls.Shapes.Shape.StrokeProperty, new DynamicResourceExtension("AppIconBrush"));
             var remove = new Button
             {
-                Name = "RemoveRecentNotebookButton", Content = removeIcon,
+                Name = "RemoveRecentBrainButton", Content = removeIcon,
                 Classes = { "quiet" }, Width = 30, Height = 30,
                 Padding = new Thickness(6), Margin = new Thickness(12, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center
@@ -398,14 +398,14 @@ public partial class MainWindow : Window
             remove.Click += async (_, e) =>
             {
                 e.Handled = true;
-                _recentNotebooksMenu.Hide();
+                _recentBrainsMenu.Hide();
                 await Run(async () =>
                 {
                     if (!await Confirm("Remove recent brain?",
                         $"Remove ‘{name}’ from recent brains? The brain and its thoughts will remain unchanged.", "Remove")) return;
-                    _settings = NotebookSettings.Read(_settingsPath).RemoveRecentNotebook(path);
+                    _settings = BrainSettings.Read(_settingsPath).RemoveRecentBrain(path);
                     _settings.Save(_settingsPath);
-                    RefreshRecentNotebooks();
+                    RefreshRecentBrains();
                 });
             };
             var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
@@ -431,7 +431,7 @@ public partial class MainWindow : Window
             ToolTip.SetTip(entry, path);
             entry.Click += async (_, _) => await Run(() =>
             {
-                _recentNotebooksMenu.Hide();
+                _recentBrainsMenu.Hide();
                 if (!Directory.Exists(path)) throw new IOException("This brain is no longer available: " + path);
                 if (SaveCurrent()) SetWorkspace(path);
                 return Task.CompletedTask;
@@ -440,13 +440,13 @@ public partial class MainWindow : Window
             items.Children.Add(header);
         }
         if (items.Children.Count == 0) items.Children.Add(new TextBlock { Text = "No recent brains" });
-        _recentNotebooksMenu.Content = items;
+        _recentBrainsMenu.Content = items;
     }
 
     private int _checkQueued;
     private void WatcherChanged(object sender, FileSystemEventArgs e)
     {
-        if (Path.GetFileName(e.FullPath).StartsWith('.') || e.FullPath.Contains(Path.DirectorySeparatorChar + ".mynotes" + Path.DirectorySeparatorChar)) return;
+        if (Path.GetFileName(e.FullPath).StartsWith('.') || e.FullPath.Contains(Path.DirectorySeparatorChar + ".brainpending" + Path.DirectorySeparatorChar)) return;
         if (Interlocked.Exchange(ref _checkQueued, 1) == 1) return;
         Dispatcher.UIThread.Post(() => { Interlocked.Exchange(ref _checkQueued, 0); CheckExternalChanges(); });
     }
@@ -454,32 +454,32 @@ public partial class MainWindow : Window
     private void RefreshBrowser(bool force = false)
     {
         if (_workspace == null) return;
-        while (!Directory.Exists(_folder) && !PathRules.AreEqual(_folder, _workspace.Root))
-            _folder = _workspace.ParentFolder(_folder);
-        var entries = _workspace.List(_folder, SearchBox.Text ?? "");
-        var signature = _folder + "|" + SearchBox.Text + "|" + string.Join('|', entries.Select(e => e.Path + e.ModifiedUtc.Ticks + e.IsPinned.ToString()));
+        while (!Directory.Exists(_cluster) && !PathRules.AreEqual(_cluster, _workspace.Root))
+            _cluster = _workspace.ParentCluster(_cluster);
+        var entries = _workspace.List(_cluster, SearchBox.Text ?? "");
+        var signature = _cluster + "|" + SearchBox.Text + "|" + string.Join('|', entries.Select(e => e.Path + e.ModifiedUtc.Ticks + e.IsPinned.ToString()));
         if (!force && signature == _listingSignature) return;
         _listingSignature = signature;
         var rows = new List<BrowserItem>();
-        if (!PathRules.AreEqual(_folder, _workspace.Root))
+        if (!PathRules.AreEqual(_cluster, _workspace.Root))
         {
-            var parent = _workspace.ParentFolder(_folder);
+            var parent = _workspace.ParentCluster(_cluster);
             rows.Add(new(parent, "Up to " + (PathRules.AreEqual(parent, _workspace.Root) ? "brain" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, "Parent cluster"));
         }
-        rows.AddRange(entries.Select(e => new BrowserItem(e.Path, e.Name, e.IsFolder, false,
-            !string.IsNullOrWhiteSpace(SearchBox.Text) ? Path.GetRelativePath(_folder, e.Path) : e.IsFolder ? "Cluster" : "Edited " + e.ModifiedUtc.ToLocalTime().ToString("d MMM, HH:mm"), IsPinned: e.IsPinned)));
-        if (PathRules.AreEqual(_folder, _workspace.Root) && (string.IsNullOrWhiteSpace(SearchBox.Text) || "Trash".Contains(SearchBox.Text.Trim(), StringComparison.OrdinalIgnoreCase)))
+        rows.AddRange(entries.Select(e => new BrowserItem(e.Path, e.Name, e.IsCluster, false,
+            !string.IsNullOrWhiteSpace(SearchBox.Text) ? Path.GetRelativePath(_cluster, e.Path) : e.IsCluster ? "Cluster" : "Edited " + e.ModifiedUtc.ToLocalTime().ToString("d MMM, HH:mm"), IsPinned: e.IsPinned)));
+        if (PathRules.AreEqual(_cluster, _workspace.Root) && (string.IsNullOrWhiteSpace(SearchBox.Text) || "Trash".Contains(SearchBox.Text.Trim(), StringComparison.OrdinalIgnoreCase)))
             rows.Add(new(_workspace.TrashPath, "Trash", true, false, "", true));
         _refreshing = true;
         try
         {
             Browser.ItemsSource = rows;
-            Browser.SelectedItem = rows.FirstOrDefault(e => PathRules.AreEqual(e.Path, _note?.Path));
+            Browser.SelectedItem = rows.FirstOrDefault(e => PathRules.AreEqual(e.Path, _thought?.Path));
         }
         finally { _refreshing = false; }
-        FolderEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? (_workspace.IsTrash(_folder) ? "Trash is empty." : "Create your first thought here.") : "No matching titles.";
-        FolderEmpty.IsVisible = rows.All(r => r.IsUp);
-        ItemCount.Text = $"{entries.Count(e => !e.IsFolder)} thoughts · {entries.Count(e => e.IsFolder)} clusters";
+        ClusterEmpty.Text = string.IsNullOrWhiteSpace(SearchBox.Text) ? (_workspace.IsTrash(_cluster) ? "Trash is empty." : "Create your first thought here.") : "No matching titles.";
+        ClusterEmpty.IsVisible = rows.All(r => r.IsUp);
+        ItemCount.Text = $"{entries.Count(e => !e.IsCluster)} thoughts · {entries.Count(e => e.IsCluster)} clusters";
     }
 
     private void CheckExternalChanges()
@@ -487,14 +487,14 @@ public partial class MainWindow : Window
         if (_workspace == null || _loading || _inDialog || _closed) return;
         try
         {
-            if (_note != null)
+            if (_thought != null)
             {
                 // Hash only when size or time changed. The stamp is taken before hashing,
                 // so a write during the hash changes it and is checked on the next poll.
-                var info = new FileInfo(_note.Path);
-                var stamp = (_note.Path, _note.Revision, info.Exists ? info.Length : -1, info.Exists ? info.LastWriteTimeUtc : default);
-                var revision = stamp == _checkedStamp ? _note.Revision : _workspace.Revision(_note.Path);
-                if (revision == _note.Revision) _checkedStamp = stamp;
+                var info = new FileInfo(_thought.Path);
+                var stamp = (_thought.Path, _thought.Revision, info.Exists ? info.Length : -1, info.Exists ? info.LastWriteTimeUtc : default);
+                var revision = stamp == _checkedStamp ? _thought.Revision : _workspace.Revision(_thought.Path);
+                if (revision == _thought.Revision) _checkedStamp = stamp;
                 else
                 {
                     if (_dirty || EditorView.Editor.IsModified)
@@ -503,12 +503,12 @@ public partial class MainWindow : Window
                     }
                     else if (revision == null)
                     {
-                        ClearNote();
+                        ClearThought();
                         ShowNotice("The open thought was moved or deleted outside this app. The cluster has been refreshed.");
                     }
                     else
                     {
-                        LoadNote(_workspace.Read(_note.Path));
+                        LoadThought(_workspace.Read(_thought.Path));
                         SaveStatus.Text = "Updated from disk";
                     }
                 }
@@ -532,15 +532,15 @@ public partial class MainWindow : Window
     {
         if (force) _saveRetry.Stop();
         else if (_saveRetry.IsEnabled) return false;
-        if (_note == null || _workspace == null || (!_dirty && !EditorView.Editor.IsModified)) return true;
+        if (_thought == null || _workspace == null || (!_dirty && !EditorView.Editor.IsModified)) return true;
         SaveResult result;
         string? rtf = null;
         try
         {
             rtf = EditorView.Editor.ToRtf();
             if (_thoughtFormatting != null) rtf = _thoughtFormatting.Write(rtf);
-            result = _workspace.Save(_note, rtf);
-            EditorView.FileSizeBytes = new FileInfo(result.Note.Path).Length;
+            result = _workspace.Save(_thought, rtf);
+            EditorView.FileSizeBytes = new FileInfo(result.Thought.Path).Length;
         }
         catch (Exception e) when (SaveRetryPolicy.IsTemporary(e) && _saveRetryCount < SaveRetryPolicy.Delays.Length)
         {
@@ -567,14 +567,14 @@ public partial class MainWindow : Window
             RetrySaveButton.IsEnabled = true;
             return false;
         }
-        if (!PathRules.AreEqual(result.Note.Path, _note.Path)) RememberOpenNote(result.Note.Path);
-        _note = result.Note;
+        if (!PathRules.AreEqual(result.Thought.Path, _thought.Path)) RememberOpenThought(result.Thought.Path);
+        _thought = result.Thought;
         _saveRetryCount = 0;
         DeleteRecovery();
         if (RetrySaveButton.IsVisible) { Notice.IsVisible = false; RetrySaveButton.IsVisible = false; }
         _dirty = false;
         EditorView.Editor.MarkSaved();
-        NoteTitle.Text = Path.GetFileNameWithoutExtension(_note.Path);
+        ThoughtTitle.Text = Path.GetFileNameWithoutExtension(_thought.Path);
         SaveStatus.Text = "Saved locally · " + DateTime.Now.ToString("HH:mm");
         try { RefreshBrowser(); }
         catch (Exception error) { ShowNotice("The thought was saved, but the brain list could not be refreshed: " + error.Message); }
@@ -583,14 +583,14 @@ public partial class MainWindow : Window
         return true;
     }
 
-    // Keeps the latest unsaved text outside the notebook so closing cannot lose it.
+    // Keeps the latest unsaved text outside the brain so closing cannot lose it.
     private void WriteRecovery(string? rtf)
     {
         _recoveryCurrent = false;
-        if (rtf == null || _note == null || _workspace == null) return;
+        if (rtf == null || _thought == null || _workspace == null) return;
         try
         {
-            _recoveryFile = _recovery.Write(_recoveryFile, _workspace.Root, _note, rtf);
+            _recoveryFile = _recovery.Write(_recoveryFile, _workspace.Root, _thought, rtf);
             _recoveryCurrent = true;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -616,36 +616,36 @@ public partial class MainWindow : Window
         Close();
     }
 
-    private readonly List<string> _recentNotes = [];
-    private readonly Dictionary<string, (EditorTextPosition Text, Vector Scroll)> _notePositions =
+    private readonly List<string> _recentThoughts = [];
+    private readonly Dictionary<string, (EditorTextPosition Text, Vector Scroll)> _thoughtPositions =
         new(PathRules.Comparer);
 
-    private void RememberNotePosition()
+    private void RememberThoughtPosition()
     {
-        if (_note != null)
-            _notePositions[_note.Path] = (EditorView.Editor.CaptureTextPosition(), EditorView.ScrollOffset);
+        if (_thought != null)
+            _thoughtPositions[_thought.Path] = (EditorView.Editor.CaptureTextPosition(), EditorView.ScrollOffset);
     }
 
-    private void LoadNote(NoteSnapshot note)
+    private void LoadThought(ThoughtSnapshot thought)
     {
         _loading = true;
         try
         {
-            RememberNotePosition();
-            if (!EditorView.Editor.TryLoadRtf(note.Rtf, out var error))
+            RememberThoughtPosition();
+            if (!EditorView.Editor.TryLoadRtf(thought.Rtf, out var error))
                 throw new IOException("This RTF could not be opened: " + error + ". The file has not been changed.");
             CancelTitleEditing();
-            _thoughtFormatting = ThoughtFormatting.Read(note.Rtf);
+            _thoughtFormatting = ThoughtFormatting.Read(thought.Rtf);
             EditorView.ScrollToTop();
-            _note = note;
-            EditorView.FileSizeBytes = new FileInfo(note.Path).Length;
+            _thought = thought;
+            EditorView.FileSizeBytes = new FileInfo(thought.Path).Length;
             _dirty = false;
             _autosave.Stop();
-            NoteTitle.Text = Path.GetFileNameWithoutExtension(note.Path);
-            Breadcrumb.Text = (_workspace!.IsInTrash(note.Path) ? "Trash  /  " + Path.GetRelativePath(_workspace.TrashPath, note.Path) : "Brain  /  " + Path.GetRelativePath(_workspace.Root, note.Path)).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
+            ThoughtTitle.Text = Path.GetFileNameWithoutExtension(thought.Path);
+            Breadcrumb.Text = (_workspace!.IsInTrash(thought.Path) ? "Trash  /  " + Path.GetRelativePath(_workspace.TrashPath, thought.Path) : "Brain  /  " + Path.GetRelativePath(_workspace.Root, thought.Path)).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
             EditorView.IsVisible = true;
             Welcome.IsVisible = false;
-            if (_notePositions.TryGetValue(note.Path, out var position))
+            if (_thoughtPositions.TryGetValue(thought.Path, out var position))
             {
                 EditorView.Editor.RestoreTextPosition(position.Text);
                 // Measure the new document before restoring an offset beyond the old extent.
@@ -656,27 +656,27 @@ public partial class MainWindow : Window
                 EditorView.Editor.RestoreTypingFormat(format.FontFamily, format.FontSize,
                     format.Color == null ? null : new SolidColorBrush(Color.Parse(format.Color)));
             SaveStatus.Text = "Saved locally";
-            Title = NoteTitle.Text + " — Brain Pending";
+            Title = ThoughtTitle.Text + " — Brain Pending";
         }
         finally { _loading = false; }
-        _recentNotes.RemoveAll(p => PathRules.AreEqual(p, note.Path));
-        _recentNotes.Insert(0, note.Path);
-        RememberOpenNote(note.Path);
+        _recentThoughts.RemoveAll(p => PathRules.AreEqual(p, thought.Path));
+        _recentThoughts.Insert(0, thought.Path);
+        RememberOpenThought(thought.Path);
     }
 
-    private void ClearNote(bool forget = true)
+    private void ClearThought(bool forget = true)
     {
-        RememberNotePosition();
+        RememberThoughtPosition();
         CloseFind(false);
         CancelTitleEditing();
-        if (forget && _note != null) RememberOpenNote(null);
-        _note = null;
+        if (forget && _thought != null) RememberOpenThought(null);
+        _thought = null;
         EditorView.FileSizeBytes = null;
         _dirty = false;
         _autosave.Stop();
         EditorView.IsVisible = false;
         Welcome.IsVisible = true;
-        NoteTitle.Text = "";
+        ThoughtTitle.Text = "";
         Breadcrumb.Text = "";
         Title = "Brain Pending";
     }
@@ -684,7 +684,7 @@ public partial class MainWindow : Window
     private async Task Navigate(string path, bool backwards = false)
     {
         if (_workspace == null || !SaveCurrent()) return;
-        _folder = _workspace.CheckPath(path);
+        _cluster = _workspace.CheckPath(path);
         SearchBox.Text = "";
         RefreshBrowser(true);
         if (MotionSettings.AnimationsEnabled)
@@ -696,41 +696,41 @@ public partial class MainWindow : Window
         if (_refreshing || Browser.SelectedItem is not BrowserItem item || _workspace == null) return;
         await Run(async () =>
         {
-            if (item.IsFolder) await Navigate(item.Path, item.IsUp);
+            if (item.IsCluster) await Navigate(item.Path, item.IsUp);
             else if (SaveCurrent())
             {
-                LoadNote(_workspace.Read(item.Path));
+                LoadThought(_workspace.Read(item.Path));
                 RefreshBrowser(true);
-                CollapseSidebarAfterNoteSelection();
+                CollapseSidebarAfterThoughtSelection();
             }
         });
         _refreshing = true;
-        try { Browser.SelectedItem = Browser.Items.OfType<BrowserItem>().FirstOrDefault(row => PathRules.AreEqual(row.Path, _note?.Path)); }
+        try { Browser.SelectedItem = Browser.Items.OfType<BrowserItem>().FirstOrDefault(row => PathRules.AreEqual(row.Path, _thought?.Path)); }
         finally { _refreshing = false; }
     }
 
-    private async void NewNote_Click(object? sender, RoutedEventArgs e) => await NewNote();
-    private async Task NewNote()
+    private async void NewThought_Click(object? sender, RoutedEventArgs e) => await NewThought();
+    private async Task NewThought()
     {
         await Run(async () =>
         {
             if (_workspace == null || !SaveCurrent()) return;
             var name = await Prompt("New thought", "Give your thought a title", "Untitled thought", "Create thought");
             if (name == null) return;
-            LoadNote(_workspace.CreateNote(_folder, name));
+            LoadThought(_workspace.CreateThought(_cluster, name));
             SearchBox.Text = "";
             RefreshBrowser(true);
             EditorView.Editor.Focus();
         });
     }
 
-    private async void NewFolder_Click(object? sender, RoutedEventArgs e) => await NewFolder();
+    private async void NewCluster_Click(object? sender, RoutedEventArgs e) => await NewCluster();
 
-    private Task NewFolder() => Run(async () =>
+    private Task NewCluster() => Run(async () =>
     {
         if (_workspace == null) return;
         var name = await Prompt("New cluster", "Keep related thoughts together", "New cluster", "Create cluster");
-        if (name != null) await Navigate(_workspace.CreateFolder(_folder, name));
+        if (name != null) await Navigate(_workspace.CreateCluster(_cluster, name));
     });
 
     private void Search_Changed(object? sender, TextChangedEventArgs e)
@@ -738,36 +738,36 @@ public partial class MainWindow : Window
         try { RefreshBrowser(); } catch (Exception error) { ShowNotice(error.Message); }
     }
     private async void Home_Click(object? sender, RoutedEventArgs e) => await Run(async () => { if (_workspace != null) await Navigate(_workspace.Root, true); });
-    private void NoteTitle_DoubleTapped(object? sender, TappedEventArgs e)
+    private void ThoughtTitle_DoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (_note == null) return;
+        if (_thought == null) return;
         e.Handled = true;
         BeginTitleEditing();
     }
 
     internal void BeginTitleEditing()
     {
-        if (_note == null) return;
-        _titleEditingPath = _note.Path;
-        NoteTitleInput.Text = Path.GetFileNameWithoutExtension(_note.Path);
-        NoteTitle.IsVisible = false;
-        NoteTitleInput.IsVisible = true;
-        NoteTitleError.IsVisible = false;
-        NoteTitleInput.Focus();
-        NoteTitleInput.SelectAll();
+        if (_thought == null) return;
+        _titleEditingPath = _thought.Path;
+        ThoughtTitleInput.Text = Path.GetFileNameWithoutExtension(_thought.Path);
+        ThoughtTitle.IsVisible = false;
+        ThoughtTitleInput.IsVisible = true;
+        ThoughtTitleError.IsVisible = false;
+        ThoughtTitleInput.Focus();
+        ThoughtTitleInput.SelectAll();
     }
 
     private void CancelTitleEditing()
     {
         _titleEditingPath = null;
-        NoteTitleInput.IsVisible = false;
-        NoteTitle.IsVisible = true;
-        NoteTitleError.IsVisible = false;
+        ThoughtTitleInput.IsVisible = false;
+        ThoughtTitle.IsVisible = true;
+        ThoughtTitleError.IsVisible = false;
     }
 
-    private void NoteTitleInput_LostFocus(object? sender, RoutedEventArgs e) => CancelTitleEditing();
+    private void ThoughtTitleInput_LostFocus(object? sender, RoutedEventArgs e) => CancelTitleEditing();
 
-    private void NoteTitleInput_KeyDown(object? sender, KeyEventArgs e)
+    private void ThoughtTitleInput_KeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape) { e.Handled = true; CancelTitleEditing(); EditorView.Editor.Focus(); }
         else if (e.Key == Key.Enter)
@@ -775,19 +775,19 @@ public partial class MainWindow : Window
             e.Handled = true;
             try
             {
-                if (_workspace == null || _note == null || _titleEditingPath == null) return;
+                if (_workspace == null || _thought == null || _titleEditingPath == null) return;
                 var source = _titleEditingPath;
-                var name = NoteWorkspace.ValidateName(NoteTitleInput.Text ?? "");
+                var name = BrainWorkspace.ValidateName(ThoughtTitleInput.Text ?? "");
                 if (!SaveCurrent()) throw new IOException("Save the thought successfully before renaming it.");
-                if (!PathRules.AreEqual(_note.Path, source)) throw new IOException("The thought changed while editing. Cancel and try renaming the current thought.");
+                if (!PathRules.AreEqual(_thought.Path, source)) throw new IOException("The thought changed while editing. Cancel and try renaming the current thought.");
                 var target = _workspace.Rename(source, name);
                 RefreshAfterMove(source, target);
                 EditorView.Editor.Focus();
             }
             catch (Exception error)
             {
-                NoteTitleError.Text = error.Message;
-                NoteTitleError.IsVisible = true;
+                ThoughtTitleError.Text = error.Message;
+                ThoughtTitleError.IsVisible = true;
             }
         }
     }
@@ -805,16 +805,16 @@ public partial class MainWindow : Window
     {
         var row = (e.Source as Visual)?.GetSelfAndVisualAncestors().OfType<ListBoxItem>().FirstOrDefault();
         if (e.GetCurrentPoint(Browser).Properties.IsLeftButtonPressed &&
-            row?.DataContext is BrowserItem selected && !selected.IsFolder &&
+            row?.DataContext is BrowserItem selected && !selected.IsCluster &&
             Equals(Browser.SelectedItem, selected) && !_settings.SidebarPinned)
         {
-            // Clicking the current note does not raise SelectionChanged.
+            // Clicking the current thought does not raise SelectionChanged.
             e.Handled = true;
-            CollapseSidebarAfterNoteSelection();
+            CollapseSidebarAfterThoughtSelection();
             return;
         }
         if (!e.GetCurrentPoint(Browser).Properties.IsRightButtonPressed) return;
-        // Handle before ListBox selects the row: selecting a folder navigates into it.
+        // Handle before ListBox selects the row: selecting a cluster navigates into it.
         e.Handled = true;
         if (row?.DataContext is BrowserItem item && (item.CanManage || item.IsTrash))
             CreateItemMenu(item).Open(row);
@@ -844,8 +844,8 @@ public partial class MainWindow : Window
                 try { _workspace.EmptyTrash(RecycleItem); }
                 finally
                 {
-                    if (_note != null && _workspace.IsInTrash(_note.Path) && !File.Exists(_note.Path)) ClearNote();
-                    if (_workspace.IsInTrash(_folder) && !Directory.Exists(_folder)) _folder = _workspace.TrashPath;
+                    if (_thought != null && _workspace.IsInTrash(_thought.Path) && !File.Exists(_thought.Path)) ClearThought();
+                    if (_workspace.IsInTrash(_cluster) && !Directory.Exists(_cluster)) _cluster = _workspace.TrashPath;
                     RefreshBrowser(true);
                 }
             });
@@ -867,7 +867,7 @@ public partial class MainWindow : Window
         moveTo.Click += async (_, _) => await Run(async () =>
         {
             if (_workspace == null) return;
-            var dialog = new MoveFolderDialog(_workspace, item, target => MoveItem(item, target));
+            var dialog = new MoveClusterDialog(_workspace, item, target => MoveItem(item, target));
             await ShowOwnedDialogAsync<object?>(dialog);
         });
         var inTrash = _workspace?.IsInTrash(item.Path) == true;
@@ -879,11 +879,11 @@ public partial class MainWindow : Window
             if (!await Confirm(inTrash ? "Move to Recycle Bin?" : "Move to Trash?", description, inTrash ? "Move to Recycle Bin" : "Move to Trash")) return;
             if (inTrash) _workspace.RecycleFromTrash(item.Path, RecycleItem);
             else _workspace.MoveToTrash(item.Path);
-            if (PathRules.IsSameOrDescendant(_note?.Path, item.Path)) ClearNote();
+            if (PathRules.IsSameOrDescendant(_thought?.Path, item.Path)) ClearThought();
             RefreshBrowser(true);
         });
         var actions = new List<Control>();
-        if (!item.IsFolder)
+        if (!item.IsCluster)
         {
             var pin = new MenuItem { Header = item.IsPinned ? "Unpin thought" : "Pin thought" };
             pin.Click += async (_, _) => await Run(() =>
@@ -934,27 +934,27 @@ public partial class MainWindow : Window
     private void RefreshAfterMove(string source, string target)
     {
         if (_workspace == null) return;
-        if (_note is { } note && PathRules.IsSameOrDescendant(note.Path, source))
+        if (_thought is { } thought && PathRules.IsSameOrDescendant(thought.Path, source))
         {
-            var path = PathRules.AreEqual(note.Path, source)
-                ? target : Path.Combine(target, Path.GetRelativePath(source, note.Path));
-            LoadNote(_workspace.Read(path));
+            var path = PathRules.AreEqual(thought.Path, source)
+                ? target : Path.Combine(target, Path.GetRelativePath(source, thought.Path));
+            LoadThought(_workspace.Read(path));
         }
         RefreshBrowser(true);
     }
 
-    private async void ImportNotes_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
+    private async void ImportThoughts_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
     {
         if (_workspace == null || !SaveCurrent()) return;
-        var destination = _workspace.IsInTrash(_folder) ? _workspace.Root : _folder;
+        var destination = _workspace.IsInTrash(_cluster) ? _workspace.Root : _cluster;
         var dialog = new ImportDialog(_workspace, destination);
         await ShowOwnedDialogAsync<object?>(dialog);
         RefreshBrowser(true);
         if (dialog.Result is { } result)
-            ShowNotice($"Imported {result.Pages.Count} OneNote pages into {result.Folder}. See Import report for details.");
+            ShowNotice($"Imported {result.Pages.Count} OneNote pages into {result.Cluster}. See Import report for details.");
     });
 
-    private async void OpenNotebook_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
+    private async void OpenBrain_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
     {
         if (!SaveCurrent()) return;
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose your brain folder", AllowMultiple = false });
@@ -981,7 +981,7 @@ public partial class MainWindow : Window
             var item = new MenuItem { Header = row, Tag = theme.Name };
             item.Click += async (_, _) => await Run(() =>
             {
-                _settings = NotebookSettings.Read(_settingsPath) with { ColorTheme = theme.Name, DarkTheme = theme.Dark };
+                _settings = BrainSettings.Read(_settingsPath) with { ColorTheme = theme.Name, DarkTheme = theme.Dark };
                 _settings.Save(_settingsPath);
                 ApplyTheme();
                 return Task.CompletedTask;
@@ -1040,15 +1040,15 @@ public partial class MainWindow : Window
         EditorView.Editor.Focus();
     }
 
-    private async void SwitchNote_Click(object? sender, RoutedEventArgs e) => await Run(SwitchNote);
+    private async void SwitchThought_Click(object? sender, RoutedEventArgs e) => await Run(SwitchThought);
 
-    private async Task SwitchNote()
+    private async Task SwitchThought()
     {
         if (_workspace == null) return;
-        var dialog = new NoteSwitcherDialog(_workspace, _recentNotes, _note?.Path);
-        var selected = await ShowOwnedDialogAsync<NoteSwitchItem?>(dialog);
+        var dialog = new ThoughtSwitcherDialog(_workspace, _recentThoughts, _thought?.Path);
+        var selected = await ShowOwnedDialogAsync<ThoughtSwitchItem?>(dialog);
         if (selected == null) return;
-        if (selected.IsFolder)
+        if (selected.IsCluster)
         {
             await Navigate(selected.Path);
             ShowSidebar();
@@ -1056,8 +1056,8 @@ public partial class MainWindow : Window
             return;
         }
         if (!SaveCurrent()) return;
-        LoadNote(_workspace.Read(selected.Path));
-        _folder = Path.GetDirectoryName(selected.Path)!;
+        LoadThought(_workspace.Read(selected.Path));
+        _cluster = Path.GetDirectoryName(selected.Path)!;
         SearchBox.Text = "";
         RefreshBrowser(true);
         EditorView.Editor.Focus();
@@ -1068,13 +1068,13 @@ public partial class MainWindow : Window
         if (_inDialog || _titleEditingPath != null) return;
         if (HandleFindShortcut(e)) return;
         if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.S) { e.Handled = true; SaveCurrent(); }
-        else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.N) { e.Handled = true; await NewNote(); }
-        else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.D) { e.Handled = true; await NewFolder(); }
+        else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.N) { e.Handled = true; await NewThought(); }
+        else if (e.KeyModifiers == KeyModifiers.Control && e.Key == Key.D) { e.Handled = true; await NewCluster(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; ShowSidebar(); SearchBox.Focus(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.O)
-        { e.Handled = true; await Run(SwitchNote); }
-        else if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Up && _workspace != null && !PathRules.AreEqual(_folder, _workspace.Root))
-        { e.Handled = true; await Run(() => Navigate(_workspace.ParentFolder(_folder), true)); }
+        { e.Handled = true; await Run(SwitchThought); }
+        else if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Up && _workspace != null && !PathRules.AreEqual(_cluster, _workspace.Root))
+        { e.Handled = true; await Run(() => Navigate(_workspace.ParentCluster(_cluster), true)); }
     }
 
     private async Task Run(Func<Task> action)
@@ -1100,7 +1100,7 @@ public partial class MainWindow : Window
         var cancel = new Button { Content = "Cancel", IsCancel = true, Classes = { "action", "quiet" } };
         void Submit()
         {
-            try { dialog.Close(NoteWorkspace.ValidateName(input.Text ?? "")); }
+            try { dialog.Close(BrainWorkspace.ValidateName(input.Text ?? "")); }
             catch (IOException e) { error.Text = e.Message; }
         }
         accept.Click += (_, _) => Submit();
@@ -1149,9 +1149,9 @@ public partial class MainWindow : Window
     }
     private async void AttachFile_Click(object? sender, EventArgs e) => await Run(async () =>
     {
-        if (_workspace == null || _note == null) return;
+        if (_workspace == null || _thought == null) return;
         var workspace = _workspace;
-        var notePath = _note.Path;
+        var thoughtPath = _thought.Path;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         { Title = "Attach files to thought", AllowMultiple = true });
         var store = new AttachmentStore(workspace.Root);
@@ -1159,7 +1159,7 @@ public partial class MainWindow : Window
         {
             if (file.TryGetLocalPath() is not { } path) continue;
             var attachment = await Task.Run(() => store.Add(path, file.Name));
-            if (_workspace != workspace || !PathRules.AreEqual(_note?.Path, notePath))
+            if (_workspace != workspace || !PathRules.AreEqual(_thought?.Path, thoughtPath))
             {
                 store.Discard(attachment);
                 throw new IOException("The selected thought changed. Please attach the file again.");

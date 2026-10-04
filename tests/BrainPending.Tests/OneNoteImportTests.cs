@@ -28,7 +28,7 @@ public sealed class OneNoteImportTests : IDisposable
         </one:Page>
         """;
 
-    internal sealed class FakeSource : INoteImportSource
+    internal sealed class FakeSource : IThoughtImportSource
     {
         public IReadOnlyList<ImportPage> Pages { get; set; } =
         [new("1", "Meeting", [new("book", "Work"), new("section", "Meetings")]),
@@ -128,43 +128,43 @@ public sealed class OneNoteImportTests : IDisposable
     [AvaloniaFact]
     public async Task ImportPreservesHierarchyAndDuplicateTitlesWithoutOverwriting()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var source = new FakeSource();
-        var result = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
+        var result = await ThoughtImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
         Assert.Equal(2, result.Pages.Count);
-        Assert.True(File.Exists(Path.Combine(result.Folder, "Work", "Meetings", "Meeting.rtf")));
-        Assert.True(File.Exists(Path.Combine(result.Folder, "Work", "Meetings", "Meeting (2).rtf")));
-        Assert.True(File.Exists(Path.Combine(result.Folder, "Import report.rtf")));
-        Assert.Single(Directory.GetFiles(Path.Combine(_root, ".mynotes", "imports"), "*.json"));
-        var second = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
-        Assert.NotEqual(result.Folder, second.Folder);
+        Assert.True(File.Exists(Path.Combine(result.Cluster, "Work", "Meetings", "Meeting.rtf")));
+        Assert.True(File.Exists(Path.Combine(result.Cluster, "Work", "Meetings", "Meeting (2).rtf")));
+        Assert.True(File.Exists(Path.Combine(result.Cluster, "Import report.rtf")));
+        Assert.Single(Directory.GetFiles(Path.Combine(_root, ".brainpending", "imports"), "*.json"));
+        var second = await ThoughtImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
+        Assert.NotEqual(result.Cluster, second.Cluster);
         Assert.Equal(2, second.Pages.Count);
     }
 
     [AvaloniaFact]
-    public async Task FailedPagesAreReportedAndCancellationKeepsCompletedNotes()
+    public async Task FailedPagesAreReportedAndCancellationKeepsCompletedThoughts()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var source = new FakeSource { Read = id => id == "1" ? throw new IOException("Locked page") : PageXml };
-        var failed = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
+        var failed = await ThoughtImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
         Assert.Single(failed.Pages);
         Assert.Contains(failed.Issues, i => i.Contains("Locked page"));
         using var cancellation = new CancellationTokenSource();
         source.Read = id => { if (id == "2") cancellation.Cancel(); return PageXml; };
-        var stopped = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root, null, cancellation.Token);
+        var stopped = await ThoughtImportService.ImportAsync(source, source.Pages, workspace, _root, null, cancellation.Token);
         Assert.True(stopped.Cancelled);
         Assert.Single(stopped.Pages);
-        Assert.True(File.Exists(Path.Combine(stopped.Folder, stopped.Pages[0].Path)));
+        Assert.True(File.Exists(Path.Combine(stopped.Cluster, stopped.Pages[0].Path)));
     }
 
     [Fact]
     public void ImportNamesCannotEscapeDestinationOrUseReservedNames()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         foreach (var name in new[] { "../../escape", "CON", "...", "a/b\\c", new string('a', 200) })
         {
-            var safe = NoteImportService.UniqueName(workspace, _root, name);
-            Assert.Equal(safe, NoteWorkspace.ValidateName(safe));
+            var safe = ThoughtImportService.UniqueName(workspace, _root, name);
+            Assert.Equal(safe, BrainWorkspace.ValidateName(safe));
             Assert.Equal(_root, Path.GetDirectoryName(Path.Combine(_root, safe)));
         }
     }
@@ -172,7 +172,7 @@ public sealed class OneNoteImportTests : IDisposable
     [AvaloniaFact]
     public async Task DialogLoadsPreviewsAndCancelsWithoutImporting()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var dialog = new ImportDialog(workspace, _root, new FakeSource());
         dialog.Show();
         try
@@ -204,7 +204,7 @@ public sealed class OneNoteImportTests : IDisposable
     [AvaloniaFact]
     public async Task DialogImportsSelectedPagesAndShowsSummary()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var dialog = new ImportDialog(workspace, _root, new FakeSource());
         dialog.Show();
         try
@@ -233,10 +233,10 @@ public sealed class OneNoteImportTests : IDisposable
     [AvaloniaFact]
     public async Task ProgressCountsFailedPagesAndDeduplicatesSelection()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var source = new FakeSource { Read = id => id == "1" ? throw new IOException("Locked") : PageXml };
         var updates = new List<ImportProgress>();
-        var result = await NoteImportService.ImportAsync(source, [..source.Pages, source.Pages[0]], workspace, _root,
+        var result = await ThoughtImportService.ImportAsync(source, [..source.Pages, source.Pages[0]], workspace, _root,
             new CaptureProgress(updates.Add), CancellationToken.None);
         Assert.Equal(2, result.Processed);
         Assert.Equal(1, result.Failed);
@@ -248,21 +248,21 @@ public sealed class OneNoteImportTests : IDisposable
     }
 
     [AvaloniaFact]
-    public async Task ImportsCachedAttachmentsAndRetainsLinksThroughRtfAndNoteMoves()
+    public async Task ImportsCachedAttachmentsAndRetainsLinksThroughRtfAndThoughtMoves()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var cache = Path.Combine(_root, "cached.bin");
         File.WriteAllBytes(cache, [0, 3, 255, 17]);
         var xml = new System.Xml.Linq.XElement("Page", new System.Xml.Linq.XElement("InsertedFile",
             new System.Xml.Linq.XAttribute("preferredName", "résumé.pdf"), new System.Xml.Linq.XAttribute("pathCache", cache))).ToString();
         var source = new FakeSource { Read = _ => xml };
-        var result = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
+        var result = await ThoughtImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
         File.Delete(cache);
         Assert.Empty(result.Issues);
         var links = new List<string>();
         foreach (var page in result.Pages)
         {
-            var path = Path.Combine(result.Folder, page.Path);
+            var path = Path.Combine(result.Cluster, page.Path);
             var moved = workspace.MoveToTrash(workspace.Rename(path, "Renamed " + page.SourceId));
             var restored = RtfDocumentFormatter.Parse(workspace.Read(moved).Rtf);
             var run = Assert.Single(restored.Blocks.OfType<Paragraph>().SelectMany(p => p.Inlines).OfType<Run>(), r => r.NavigateUri != null);
@@ -277,23 +277,23 @@ public sealed class OneNoteImportTests : IDisposable
     [AvaloniaFact]
     public async Task MissingCacheReportsAttachmentWithoutReadingOriginalSource()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var original = Path.Combine(_root, "original.txt");
         File.WriteAllText(original, "Do not import this external file");
         var xml = new System.Xml.Linq.XElement("Page", new System.Xml.Linq.XElement("T", "Keep this note"),
             new System.Xml.Linq.XElement("InsertedFile", new System.Xml.Linq.XAttribute("pathSource", original),
                 new System.Xml.Linq.XAttribute("preferredName", "original.txt"))).ToString();
         var source = new FakeSource { Read = _ => xml };
-        var result = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
+        var result = await ThoughtImportService.ImportAsync(source, source.Pages, workspace, _root, null, CancellationToken.None);
         Assert.Equal(2, result.Pages.Count);
         Assert.Contains(result.Issues, issue => issue.Contains("Attachment 'original.txt' could not be imported"));
-        Assert.False(Directory.Exists(Path.Combine(_root, ".mynotes", "attachments")));
+        Assert.False(Directory.Exists(Path.Combine(_root, ".brainpending", "attachments")));
     }
 
     [AvaloniaFact]
-    public async Task CancelDuringAttachmentCopyKeepsCompletedNotesAndRemovesUncommittedFiles()
+    public async Task CancelDuringAttachmentCopyKeepsCompletedThoughtsAndRemovesUncommittedFiles()
     {
-        var workspace = new NoteWorkspace(_root);
+        var workspace = new BrainWorkspace(_root);
         var cache = Path.Combine(_root, "cache.bin");
         File.WriteAllText(cache, "test");
         var fileXml = new System.Xml.Linq.XElement("InsertedFile", new System.Xml.Linq.XAttribute("pathCache", cache),
@@ -301,12 +301,12 @@ public sealed class OneNoteImportTests : IDisposable
         var source = new FakeSource { Read = id => id == "1" ? "<Page><T>Complete</T></Page>" : new System.Xml.Linq.XElement("Page", fileXml, new System.Xml.Linq.XElement(fileXml)).ToString() };
         using var cancellation = new CancellationTokenSource();
         var copies = 0;
-        var result = await NoteImportService.ImportAsync(source, source.Pages, workspace, _root,
+        var result = await ThoughtImportService.ImportAsync(source, source.Pages, workspace, _root,
             new CaptureProgress(update => { if (update.Message.StartsWith("Copying attachment") && ++copies == 2) cancellation.Cancel(); }), cancellation.Token);
         Assert.True(result.Cancelled);
         Assert.Single(result.Pages);
         Assert.Equal(1, result.Processed);
-        Assert.Empty(Directory.GetFiles(Path.Combine(_root, ".mynotes", "attachments"), "*", SearchOption.AllDirectories));
+        Assert.Empty(Directory.GetFiles(Path.Combine(_root, ".brainpending", "attachments"), "*", SearchOption.AllDirectories));
     }
 
     [AvaloniaFact]
@@ -314,7 +314,7 @@ public sealed class OneNoteImportTests : IDisposable
     {
         var gate = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var source = new FakeSource { ReadAsync = (id, token) => id == "1" ? Task.FromResult(PageXml) : gate.Task.WaitAsync(token) };
-        var dialog = new ImportDialog(new NoteWorkspace(_root), _root, source);
+        var dialog = new ImportDialog(new BrainWorkspace(_root), _root, source);
         dialog.Show();
         try
         {
@@ -349,14 +349,14 @@ public sealed class OneNoteImportTests : IDisposable
         var prefixes = new[] { "0001", "0010", "0501", "0510", "1001", "1010", "1501", "1510" };
         var selected = pages.Where(p => prefixes.Any(prefix => p.Title.StartsWith(prefix + " -"))).ToArray();
         Assert.Equal(8, selected.Length);
-        var workspace = new NoteWorkspace(_root);
-        var result = await NoteImportService.ImportAsync(source, selected, workspace, _root, null, TestContext.Current.CancellationToken);
+        var workspace = new BrainWorkspace(_root);
+        var result = await ThoughtImportService.ImportAsync(source, selected, workspace, _root, null, TestContext.Current.CancellationToken);
         Assert.True(result.Pages.Count == 8, string.Join("\n", result.Issues));
         Assert.DoesNotContain(result.Issues, issue => issue.Contains("Attachment") || issue.Contains("image") || issue.Contains("Not imported"));
-        var rtfs = result.Pages.Select(p => File.ReadAllText(Path.Combine(result.Folder, p.Path))).ToArray();
+        var rtfs = result.Pages.Select(p => File.ReadAllText(Path.Combine(result.Cluster, p.Path))).ToArray();
         Assert.Equal(4, rtfs.Count(rtf => rtf.Contains(@"\pict")));
         Assert.Equal(4, rtfs.Count(rtf => rtf.Contains(AttachmentStore.Scheme)));
-        var attached = Directory.GetFiles(Path.Combine(_root, ".mynotes", "attachments"), "*", SearchOption.AllDirectories);
+        var attached = Directory.GetFiles(Path.Combine(_root, ".brainpending", "attachments"), "*", SearchOption.AllDirectories);
         Assert.Equal(4, attached.Length);
         Assert.All(attached, file => Assert.True(new FileInfo(file).Length > 1_000_000));
     }
@@ -365,7 +365,7 @@ public sealed class OneNoteImportTests : IDisposable
     public void SelectAllIsDisabledWithoutVisiblePagesAndHandlesEmptyClicksSafely()
     {
         var source = new FakeSource { Pages = [] };
-        var dialog = new ImportDialog(new NoteWorkspace(_root), _root, source);
+        var dialog = new ImportDialog(new BrainWorkspace(_root), _root, source);
         dialog.Show();
         try
         {

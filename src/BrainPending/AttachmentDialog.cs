@@ -27,7 +27,7 @@ internal sealed class AttachmentDialog : Window
         {
             try
             {
-                // Notebooks can be shared; ask before running programs or scripts from one.
+                // Brains can be shared; ask before running programs or scripts from one.
                 if (!confirmed && IsDangerous(attachment.Name))
                 {
                     confirmed = true;

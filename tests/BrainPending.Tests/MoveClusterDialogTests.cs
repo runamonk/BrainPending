@@ -7,55 +7,55 @@ using BrainPending.Core;
 
 namespace BrainPending.Tests;
 
-public sealed class MoveFolderDialogTests : IDisposable
+public sealed class MoveClusterDialogTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "BrainPending-move-" + Guid.NewGuid().ToString("N"));
 
     [AvaloniaFact]
     public void EscapeClosesMoveDialogWithoutMoving()
     {
-        var workspace = new NoteWorkspace(_root);
-        var note = workspace.CreateNote(_root, "Keep me");
-        workspace.CreateFolder(_root, "Destination");
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Keep me");
+        workspace.CreateCluster(_root, "Destination");
         var moved = false;
-        var dialog = new MoveFolderDialog(workspace, new(note.Path, "Keep me", false, false, ""),
+        var dialog = new MoveClusterDialog(workspace, new(thought.Path, "Keep me", false, false, ""),
             _ => { moved = true; return true; });
         dialog.Show();
         try
         {
-            dialog.FindControl<ListBox>("Folders")!.Focus();
+            dialog.FindControl<ListBox>("Clusters")!.Focus();
             dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
             Assert.False(dialog.IsVisible);
             Assert.False(moved);
-            Assert.True(File.Exists(note.Path));
+            Assert.True(File.Exists(thought.Path));
         }
         finally { dialog.Close(); }
     }
 
     [AvaloniaFact]
-    public void FolderNavigationExcludesSourceAndMovesIntoChosenFolder()
+    public void ClusterNavigationExcludesSourceAndMovesIntoChosenCluster()
     {
-        var workspace = new NoteWorkspace(_root);
-        var source = workspace.CreateFolder(_root, "Source");
-        workspace.CreateNote(source, "Keep me");
-        var destination = workspace.CreateFolder(_root, "Destination");
-        var nested = workspace.CreateFolder(destination, "Nested");
-        workspace.CreateNote(_root, "Not a folder");
+        var workspace = new BrainWorkspace(_root);
+        var source = workspace.CreateCluster(_root, "Source");
+        workspace.CreateThought(source, "Keep me");
+        var destination = workspace.CreateCluster(_root, "Destination");
+        var nested = workspace.CreateCluster(destination, "Nested");
+        workspace.CreateThought(_root, "Not a folder");
         var item = new BrowserItem(source, "Source", true, false, "");
-        var dialog = new MoveFolderDialog(workspace, item, target => { workspace.Move(source, target); return true; });
+        var dialog = new MoveClusterDialog(workspace, item, target => { workspace.Move(source, target); return true; });
         dialog.Show();
         try
         {
-            var folders = dialog.FindControl<ListBox>("Folders")!;
+            var clusters = dialog.FindControl<ListBox>("Clusters")!;
             var move = dialog.FindControl<Button>("MoveButton")!;
             Assert.False(move.IsEnabled);
-            Assert.Equal(destination, Assert.Single(folders.ItemsSource!.Cast<BrowserItem>()).Path);
-            folders.SelectedItem = folders.ItemsSource!.Cast<BrowserItem>().Single();
+            Assert.Equal(destination, Assert.Single(clusters.ItemsSource!.Cast<BrowserItem>()).Path);
+            clusters.SelectedItem = clusters.ItemsSource!.Cast<BrowserItem>().Single();
             Assert.True(move.IsEnabled);
-            Assert.Contains(folders.ItemsSource!.Cast<BrowserItem>(), i => i.IsUp);
-            folders.SelectedItem = folders.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == nested);
+            Assert.Contains(clusters.ItemsSource!.Cast<BrowserItem>(), i => i.IsUp);
+            clusters.SelectedItem = clusters.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == nested);
             Assert.Equal("Brain / Destination / Nested", dialog.FindControl<TextBlock>("Location")!.Text);
-            folders.SelectedItem = folders.ItemsSource!.Cast<BrowserItem>().Single(i => i.IsUp);
+            clusters.SelectedItem = clusters.ItemsSource!.Cast<BrowserItem>().Single(i => i.IsUp);
             move.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.True(File.Exists(Path.Combine(destination, "Source", "Keep me.rtf")));
             Assert.False(Directory.Exists(source));
@@ -64,14 +64,14 @@ public sealed class MoveFolderDialogTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void CollisionKeepsDialogOpenAndHomeReturnsToNotebook()
+    public void CollisionKeepsDialogOpenAndHomeReturnsToBrain()
     {
-        var workspace = new NoteWorkspace(_root);
-        var source = workspace.CreateFolder(_root, "Source");
-        var note = workspace.CreateNote(source, "Ideas");
-        var existing = workspace.CreateNote(_root, "Ideas");
-        var dialog = new MoveFolderDialog(workspace, new(note.Path, "Ideas", false, false, ""),
-            target => { workspace.Move(note.Path, target); return true; });
+        var workspace = new BrainWorkspace(_root);
+        var source = workspace.CreateCluster(_root, "Source");
+        var thought = workspace.CreateThought(source, "Ideas");
+        var existing = workspace.CreateThought(_root, "Ideas");
+        var dialog = new MoveClusterDialog(workspace, new(thought.Path, "Ideas", false, false, ""),
+            target => { workspace.Move(thought.Path, target); return true; });
         dialog.Show();
         try
         {
@@ -80,7 +80,7 @@ public sealed class MoveFolderDialogTests : IDisposable
             dialog.FindControl<Button>("MoveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.True(dialog.IsVisible);
             Assert.Contains("Could not move here", dialog.FindControl<TextBlock>("Error")!.Text);
-            Assert.Equal(note.Revision, workspace.Read(note.Path).Revision);
+            Assert.Equal(thought.Revision, workspace.Read(thought.Path).Revision);
             Assert.Equal(existing.Revision, workspace.Read(existing.Path).Revision);
         }
         finally { dialog.Close(); }

@@ -13,11 +13,11 @@ public sealed class ThemeCatalogTests : IDisposable
     public void NewSettingsUseSystemThemeUntilUserChooses(bool systemDark, string expected)
     {
         var path = Path.Combine(_root, "settings.json");
-        var settings = NotebookSettings.Read(path);
+        var settings = BrainSettings.Read(path);
         Assert.Null(settings.DarkTheme);
         Assert.Equal(expected, Catalog().Resolve(settings, systemDark).Name);
         settings.Save(path);
-        Assert.Equal(expected, Catalog().Resolve(NotebookSettings.Read(path), systemDark).Name);
+        Assert.Equal(expected, Catalog().Resolve(BrainSettings.Read(path), systemDark).Name);
         Assert.Equal("Default", Catalog().Resolve(settings with { DarkTheme = false }, true).Name);
         Assert.Equal("Default Dark", Catalog().Resolve(settings with { DarkTheme = true }, false).Name);
         Assert.Equal("Default", Catalog().Resolve(settings with { ColorTheme = "Default" }, true).Name);
@@ -32,10 +32,10 @@ public sealed class ThemeCatalogTests : IDisposable
         var json = JsonSerializer.Serialize(original);
         File.WriteAllText(catalog.FilePath, json);
         catalog.Reload();
-        Assert.Equal("Default Dark", catalog.Resolve(new NotebookSettings(), true).Name);
-        Assert.Equal(original.Single(t => t.Name == "Dracula"), catalog.Resolve(new NotebookSettings(ColorTheme: "Dracula"), true));
-        Assert.Equal("#282A36", catalog.Resolve(new NotebookSettings(ColorTheme: "Dracula")).Surface);
-        Assert.Equal("#202020", catalog.Resolve(new NotebookSettings(), true).Surface);
+        Assert.Equal("Default Dark", catalog.Resolve(new BrainSettings(), true).Name);
+        Assert.Equal(original.Single(t => t.Name == "Dracula"), catalog.Resolve(new BrainSettings(ColorTheme: "Dracula"), true));
+        Assert.Equal("#282A36", catalog.Resolve(new BrainSettings(ColorTheme: "Dracula")).Surface);
+        Assert.Equal("#202020", catalog.Resolve(new BrainSettings(), true).Surface);
         Assert.Equal(json, File.ReadAllText(Assert.Single(Directory.GetFiles(_root, "*.bak"))));
         foreach (var theme in original) Assert.Contains(theme, catalog.Themes);
     }
@@ -50,7 +50,7 @@ public sealed class ThemeCatalogTests : IDisposable
         File.WriteAllText(catalog.FilePath, JsonSerializer.Serialize(AppThemes.All.Append(custom)));
         var reopened = Catalog();
         reopened.Reload();
-        Assert.Equal(custom, reopened.Resolve(new NotebookSettings(ColorTheme: "My theme")));
+        Assert.Equal(custom, reopened.Resolve(new BrainSettings(ColorTheme: "My theme")));
     }
 
     [Theory]
@@ -69,7 +69,7 @@ public sealed class ThemeCatalogTests : IDisposable
         Assert.Equal(invalid, File.ReadAllText(catalog.FilePath));
         Assert.ThrowsAny<Exception>(() => catalog.ResetBuiltIns());
         Assert.Equal(invalid, File.ReadAllText(catalog.FilePath));
-        Assert.Equal("Default Dark", Catalog().Resolve(new NotebookSettings(DarkTheme: true)).Name);
+        Assert.Equal("Default Dark", Catalog().Resolve(new BrainSettings(DarkTheme: true)).Name);
     }
 
     [Fact]

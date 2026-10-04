@@ -7,7 +7,7 @@
       "request": "launch",
       "preLaunchTask": "build",
       "program": "${workspaceFolder}/src/BrainPending/bin/Debug/net10.0/BrainPending.dll",
-      "args": ["--notes", "${workspaceFolder}/Notes"],
+      "args": ["--brain", "${workspaceFolder}/Brain"],
       "cwd": "${workspaceFolder}",
       "console": "internalConsole"
     }

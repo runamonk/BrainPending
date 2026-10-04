@@ -4,6 +4,6 @@
 artifacts/
 .vs/
 *.user
-Notes/
+Brain/
 *.log
 .tmp/

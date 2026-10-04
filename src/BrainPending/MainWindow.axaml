@@ -32,7 +32,7 @@
           <TextBox x:Name="SearchBox" Grid.Row="0" PlaceholderText="Search titles in this cluster…" CornerRadius="7" FontSize="13" TextChanged="Search_Changed" />
           <Grid x:Name="SidebarToolbar" Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,6,0,6">
             <StackPanel Orientation="Horizontal" Spacing="6">
-              <Button x:Name="SidebarHome" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Notebook home" AutomationProperties.Name="Notebook home" Click="Home_Click">
+              <Button x:Name="SidebarHome" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Brain home" AutomationProperties.Name="Brain home" Click="Home_Click">
                 <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 1,9 L 10,2 L 19,9 M 4,7 L 4,18 L 8,18 L 8,12 L 12,12 L 12,18 L 16,18 L 16,7" />
               </Button>
               <StackPanel x:Name="SidebarPinnedActions" Orientation="Horizontal" Spacing="6">
@@ -91,7 +91,7 @@
       <Grid Grid.Column="2" RowDefinitions="Auto,*,Auto">
         <Border x:Name="NoteHeader" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1" Padding="14,20,14,18">
           <Grid RowDefinitions="Auto,Auto,Auto">
-            <TextBlock x:Name="Breadcrumb" Text="Your notebook" FontSize="12" Opacity="0.5" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="Breadcrumb" Text="Your brain" FontSize="12" Opacity="0.5" TextTrimming="CharacterEllipsis" />
             <TextBlock x:Name="NoteTitle" Grid.Row="1" Text="" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" TextTrimming="CharacterEllipsis" DoubleTapped="NoteTitle_DoubleTapped" ToolTip.Tip="Double-click to rename" />
             <TextBox x:Name="NoteTitleInput" Grid.Row="1" IsVisible="False" FontSize="28" FontWeight="SemiBold" Margin="0,8,0,0" Padding="0" Background="Transparent" BorderThickness="0,0,0,1" KeyDown="NoteTitleInput_KeyDown" LostFocus="NoteTitleInput_LostFocus" AutomationProperties.Name="Thought title" />
             <TextBlock x:Name="NoteTitleError" Grid.Row="2" IsVisible="False" Foreground="{DynamicResource AppErrorBrush}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" />
@@ -126,8 +126,8 @@
     </Grid>
     <Border Grid.Row="1" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,1,0,0" Padding="12,0">
       <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-        <SplitButton Grid.Column="1" x:Name="OpenNotebookButton" Click="OpenNotebook_Click" Background="Transparent" BorderThickness="0" CornerRadius="4" Height="30" Padding="8,3" FontSize="11" HorizontalAlignment="Left" HorizontalContentAlignment="Left" ToolTip.Tip="Open notebook" AutomationProperties.Name="Open notebook">
-          <TextBlock x:Name="NotebookPath" Text="Open notebook" TextTrimming="CharacterEllipsis" />
+        <SplitButton Grid.Column="1" x:Name="OpenNotebookButton" Click="OpenNotebook_Click" Background="Transparent" BorderThickness="0" CornerRadius="4" Height="30" Padding="8,3" FontSize="11" HorizontalAlignment="Left" HorizontalContentAlignment="Left" ToolTip.Tip="Open brain" AutomationProperties.Name="Open brain">
+          <TextBlock x:Name="NotebookPath" Text="Open brain" TextTrimming="CharacterEllipsis" />
         </SplitButton>
         <TextBlock x:Name="SaveStatus" Grid.Column="2" Text="Ready" FontSize="11" Opacity="0.7" VerticalAlignment="Center" Margin="16,0" />
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="0,0,6,0">

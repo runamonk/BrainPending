@@ -106,7 +106,7 @@ public partial class ImportDialog : Window
     {
         try
         {
-            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose a cluster in the current notebook" });
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose a cluster in the current brain" });
             if (folders.FirstOrDefault()?.TryGetLocalPath() is not { } path || _workspace == null) return;
             path = _workspace.CheckPath(path);
             if (_workspace.IsInTrash(path)) throw new IOException("Choose a destination outside Trash.");

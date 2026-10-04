@@ -54,7 +54,7 @@ public sealed class MoveFolderDialogTests : IDisposable
             Assert.True(move.IsEnabled);
             Assert.Contains(folders.ItemsSource!.Cast<BrowserItem>(), i => i.IsUp);
             folders.SelectedItem = folders.ItemsSource!.Cast<BrowserItem>().Single(i => i.Path == nested);
-            Assert.Equal("Notebook / Destination / Nested", dialog.FindControl<TextBlock>("Location")!.Text);
+            Assert.Equal("Brain / Destination / Nested", dialog.FindControl<TextBlock>("Location")!.Text);
             folders.SelectedItem = folders.ItemsSource!.Cast<BrowserItem>().Single(i => i.IsUp);
             move.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.True(File.Exists(Path.Combine(destination, "Source", "Keep me.rtf")));
@@ -76,7 +76,7 @@ public sealed class MoveFolderDialogTests : IDisposable
         try
         {
             dialog.FindControl<Button>("HomeButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Assert.Equal("Notebook", dialog.FindControl<TextBlock>("Location")!.Text);
+            Assert.Equal("Brain", dialog.FindControl<TextBlock>("Location")!.Text);
             dialog.FindControl<Button>("MoveButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.True(dialog.IsVisible);
             Assert.Contains("Could not move here", dialog.FindControl<TextBlock>("Error")!.Text);

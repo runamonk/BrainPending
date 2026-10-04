@@ -35,11 +35,11 @@ public sealed class NoteWorkspace
         var full = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path));
         if (PathRules.AreEqual(full, Root))
         {
-            if (!allowRoot) throw new IOException("Choose a thought or cluster inside the notebook.");
+            if (!allowRoot) throw new IOException("Choose a thought or cluster inside the brain.");
             return full;
         }
         if (!PathRules.IsSameOrDescendant(full, Root))
-            throw new IOException("This item is outside the notebook.");
+            throw new IOException("This item is outside the brain.");
         var relative = System.IO.Path.GetRelativePath(Root, full);
         var inTrash = IsInTrash(full);
         if (!allowRoot && IsTrash(full)) throw new IOException("The Trash cluster cannot be renamed, moved or deleted.");
@@ -47,12 +47,12 @@ public sealed class NoteWorkspace
         var index = 0;
         foreach (var part in relative.Split(System.IO.Path.DirectorySeparatorChar))
         {
-            if (part.StartsWith('.') && !(inTrash && index == 0 && part == ".mynotes")) throw new IOException("Internal notebook folders cannot be edited here.");
+            if (part.StartsWith('.') && !(inTrash && index == 0 && part == ".mynotes")) throw new IOException("Internal brain folders cannot be edited here.");
             index++;
             current = System.IO.Path.Combine(current, part);
             if ((File.Exists(current) || Directory.Exists(current)) &&
                 (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                throw new IOException("Linked files and folders are not supported in a notebook.");
+                throw new IOException("Linked files and folders are not supported in a brain.");
         }
         return full;
     }

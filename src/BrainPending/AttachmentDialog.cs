@@ -67,7 +67,7 @@ internal sealed class AttachmentDialog : Window
             Children =
             {
                 new TextBlock { Text = attachment.Name, FontSize = 20, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
-                new TextBlock { Text = $"{attachment.Size:N0} bytes · stored in this notebook" },
+                new TextBlock { Text = $"{attachment.Size:N0} bytes · stored in this brain" },
                 new TextBlock { Text = "Open a copy in its associated app, or save it to a folder. Changes to the copy do not change the attachment.", TextWrapping = Avalonia.Media.TextWrapping.Wrap },
                 error,
                 new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Children = { open, save, close } }

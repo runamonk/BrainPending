@@ -25,7 +25,7 @@ dotnet run --project src/BrainPending -- --notes ./Notes
 - Use the pin at the right end of the left panel's toolbar to auto-hide the panel;
   click the mini sidebar’s toggle to reveal it over the editor, or use Ctrl+Shift+F.
   Pin it again to keep it visible. The pin preference is remembered across launches.
-- Nested folders, sliding folder navigation, an Up entry, and notebook-home button.
+- Nested folders, sliding folder navigation, an Up entry, and brain-home button.
 - Individual `.rtf` files in real folders.
 - Unpin the sidebar to keep a narrow vertical toolbar. Click its top button
   to toggle the note list. Home and Pin stay below search in the expanded pane;
@@ -35,47 +35,47 @@ dotnet run --project src/BrainPending -- --notes ./Notes
   Controls wrap onto another row when needed; there is no overflow menu.
 - Image insertion, clipboard images, and resize handles. Click an image to select
   it; drag its corner to resize while retaining its proportions.
-- **Attach file…** copies files into notebook storage and inserts attachment links.
+- **Attach file…** copies files into brain storage and inserts attachment links.
   Follow a link to see its filename and size, **Open copy**, or **Save As…**.
   Opening a copy never changes the stored original. Programs and scripts ask for
   confirmation before opening, and downloaded files keep Windows' downloaded-file warning.
 - Insert/edit links from the toolbar; right-click an existing link to edit/remove
   it. Select text before inserting a link to use that text as the label.
 - Autosave after a short typing pause; save on note switch and close.
-- If a thought cannot be saved (for example, the notebook drive is disconnected), the
+- If a thought cannot be saved (for example, the drive holding the brain is disconnected), the
   latest edits are kept in `%LOCALAPPDATA%/MyNotes/recovery` and the app can still close.
-  They are restored the next time that notebook opens; a thought that changed meanwhile
+  They are restored the next time that brain opens; a thought that changed meanwhile
   gets a conflict copy instead of being overwritten.
 - Search note/folder titles recursively in the current folder (Ctrl+Shift+F).
-- Quick switch (Ctrl+Shift+O) searches thoughts and clusters across the notebook,
+- Quick switch (Ctrl+Shift+O) searches thoughts and clusters across the brain,
   with the previous thought selected first. Open a cluster, then use Ctrl+N to
   add a thought there. Thought bubbles and connected nodes distinguish the two.
 - Ctrl+F opens a slide-down find panel above the editor and focuses its input.
   Matches are highlighted as you type, with a match counter. F3 / Shift+F3
   (or Enter / Shift+Enter in the input) move between matches with wrap-around;
   Escape closes the panel and clears the highlights.
-- Right-click entries to rename, move to parent, move to another notebook folder,
+- Right-click entries to rename, move to parent, move to another cluster,
   or delete to recoverable trash. Shift+F10 opens the menu for a selected entry.
 - Pin notes from their right-click menu to keep them above other entries. Pins
-  are saved in the notebook and follow notes when renamed or moved in the app.
+  are saved in the brain and follow notes when renamed or moved in the app.
 - Move to cluster uses an in-app cluster browser with Home, Up, and Move here;
-  destinations stay inside the notebook.
-- Trash is a protected notebook folder. Deleted notes and folders stay browsable
+  destinations stay inside the brain.
+- Trash is a protected brain folder. Deleted notes and folders stay browsable
   and editable there; move them out to recover them. Deleting from Trash sends
   the item to the Windows Recycle Bin. Trash itself cannot be renamed, moved or deleted.
 - Light/dark themes.
-- Bottom status bar includes the current notebook as a split button: click the
-  path to browse, or the arrow for the ten most recently opened notebooks,
+- Bottom status bar includes the current brain as a split button: click the
+  path to browse, or the arrow for the ten most recently opened brains,
   remembered between sessions. The color theme button sits alongside save status.
-- Each recent notebook has a trashcan button to remove it from the menu without
-  deleting its files or changing the currently open notebook.
+- Each recent brain has a trashcan button to remove it from the menu without
+  deleting its files or changing the currently open brain.
 - Dark mode uses the Dracula palette, including the editor, toolbar, dialogs,
   cyan folder icons, purple accents and muted selection backgrounds.
   Dark document ink is lightened for display without changing saved RTF colours.
 - Main-window size, position and maximized state are remembered on close and
   restored within an available monitor.
-- Each notebook remembers its last open note and restores its folder and selection.
-  Missing or unreadable notes are skipped without preventing the notebook from opening.
+- Each brain remembers its last open note and restores its folder and selection.
+  Missing or unreadable notes are skipped without preventing the brain from opening.
 - Double-click the open note's title to rename it inline. Enter saves the name;
   Escape or clicking away cancels the title edit.
 - File watching plus a three-second fallback scan for external changes.
@@ -89,15 +89,15 @@ dotnet publish src/BrainPending -c Release -r win-x64 --self-contained true -o a
 Copy the **whole output folder** to your synced location. Run `BrainPending.exe`.
 No .NET SDK or IDE is needed on the destination computer.
 
-Notebook selection order: `--notes <folder>`, the last successfully opened notebook
+Brain selection order: `--notes <folder>`, the last successfully opened brain
 on this computer, then an adjacent `Notes` folder (created on first use).
 If automatic reopening fails or is interrupted, startup leaves the app ready for
-you to choose a notebook instead of retrying on every launch. Opening a notebook
+you to choose a brain instead of retrying on every launch. Opening a brain
 successfully enables automatic reopening again. A missing remembered folder is
-never silently recreated. **Open notebook** can select any other writable folder.
+never silently recreated. **Open brain** can select any other writable folder.
 
 Preferences are per computer, under `%LOCALAPPDATA%/MyNotes`. They are not shared
-with the notes. Use `--notes` to open multiple independent notebooks/instances.
+with the notes. Use `--notes` to open multiple independent brains/instances.
 
 ## Shared-folder behaviour
 
@@ -111,7 +111,7 @@ Your existing sync service transfers the files; Brain Pending reacts when they a
   This lock is **not** a distributed lock between cloud replicas.
 - Immutable RTF revisions are stored in `Notes/.mynotes/history`, with JSON files
   identifying their original paths. Deleted items live in `.mynotes/trash/items`
-  and appear in the notebook's Trash folder. Earlier trash entries migrate into this view.
+  and appear in the brain's Trash folder. Earlier trash entries migrate into this view.
   Recover deleted items with Move to cluster or Move to parent; history recovery
   still requires copying an RTF from the history directory.
 
@@ -133,7 +133,7 @@ save-on-close and RTF round-trips for links, images, Unicode, fonts,
 highlighting, lists and alignment. A headless Skia-rendered screenshot is written
 to `artifacts/screenshots/editor.png` by the visual-review test.
 
-This is the first working version. Full-notebook content search,
+This is the first working version. Full-brain content search,
 history restore screens, and automatic handling
 of sync-provider conflict files are still to come. Moving files with Explorer
 is supported through refresh; avoid moving a note while actively editing it.
@@ -195,13 +195,13 @@ rather than parsing these binary files directly.
 
 Filter by notebook, section, or page name. Use **Select all shown**, or Ctrl/Shift
 selection, and review a page preview. Choose a destination inside the current
-Brain Pending notebook and click **Import selected**. Each run creates a separate
+brain and click **Import selected**. Each run creates a separate
 folder, preserving notebook/section-group/section structure and giving duplicate
 titles unique filenames. Existing notes and source OneNote pages are not changed.
 
 Text, basic formatting, links, lists, tables, and embedded supported images are
 converted to RTF. Free-positioned content is arranged top-to-bottom, then
-left-to-right. Attached files are copied from OneNote's cache into notebook storage
+left-to-right. Attached files are copied from OneNote's cache into brain storage
 and linked from the imported note. Missing cached files are reported individually;
 the rest of the page is still imported. Ink, media, and tags are not fully converted; the
 preview and import report flag these limitations. Internal OneNote links still
@@ -218,9 +218,9 @@ off the UI thread; an in-flight OneNote call may finish after cancellation, but
 its result is discarded. No remote or local-file image references are fetched
 by the converter.
 
-Attachment files live in `.mynotes/attachments` and use notebook-relative links,
-so renaming/moving notes or moving the whole notebook preserves them. Duplicate
-filenames are stored separately. Copy/back up the **whole notebook including
+Attachment files live in `.mynotes/attachments` and use brain-relative links,
+so renaming/moving notes or moving the whole brain preserves them. Duplicate
+filenames are stored separately. Copy/back up the **whole brain including
 `.mynotes`** to preserve attachments; an individual RTF export contains links,
 not embedded attachment bytes. Files are retained for undo, history, and conflict
 copies even after their links are removed. Attachment previews and automatic

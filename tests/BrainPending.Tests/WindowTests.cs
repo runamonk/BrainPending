@@ -190,7 +190,7 @@ public sealed class WindowTests : IDisposable
         var window = new MainWindow(notAFolder, settingsPath);
         _windows.Add(window);
         window.Show();
-        Assert.Equal("Choose a notebook", window.FindControl<TextBlock>("SaveStatus")!.Text);
+        Assert.Equal("Choose a brain", window.FindControl<TextBlock>("SaveStatus")!.Text);
         var settings = NotebookSettings.Read(settingsPath);
         Assert.Equal(_root, settings.NotebookPath);
         Assert.False(settings.SkipAutomaticNotebook);
@@ -314,7 +314,7 @@ public sealed class WindowTests : IDisposable
             toolbar.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).Select(b => b.Name));
         Assert.Equal(5, mini.GetVisualDescendants().OfType<Button>().Count());
         Assert.DoesNotContain(mini.GetVisualDescendants().OfType<Button>(),
-            b => Equals(ToolTip.GetTip(b), "Notebook home"));
+            b => Equals(ToolTip.GetTip(b), "Brain home"));
         window.MouseMove(new Point(700, 200));
         await Task.Delay(500, TestContext.Current.CancellationToken);
         Dispatcher.UIThread.RunJobs();
@@ -712,7 +712,7 @@ public sealed class WindowTests : IDisposable
         var second = new MainWindow(null, settingsPath);
         _windows.Add(second);
         second.Show();
-        Assert.Equal("Choose a notebook", second.FindControl<TextBlock>("SaveStatus")!.Text);
+        Assert.Equal("Choose a brain", second.FindControl<TextBlock>("SaveStatus")!.Text);
         var menu = (Flyout)second.FindControl<SplitButton>("OpenNotebookButton")!.Flyout!;
         RecentButtons(menu).Single(i => Equals(i.Tag, _root))
             .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -730,7 +730,7 @@ public sealed class WindowTests : IDisposable
         var window = new MainWindow(null, settingsPath);
         _windows.Add(window);
         window.Show();
-        Assert.Equal("Choose a notebook", window.FindControl<TextBlock>("SaveStatus")!.Text);
+        Assert.Equal("Choose a brain", window.FindControl<TextBlock>("SaveStatus")!.Text);
         Assert.True(NotebookSettings.Read(settingsPath).SkipAutomaticNotebook);
         window.Close();
     }

@@ -63,7 +63,7 @@ public sealed class AttachmentStore(string notebookRoot)
         var name = Uri.UnescapeDataString(parts[1]);
         if (name != SafeName(name)) throw new IOException("Invalid attachment filename.");
         var path = AttachmentPath(parts[0], name);
-        if (!File.Exists(path)) throw new IOException("This attachment is missing. Copy the complete notebook, including its .mynotes folder.");
+        if (!File.Exists(path)) throw new IOException("This attachment is missing. Copy the complete brain, including its .mynotes folder.");
         return new(name, path, new FileInfo(path).Length, link);
     }
 

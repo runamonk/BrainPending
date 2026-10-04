@@ -52,15 +52,15 @@ public partial class MoveFolderDialog : Window
             if (!PathRules.AreEqual(folder, _workspace.Root))
             {
                 var parent = _workspace.ParentFolder(folder);
-                rows.Add(new(parent, "Up to " + (PathRules.AreEqual(parent, _workspace.Root) ? "notebook" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, ""));
+                rows.Add(new(parent, "Up to " + (PathRules.AreEqual(parent, _workspace.Root) ? "brain" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, ""));
             }
             rows.AddRange(children.Select(e => new BrowserItem(e.Path, e.Name, true, false, "")));
             _folder = folder;
             _refreshing = true;
             try { Folders.ItemsSource = rows; Folders.SelectedItem = null; }
             finally { _refreshing = false; }
-            Location.Text = PathRules.AreEqual(folder, _workspace.Root) ? "Notebook" : _workspace.IsTrash(folder) ? "Trash" :
-                (_workspace.IsInTrash(folder) ? "Trash / " + Path.GetRelativePath(_workspace.TrashPath, folder) : "Notebook / " + Path.GetRelativePath(_workspace.Root, folder))
+            Location.Text = PathRules.AreEqual(folder, _workspace.Root) ? "Brain" : _workspace.IsTrash(folder) ? "Trash" :
+                (_workspace.IsInTrash(folder) ? "Trash / " + Path.GetRelativePath(_workspace.TrashPath, folder) : "Brain / " + Path.GetRelativePath(_workspace.Root, folder))
                 .Replace(Path.DirectorySeparatorChar.ToString(), " / ");
             EmptyMessage.IsVisible = children.Count == 0;
             MoveButton.IsEnabled = !PathRules.AreEqual(folder, _sourceFolder);

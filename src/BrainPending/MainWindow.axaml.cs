@@ -205,8 +205,8 @@ public partial class MainWindow : Window
         var explicitPath = _startupPath ?? (flag >= 0 && flag + 1 < args.Length ? args[flag + 1] : null);
         if (explicitPath == null && _settings.SkipAutomaticNotebook)
         {
-            SaveStatus.Text = "Choose a notebook";
-            ShowNotice("Automatic reopening was paused after a notebook failed to open. Use Open notebook or choose a recent notebook to continue.");
+            SaveStatus.Text = "Choose a brain";
+            ShowNotice("Automatic reopening was paused after a brain failed to open. Use Open brain or choose a recent brain to continue.");
             return;
         }
         var remembered = explicitPath == null && _settings.NotebookPath != null;
@@ -220,7 +220,7 @@ public partial class MainWindow : Window
                 _settings.Save(_settingsPath);
             }
             if (remembered && !Directory.Exists(path))
-                throw new IOException("The last notebook is no longer available: " + path);
+                throw new IOException("The last brain is no longer available: " + path);
             SetWorkspace(path);
         }
         catch (Exception e)
@@ -231,20 +231,20 @@ public partial class MainWindow : Window
             _workspace = null;
             _folder = "";
             Browser.ItemsSource = null;
-            NotebookPath.Text = "Open notebook";
+            NotebookPath.Text = "Open brain";
             ClearNote();
-            SaveStatus.Text = "Choose a notebook";
+            SaveStatus.Text = "Choose a brain";
             // A failed --notes path says nothing about the remembered notebook; leave it alone.
             if (explicitPath != null)
             {
-                ShowNotice("Could not open the notebook: " + e.Message + " Use Open notebook to choose a notebook." + PendingRecoveryNotice());
+                ShowNotice("Could not open the brain: " + e.Message + " Use Open brain to choose a brain." + PendingRecoveryNotice());
                 return;
             }
             _settings = NotebookSettings.Read(_settingsPath) with { NotebookPath = null, SkipAutomaticNotebook = true };
             try { _settings.Save(_settingsPath); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             { System.Diagnostics.Trace.TraceWarning("Could not remember startup failure: " + error.Message); }
-            ShowNotice("Could not open the notebook: " + e.Message + " Automatic reopening is paused. Use Open notebook to choose a notebook." + PendingRecoveryNotice());
+            ShowNotice("Could not open the brain: " + e.Message + " Automatic reopening is paused. Use Open brain to choose a brain." + PendingRecoveryNotice());
         }
     }
 
@@ -290,7 +290,7 @@ public partial class MainWindow : Window
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            ShowNotice("Could not remember this notebook: " + e.Message);
+            ShowNotice("Could not remember this brain: " + e.Message);
         }
         RestoreLastNote();
         RestoreRecoveredChanges();
@@ -334,7 +334,7 @@ public partial class MainWindow : Window
         var others = _recovery.Pending().Select(p => p.Note.Notebook)
             .Where(n => _workspace == null || !PathRules.AreEqual(n, _workspace.Root))
             .Distinct(PathRules.Comparer).ToList();
-        return others.Count == 0 ? "" : " Unsaved changes are waiting for " + string.Join(", ", others) + "; open that notebook to restore them.";
+        return others.Count == 0 ? "" : " Unsaved changes are waiting for " + string.Join(", ", others) + "; open that brain to restore them.";
     }
 
     private void RememberOpenNote(string? path)
@@ -393,16 +393,16 @@ public partial class MainWindow : Window
                 Padding = new Thickness(6), Margin = new Thickness(12, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center
             };
-            ToolTip.SetTip(remove, "Remove from recent notebooks");
-            Avalonia.Automation.AutomationProperties.SetName(remove, "Remove " + name + " from recent notebooks");
+            ToolTip.SetTip(remove, "Remove from recent brains");
+            Avalonia.Automation.AutomationProperties.SetName(remove, "Remove " + name + " from recent brains");
             remove.Click += async (_, e) =>
             {
                 e.Handled = true;
                 _recentNotebooksMenu.Hide();
                 await Run(async () =>
                 {
-                    if (!await Confirm("Remove recent notebook?",
-                        $"Remove ‘{name}’ from recent notebooks? The notebook and its thoughts will remain unchanged.", "Remove")) return;
+                    if (!await Confirm("Remove recent brain?",
+                        $"Remove ‘{name}’ from recent brains? The brain and its thoughts will remain unchanged.", "Remove")) return;
                     _settings = NotebookSettings.Read(_settingsPath).RemoveRecentNotebook(path);
                     _settings.Save(_settingsPath);
                     RefreshRecentNotebooks();
@@ -432,14 +432,14 @@ public partial class MainWindow : Window
             entry.Click += async (_, _) => await Run(() =>
             {
                 _recentNotebooksMenu.Hide();
-                if (!Directory.Exists(path)) throw new IOException("This notebook is no longer available: " + path);
+                if (!Directory.Exists(path)) throw new IOException("This brain is no longer available: " + path);
                 if (SaveCurrent()) SetWorkspace(path);
                 return Task.CompletedTask;
             });
             header.Children.Add(entry);
             items.Children.Add(header);
         }
-        if (items.Children.Count == 0) items.Children.Add(new TextBlock { Text = "No recent notebooks" });
+        if (items.Children.Count == 0) items.Children.Add(new TextBlock { Text = "No recent brains" });
         _recentNotebooksMenu.Content = items;
     }
 
@@ -464,7 +464,7 @@ public partial class MainWindow : Window
         if (!PathRules.AreEqual(_folder, _workspace.Root))
         {
             var parent = _workspace.ParentFolder(_folder);
-            rows.Add(new(parent, "Up to " + (PathRules.AreEqual(parent, _workspace.Root) ? "notebook" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, "Parent cluster"));
+            rows.Add(new(parent, "Up to " + (PathRules.AreEqual(parent, _workspace.Root) ? "brain" : _workspace.IsTrash(parent) ? "Trash" : Path.GetFileName(parent)), true, true, "Parent cluster"));
         }
         rows.AddRange(entries.Select(e => new BrowserItem(e.Path, e.Name, e.IsFolder, false,
             !string.IsNullOrWhiteSpace(SearchBox.Text) ? Path.GetRelativePath(_folder, e.Path) : e.IsFolder ? "Cluster" : "Edited " + e.ModifiedUtc.ToLocalTime().ToString("d MMM, HH:mm"), IsPinned: e.IsPinned)));
@@ -516,7 +516,7 @@ public partial class MainWindow : Window
             RefreshBrowser();
         }
         catch (IOException) { /* Sync clients can briefly hold/replace a file. Retry on the next poll. */ }
-        catch (UnauthorizedAccessException e) { ShowNotice("Cannot read notebook changes: " + e.Message); }
+        catch (UnauthorizedAccessException e) { ShowNotice("Cannot read brain changes: " + e.Message); }
         catch (Exception e) { ShowNotice("Could not load an incoming change: " + e.Message); }
     }
 
@@ -577,7 +577,7 @@ public partial class MainWindow : Window
         NoteTitle.Text = Path.GetFileNameWithoutExtension(_note.Path);
         SaveStatus.Text = "Saved locally · " + DateTime.Now.ToString("HH:mm");
         try { RefreshBrowser(); }
-        catch (Exception error) { ShowNotice("The thought was saved, but the notebook list could not be refreshed: " + error.Message); }
+        catch (Exception error) { ShowNotice("The thought was saved, but the brain list could not be refreshed: " + error.Message); }
         if (result.IsConflict)
             ShowNotice("This thought changed on disk while you were editing. Your work is saved in this conflict copy; the other version is unchanged.");
         return true;
@@ -610,7 +610,7 @@ public partial class MainWindow : Window
     {
         if (_inDialog) return;
         if (!await Confirm("Close without saving?",
-            "Your changes could not be saved to the notebook or to a recovery copy on this computer. Closing now discards them.",
+            "Your changes could not be saved to the brain or to a recovery copy on this computer. Closing now discards them.",
             "Discard and close")) return;
         _closeConfirmed = true;
         Close();
@@ -642,7 +642,7 @@ public partial class MainWindow : Window
             _dirty = false;
             _autosave.Stop();
             NoteTitle.Text = Path.GetFileNameWithoutExtension(note.Path);
-            Breadcrumb.Text = (_workspace!.IsInTrash(note.Path) ? "Trash  /  " + Path.GetRelativePath(_workspace.TrashPath, note.Path) : "Notebook  /  " + Path.GetRelativePath(_workspace.Root, note.Path)).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
+            Breadcrumb.Text = (_workspace!.IsInTrash(note.Path) ? "Trash  /  " + Path.GetRelativePath(_workspace.TrashPath, note.Path) : "Brain  /  " + Path.GetRelativePath(_workspace.Root, note.Path)).Replace(Path.DirectorySeparatorChar.ToString(), "  /  ");
             EditorView.IsVisible = true;
             Welcome.IsVisible = false;
             if (_notePositions.TryGetValue(note.Path, out var position))
@@ -840,7 +840,7 @@ public partial class MainWindow : Window
             empty.Click += async (_, _) => await Run(async () =>
             {
                 if (_workspace == null || !SaveCurrent()) return;
-                if (!await Confirm("Empty trash?", "Everything in this notebook’s Trash will move to the Windows Recycle Bin.", "Empty trash")) return;
+                if (!await Confirm("Empty trash?", "Everything in this brain’s Trash will move to the Windows Recycle Bin.", "Empty trash")) return;
                 try { _workspace.EmptyTrash(RecycleItem); }
                 finally
                 {
@@ -875,7 +875,7 @@ public partial class MainWindow : Window
         trash.Click += async (_, _) => await Run(async () =>
         {
             if (_workspace == null || !SaveCurrent()) return;
-            var description = inTrash ? $"“{item.Name}” will leave this notebook’s Trash and move to the Windows Recycle Bin." : $"“{item.Name}” will be moved to Trash. You can open Trash and move it back later.";
+            var description = inTrash ? $"“{item.Name}” will leave this brain’s Trash and move to the Windows Recycle Bin." : $"“{item.Name}” will be moved to Trash. You can open Trash and move it back later.";
             if (!await Confirm(inTrash ? "Move to Recycle Bin?" : "Move to Trash?", description, inTrash ? "Move to Recycle Bin" : "Move to Trash")) return;
             if (inTrash) _workspace.RecycleFromTrash(item.Path, RecycleItem);
             else _workspace.MoveToTrash(item.Path);
@@ -927,7 +927,7 @@ public partial class MainWindow : Window
         if (_workspace == null || !SaveCurrent()) return false;
         var target = _workspace.Move(item.Path, destination);
         RefreshAfterMove(item.Path, target);
-        SaveStatus.Text = "Moved to " + (PathRules.AreEqual(destination, _workspace.Root) ? "notebook" : Path.GetFileName(destination));
+        SaveStatus.Text = "Moved to " + (PathRules.AreEqual(destination, _workspace.Root) ? "brain" : Path.GetFileName(destination));
         return true;
     }
 
@@ -957,7 +957,7 @@ public partial class MainWindow : Window
     private async void OpenNotebook_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
     {
         if (!SaveCurrent()) return;
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose your notebook folder", AllowMultiple = false });
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose your brain folder", AllowMultiple = false });
         var path = folders.FirstOrDefault()?.TryGetLocalPath();
         if (path == null) return;
         SetWorkspace(path);

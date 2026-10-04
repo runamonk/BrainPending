@@ -1,0 +1,64 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:BrainPending"
+        x:Class="BrainPending.ThoughtSearchDialog"
+        Title="Search thoughts" Width="640" Height="560" MinWidth="420" MinHeight="320"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}">
+  <Grid Margin="20" RowDefinitions="Auto,Auto,*,Auto">
+    <TextBox x:Name="Query" PlaceholderText="Search inside thoughts…" TextChanged="Query_Changed" AutomationProperties.Name="Search inside thoughts" />
+    <WrapPanel Grid.Row="1" Margin="0,10,0,0" ItemSpacing="14" LineSpacing="4">
+      <RadioButton x:Name="ClusterScope" GroupName="Scope" Content="Current cluster" IsChecked="True" IsCheckedChanged="Option_Changed" />
+      <RadioButton x:Name="BrainScope" GroupName="Scope" Content="Whole brain" IsCheckedChanged="Option_Changed" />
+      <CheckBox x:Name="MatchCase" Content="Match case" IsCheckedChanged="Option_Changed" />
+      <CheckBox x:Name="WholeWord" Content="Whole word" IsCheckedChanged="Option_Changed" />
+      <CheckBox x:Name="UseRegex" Content="Regex" IsCheckedChanged="Option_Changed" />
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="Context lines" VerticalAlignment="Center" />
+        <NumericUpDown x:Name="ContextLines" Minimum="0" Maximum="10" Increment="1" Value="2" FormatString="0" Width="110"
+                       ValueChanged="ContextLines_Changed" AutomationProperties.Name="Context lines" />
+      </StackPanel>
+    </WrapPanel>
+    <Grid Grid.Row="2" Margin="0,12,0,12">
+      <ListBox x:Name="Results" Background="Transparent" Tapped="Results_Tapped" AutomationProperties.Name="Matches">
+        <ListBox.Styles>
+          <Style Selector="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+          </Style>
+        </ListBox.Styles>
+        <ListBox.DataTemplates>
+          <DataTemplate x:DataType="local:SearchGroupRow">
+            <Grid ColumnDefinitions="28,*,Auto" Margin="0,2">
+              <Button Classes="quiet" Width="22" Height="22" Padding="0" Click="Toggle_Click"
+                      Content="{Binding ToggleGlyph}" FontSize="15" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                      ToolTip.Tip="Show or hide matches" AutomationProperties.Name="Show or hide matches" />
+              <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Location}" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <TextBlock Grid.Column="2" Text="{Binding Summary}" FontSize="12" Opacity="0.7" VerticalAlignment="Center" Margin="8,0,0,0" />
+            </Grid>
+          </DataTemplate>
+          <DataTemplate x:DataType="local:SearchMatchRow">
+            <StackPanel Margin="28,2,0,2" Spacing="1">
+              <TextBlock Text="{Binding LineLabel}" FontSize="11" Opacity="0.6" />
+              <TextBlock Text="{Binding Before}" FontFamily="Consolas,Menlo,monospace" FontSize="12" Opacity="0.6"
+                         IsVisible="{Binding Before, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <TextBlock FontFamily="Consolas,Menlo,monospace" FontSize="12" TextTrimming="CharacterEllipsis">
+                <Run Text="{Binding Pre}" /><Run Text="{Binding Hit}" FontWeight="Bold" Foreground="{DynamicResource AppIconBrush}" /><Run Text="{Binding Post}" />
+              </TextBlock>
+              <TextBlock Text="{Binding After}" FontFamily="Consolas,Menlo,monospace" FontSize="12" Opacity="0.6"
+                         IsVisible="{Binding After, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.DataTemplates>
+      </ListBox>
+      <TextBlock x:Name="EmptyMessage" Text="Type to search inside thoughts" HorizontalAlignment="Center" VerticalAlignment="Center"
+                 IsHitTestVisible="False" Opacity="0.6" TextWrapping="Wrap" TextAlignment="Center" />
+    </Grid>
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
+      <TextBlock x:Name="Status" FontSize="12" Opacity="0.7" TextTrimming="CharacterEllipsis" />
+      <TextBlock Grid.Column="1" Text="Enter to open · → ← expand · Esc to close" FontSize="12" Opacity="0.6" Margin="12,0,0,0" />
+    </Grid>
+  </Grid>
+</Window>

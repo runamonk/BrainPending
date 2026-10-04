@@ -25,6 +25,9 @@
             <Button x:Name="MiniSwitchThoughtButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Quick switch (Ctrl+Shift+O)" AutomationProperties.Name="Quick switch" Click="SwitchThought_Click">
               <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 3,6 L 17,6 M 13,2 L 17,6 L 13,10 M 17,14 L 3,14 M 7,10 L 3,14 L 7,18" />
             </Button>
+            <Button x:Name="MiniSearchThoughtsButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Search inside thoughts (Ctrl+Shift+G)" AutomationProperties.Name="Search thoughts" Click="SearchThoughts_Click">
+              <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 14,8 A 6,6 0 1 0 2,8 A 6,6 0 1 0 14,8 M 12.5,12.5 L 18.5,18.5 M 5.6,8 A 0.6,0.6 0 1 0 4.4,8 A 0.6,0.6 0 1 0 5.6,8 M 8.6,8 A 0.6,0.6 0 1 0 7.4,8 A 0.6,0.6 0 1 0 8.6,8 M 11.6,8 A 0.6,0.6 0 1 0 10.4,8 A 0.6,0.6 0 1 0 11.6,8" />
+            </Button>
         </StackPanel>
       </Border>
       <Border x:Name="Sidebar" ZIndex="2" Background="{DynamicResource AppSurfaceBrush}" Padding="16,22,16,12" PointerEntered="Sidebar_PointerEntered" PointerExited="Sidebar_PointerExited">
@@ -47,6 +50,9 @@
                 </Button>
                 <Button x:Name="SwitchThoughtButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Quick switch (Ctrl+Shift+O)" AutomationProperties.Name="Quick switch" Click="SwitchThought_Click">
                   <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 3,6 L 17,6 M 13,2 L 17,6 L 13,10 M 17,14 L 3,14 M 7,10 L 3,14 L 7,18" />
+                </Button>
+                <Button x:Name="SearchThoughtsButton" Classes="quiet" Width="32" Height="32" Padding="6" ToolTip.Tip="Search inside thoughts (Ctrl+Shift+G)" AutomationProperties.Name="Search thoughts" Click="SearchThoughts_Click">
+                  <Path Width="20" Height="20" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 14,8 A 6,6 0 1 0 2,8 A 6,6 0 1 0 14,8 M 12.5,12.5 L 18.5,18.5 M 5.6,8 A 0.6,0.6 0 1 0 4.4,8 A 0.6,0.6 0 1 0 5.6,8 M 8.6,8 A 0.6,0.6 0 1 0 7.4,8 A 0.6,0.6 0 1 0 8.6,8 M 11.6,8 A 0.6,0.6 0 1 0 10.4,8 A 0.6,0.6 0 1 0 11.6,8" />
                 </Button>
               </StackPanel>
             </StackPanel>

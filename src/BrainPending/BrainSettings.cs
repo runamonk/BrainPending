@@ -6,7 +6,8 @@ namespace BrainPending;
 internal sealed record BrainSettings(string? BrainPath = null, bool? DarkTheme = null, int? WindowX = null, int? WindowY = null,
     string[]? RecentBrains = null, bool SkipAutomaticBrain = false,
     double? WindowWidth = null, double? WindowHeight = null, bool WindowMaximized = false,
-    Dictionary<string, string>? LastOpenThoughts = null, string? ColorTheme = null, bool SidebarPinned = true)
+    Dictionary<string, string>? LastOpenThoughts = null, string? ColorTheme = null, bool SidebarPinned = true,
+    SearchSettings? Search = null)
 {
     public string? LastThought(string brain) => LastOpenThoughts?.FirstOrDefault(p =>
         PathRules.AreEqual(p.Key, brain)).Value;
@@ -43,3 +44,6 @@ internal sealed record BrainSettings(string? BrainPath = null, bool? DarkTheme =
     public void Save(string? filePath = null) =>
         AtomicFile.WriteAllText(filePath ?? FilePath, JsonSerializer.Serialize(this));
 }
+
+internal sealed record SearchSettings(bool WholeBrain = false, bool MatchCase = false, bool WholeWord = false,
+    bool UseRegex = false, int ContextLines = 2, int? X = null, int? Y = null, double? Width = null, double? Height = null);

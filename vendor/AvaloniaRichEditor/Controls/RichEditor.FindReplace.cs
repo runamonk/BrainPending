@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using AvaloniaRichEditor.Documents;
 
 namespace AvaloniaRichEditor.Controls;
@@ -9,6 +10,8 @@ public partial class RichEditor
     // Null disables the highlight-all overlay; the find UI clears it on close.
     internal string? FindHighlightQuery { get; private set; }
     internal bool FindHighlightMatchCase { get; private set; }
+    // Brain Pending: pattern highlight for searches across thoughts; replaces the query while set.
+    internal Regex? FindHighlightPattern { get; private set; }
 
     /// <summary>Sets (or clears, with null/empty) the query whose matches are highlighted while a find UI
     /// is open. Every match except the current selection is tinted — the current one is already painted as
@@ -17,13 +20,45 @@ public partial class RichEditor
     public void SetFindHighlight(string? query, bool matchCase)
     {
         string? q = string.IsNullOrEmpty(query) ? null : query;
-        if (q == FindHighlightQuery && matchCase == FindHighlightMatchCase) return;
+        if (q == FindHighlightQuery && matchCase == FindHighlightMatchCase && FindHighlightPattern == null) return;
+        FindHighlightPattern = null;
         FindHighlightQuery = q;
         FindHighlightMatchCase = matchCase;
         InvalidateVisual();
     }
 
     public void ClearFindHighlight() => SetFindHighlight(null, false);
+
+    /// <summary>Highlights every non-empty match of <paramref name="pattern"/> (null clears).</summary>
+    public void SetFindHighlight(Regex? pattern)
+    {
+        FindHighlightQuery = null;
+        FindHighlightPattern = pattern;
+        InvalidateVisual();
+    }
+
+    /// <summary>Selects the match at <paramref name="index"/> (0-based, document order) of the
+    /// pattern set by <see cref="SetFindHighlight(Regex?)"/>. Returns false when there is no such match.</summary>
+    public bool SelectFindMatch(int index)
+    {
+        if (FindHighlightPattern is not { } pattern || Document == null || index < 0) return false;
+        foreach (var p in GetAllParagraphsInOrder())
+            foreach (Match m in pattern.Matches(BuildPlain(p)))
+            {
+                if (m.Length == 0) continue;
+                if (index-- == 0) { SelectMatch(p, m.Index, m.Length); return true; }
+            }
+        return false;
+    }
+
+    /// <summary>Plain text of each paragraph in the order the editor searches them, including table
+    /// cells. Objects such as images appear as U+FFFC.</summary>
+    public static IReadOnlyList<string> ParagraphTexts(FlowDocument document)
+    {
+        var texts = new List<string>();
+        foreach (var p in ParagraphsInBlocks(document.Blocks)) texts.Add(BuildPlain(p));
+        return texts;
+    }
 
     /// <summary>Position of the current selection among all matches of the highlight query:
     /// (current 1-based index or 0 when the selection isn't on a match, total match count).

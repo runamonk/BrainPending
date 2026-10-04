@@ -295,6 +295,7 @@ public partial class MainWindow : Window
         RestoreLastThought();
         RestoreRecoveredChanges();
         RefreshRecentBrains();
+        _searchDialog?.Refresh();
     }
 
     private void RestoreRecoveredChanges()
@@ -629,6 +630,7 @@ public partial class MainWindow : Window
     private void LoadThought(ThoughtSnapshot thought)
     {
         _loading = true;
+        ClearSearchHighlight();
         try
         {
             RememberThoughtPosition();
@@ -668,6 +670,7 @@ public partial class MainWindow : Window
     {
         RememberThoughtPosition();
         CloseFind(false);
+        ClearSearchHighlight();
         CancelTitleEditing();
         if (forget && _thought != null) RememberOpenThought(null);
         _thought = null;
@@ -1063,6 +1066,59 @@ public partial class MainWindow : Window
         EditorView.Editor.Focus();
     }
 
+    private ThoughtSearchDialog? _searchDialog;
+    private bool _searchHighlight;
+
+    private void SearchThoughts_Click(object? sender, RoutedEventArgs e) => SearchThoughts();
+
+    // Non-modal so several matches can be opened in turn.
+    private void SearchThoughts()
+    {
+        if (_workspace == null) return;
+        if (_searchDialog is { } open)
+        {
+            open.Activate();
+            open.FocusQuery();
+            return;
+        }
+        _searchDialog = new ThoughtSearchDialog(this, _settingsPath);
+        _searchDialog.Closed += (_, _) => _searchDialog = null;
+        _searchDialog.Show(this);
+    }
+
+    internal BrainWorkspace? SearchWorkspace => _workspace;
+    internal string SearchCluster => _cluster;
+    internal void SaveBeforeSearch() => SaveCurrent();
+
+    // Returns a message when the match cannot be shown.
+    internal string? OpenSearchMatch(string path, System.Text.RegularExpressions.Regex pattern, int index)
+    {
+        if (_workspace == null) return null;
+        if (_inDialog || _titleEditingPath != null) return "Finish the open prompt first.";
+        if (!File.Exists(path)) return "That thought no longer exists. Search again to refresh the results.";
+        try
+        {
+            if (!PathRules.AreEqual(_thought?.Path, path))
+            {
+                if (!SaveCurrent()) return "The open thought could not be saved, so it was kept open.";
+                LoadThought(_workspace.Read(path));
+                RefreshBrowser(true);
+            }
+        }
+        catch (Exception e) { return e.Message; }
+        if (_findOpen) CloseFind(false);
+        EditorView.Editor.SetFindHighlight(pattern);
+        _searchHighlight = true;
+        return EditorView.Editor.SelectFindMatch(index) ? null : "That match is no longer in the thought.";
+    }
+
+    private void ClearSearchHighlight()
+    {
+        if (!_searchHighlight) return;
+        _searchHighlight = false;
+        EditorView.Editor.ClearFindHighlight();
+    }
+
     private async void OnShortcut(object? sender, KeyEventArgs e)
     {
         if (_inDialog || _titleEditingPath != null) return;
@@ -1073,6 +1129,8 @@ public partial class MainWindow : Window
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.F) { e.Handled = true; ShowSidebar(); SearchBox.Focus(); }
         else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.O)
         { e.Handled = true; await Run(SwitchThought); }
+        else if (e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift) && e.Key == Key.G) { e.Handled = true; SearchThoughts(); }
+        else if (e.KeyModifiers == KeyModifiers.None && e.Key == Key.Escape && _searchHighlight) { e.Handled = true; ClearSearchHighlight(); }
         else if (e.KeyModifiers == KeyModifiers.Alt && e.Key == Key.Up && _workspace != null && !PathRules.AreEqual(_cluster, _workspace.Root))
         { e.Handled = true; await Run(() => Navigate(_workspace.ParentCluster(_cluster), true)); }
     }

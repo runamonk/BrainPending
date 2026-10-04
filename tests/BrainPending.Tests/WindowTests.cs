@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -312,7 +313,7 @@ public sealed class WindowTests : IDisposable
         Assert.False(window.FindControl<StackPanel>("SidebarPinnedActions")!.IsVisible);
         Assert.Equal(new[] { "SidebarHome", "SidebarPin" },
             toolbar.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).Select(b => b.Name));
-        Assert.Equal(5, mini.GetVisualDescendants().OfType<Button>().Count());
+        Assert.Equal(6, mini.GetVisualDescendants().OfType<Button>().Count());
         Assert.DoesNotContain(mini.GetVisualDescendants().OfType<Button>(),
             b => Equals(ToolTip.GetTip(b), "Brain home"));
         window.MouseMove(new Point(700, 200));
@@ -769,6 +770,74 @@ public sealed class WindowTests : IDisposable
         Assert.Equal(_root, window.FindControl<TextBlock>("BrainPath")!.Text);
         Assert.Equal(thought.Revision, other.Read(thought.Path).Revision);
         window.Close();
+    }
+
+    [Fact]
+    public void ThoughtSearchPatternHonoursWholeWordCaseAndRegex()
+    {
+        Assert.Single(ThoughtSearch.Matches(["use c++ daily", "c++x"], ThoughtSearch.Pattern("c++", false, true, false)));
+        Assert.Empty(ThoughtSearch.Matches(["Garden"], ThoughtSearch.Pattern("garden", true, false, false)));
+        Assert.Equal(2, ThoughtSearch.Matches(["Garden gardens"], ThoughtSearch.Pattern("garden", false, false, false)).Count);
+        Assert.Single(ThoughtSearch.Matches(["Garden gardens"], ThoughtSearch.Pattern("garden", false, true, false)));
+        Assert.Equal(2, ThoughtSearch.Matches(["a1 b22"], ThoughtSearch.Pattern(@"\d+", false, false, true)).Count);
+        Assert.Throws<RegexParseException>(() => ThoughtSearch.Pattern("(", false, false, true));
+    }
+
+    [AvaloniaFact]
+    public async Task ThoughtSearchStaysOpenWhileOpeningMatchesAndRemembersSettings()
+    {
+        var workspace = new BrainWorkspace(_root);
+        var first = workspace.CreateThought(_root, "First", BrainWorkspace.PlainTextRtf("zero\nfind me\ntwo"));
+        var cluster = workspace.CreateCluster(_root, "Projects");
+        workspace.CreateThought(cluster, "Second", BrainWorkspace.PlainTextRtf("one\ntwo\nthree find\nfour\nfive find"));
+        var window = OpenWindow();
+        Select(window, first.Path);
+        window.KeyPress(Key.G, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.G, "g");
+        var dialog = Assert.IsType<ThoughtSearchDialog>(Assert.Single(window.OwnedWindows));
+        var results = dialog.FindControl<ListBox>("Results")!;
+        var status = dialog.FindControl<TextBlock>("Status")!;
+        dialog.FindControl<RadioButton>("BrainScope")!.IsChecked = true;
+        dialog.FindControl<TextBox>("Query")!.Text = "find";
+        await WaitFor(() => status.Text!.StartsWith("3 matches in 2 thoughts"));
+
+        var second = Assert.IsType<SearchGroupRow>(results.Items[1]);
+        Assert.Equal("Projects", second.Location);
+        results.SelectedItem = second;
+        results.ContainerFromItem(second)!.Focus();
+        dialog.KeyPress(Key.Right, RawInputModifiers.None, PhysicalKey.ArrowRight, null);
+        var match = Assert.IsType<SearchMatchRow>(results.Items[3]);
+        Assert.Equal("Line 5", match.LineLabel);
+        Assert.Equal("three find\nfour", match.Before);
+        Assert.Equal("", match.After);
+        dialog.FindControl<NumericUpDown>("ContextLines")!.Value = 1;
+        Assert.Equal("four", match.Before);
+
+        results.SelectedItem = match;
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.Equal("Second", window.FindControl<TextBlock>("ThoughtTitle")!.Text);
+        Assert.True(dialog.IsVisible);
+        Assert.DoesNotContain("no longer", status.Text);
+
+        dialog.FindControl<CheckBox>("WholeWord")!.IsChecked = true;
+        dialog.FindControl<TextBox>("Query")!.Text = "fin";
+        await WaitFor(() => dialog.FindControl<TextBlock>("EmptyMessage")!.IsVisible && status.Text!.StartsWith("0 matches"));
+
+        dialog.Close();
+        window.KeyPress(Key.G, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.G, "g");
+        dialog = Assert.IsType<ThoughtSearchDialog>(Assert.Single(window.OwnedWindows));
+        Assert.True(dialog.FindControl<RadioButton>("BrainScope")!.IsChecked);
+        Assert.True(dialog.FindControl<CheckBox>("WholeWord")!.IsChecked);
+        Assert.Equal(1, dialog.FindControl<NumericUpDown>("ContextLines")!.Value);
+    }
+
+    private static async Task WaitFor(Func<bool> condition)
+    {
+        for (var i = 0; i < 200 && !condition(); i++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            await Task.Delay(20);
+        }
+        Assert.True(condition());
     }
 
     [AvaloniaFact]

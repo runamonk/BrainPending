@@ -2030,6 +2030,11 @@ public partial class RichEditor : Control
     private void DrawFindHighlights(DrawingContext context, Paragraph p, Avalonia.Media.TextFormatting.TextLayout layout,
         double originX, double originY)
     {
+        if (FindHighlightPattern is { } pattern)
+        {
+            DrawPatternHighlights(context, p, layout, originX, originY, pattern);
+            return;
+        }
         if (FindHighlightQuery is not { } q) return;
         var cmp = FindHighlightMatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
         string text = BuildPlain(p);
@@ -2053,6 +2058,23 @@ public partial class RichEditor : Control
                 foreach (var rect in layout.HitTestTextRange(idx, q.Length))
                     context.FillRectangle(FindMatchBrush, new Rect(originX + rect.X, originY + rect.Y, rect.Width, rect.Height));
             from = idx + 1;
+        }
+    }
+
+    private void DrawPatternHighlights(DrawingContext context, Paragraph p, Avalonia.Media.TextFormatting.TextLayout layout,
+        double originX, double originY, System.Text.RegularExpressions.Regex pattern)
+    {
+        int selStart = -1, selLength = 0;
+        if (ReferenceEquals(_selectionStart.Paragraph, p) && ReferenceEquals(_selectionEnd.Paragraph, p))
+        {
+            selStart = Math.Min(_selectionStart.Offset, _selectionEnd.Offset);
+            selLength = Math.Abs(_selectionEnd.Offset - _selectionStart.Offset);
+        }
+        foreach (System.Text.RegularExpressions.Match m in pattern.Matches(BuildPlain(p)))
+        {
+            if (m.Length == 0 || (m.Index == selStart && m.Length == selLength)) continue;
+            foreach (var rect in layout.HitTestTextRange(m.Index, m.Length))
+                context.FillRectangle(FindMatchBrush, new Rect(originX + rect.X, originY + rect.Y, rect.Width, rect.Height));
         }
     }
 

@@ -47,3 +47,5 @@ NuGet package without passing the persistence tests.
   paragraphs instead of copying unselected text. Selections within a cell retain block images.
 - `LinkHandler` lets the app handle notebook attachment links before the editor's
   normal HTTP/HTTPS-only launcher. Other local/custom schemes remain blocked.
+- Regex find highlight (`SetFindHighlight(Regex?)`), `SelectFindMatch` and static
+  `ParagraphTexts` support searching inside thoughts with whole-word and regex options.

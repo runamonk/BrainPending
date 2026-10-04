@@ -1,2 +1,5 @@
 ﻿#nullable enable
 AvaloniaRichEditor.Controls.RichEditor.TryLoadRtf(string! rtf, out string? error) -> bool
+AvaloniaRichEditor.Controls.RichEditor.SetFindHighlight(System.Text.RegularExpressions.Regex? pattern) -> void
+AvaloniaRichEditor.Controls.RichEditor.SelectFindMatch(int index) -> bool
+static AvaloniaRichEditor.Controls.RichEditor.ParagraphTexts(AvaloniaRichEditor.Documents.FlowDocument! document) -> System.Collections.Generic.IReadOnlyList<string!>!

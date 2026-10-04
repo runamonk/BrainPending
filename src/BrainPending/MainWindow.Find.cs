@@ -24,6 +24,7 @@ public partial class MainWindow
     {
         if (_thought == null) return;
         _findOpen = true;
+        _searchHighlight = false;
         FindPanel.IsVisible = true;
         FindPanel.Height = 52;
         EditorView.Editor.SetFindHighlight(FindInput.Text, false);

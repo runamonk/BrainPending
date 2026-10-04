@@ -50,6 +50,10 @@ dotnet run --project src/BrainPending -- --brain ./Brain
 - Quick switch (Ctrl+Shift+O) searches thoughts and clusters across the brain,
   with the previous thought selected first. Open a cluster, then use Ctrl+N to
   add a thought there. Thought bubbles and connected nodes distinguish the two.
+- Search inside thoughts (Ctrl+Shift+G) opens a separate window that stays open while you
+  open matches. Search the current cluster or the whole brain, with match case, whole word
+  and regex options. Results are grouped by thought; expand one with + to preview each match
+  with adjustable context lines. Options and window placement are remembered.
 - Ctrl+F opens a slide-down find panel above the editor and focuses its input.
   Matches are highlighted as you type, with a match counter. F3 / Shift+F3
   (or Enter / Shift+Enter in the input) move between matches with wrap-around;

@@ -46,4 +46,5 @@ internal sealed record BrainSettings(string? BrainPath = null, bool? DarkTheme =
 }
 
 internal sealed record SearchSettings(bool WholeBrain = false, bool MatchCase = false, bool WholeWord = false,
-    bool UseRegex = false, int ContextLines = 2, int? X = null, int? Y = null, double? Width = null, double? Height = null);
+    bool UseRegex = false, int ContextLines = 2, int? X = null, int? Y = null, double? Width = null, double? Height = null,
+    string[]? History = null, string? LastQuery = null, string? SelectedPath = null, int SelectedMatch = -1);

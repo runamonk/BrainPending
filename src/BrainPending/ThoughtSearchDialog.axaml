@@ -6,7 +6,17 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
         Background="{DynamicResource AppSurfaceBrush}">
   <Grid Margin="20" RowDefinitions="Auto,Auto,*,Auto">
-    <TextBox x:Name="Query" PlaceholderText="Search inside thoughts…" TextChanged="Query_Changed" AutomationProperties.Name="Search inside thoughts" />
+    <Grid ColumnDefinitions="*,Auto">
+      <TextBox x:Name="Query" PlaceholderText="Search inside thoughts…" TextChanged="Query_Changed" AutomationProperties.Name="Search inside thoughts">
+        <TextBox.InnerRightContent>
+          <Button x:Name="HistoryButton" Classes="quiet" Width="28" Padding="6,0" VerticalAlignment="Stretch" Focusable="False"
+                  ToolTip.Tip="Recent searches (Alt+Down)" AutomationProperties.Name="Recent searches">
+            <Path Width="10" Height="6" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5" Data="M 1,1 L 5,5 L 9,1" />
+          </Button>
+        </TextBox.InnerRightContent>
+      </TextBox>
+      <Button x:Name="SearchButton" Grid.Column="1" Classes="action primary" Margin="8,0,0,0" Content="Search" Click="SearchButton_Click" />
+    </Grid>
     <WrapPanel Grid.Row="1" Margin="0,10,0,0" ItemSpacing="14" LineSpacing="4">
       <RadioButton x:Name="ClusterScope" GroupName="Scope" Content="Current cluster" IsChecked="True" IsCheckedChanged="Option_Changed" />
       <RadioButton x:Name="BrainScope" GroupName="Scope" Content="Whole brain" IsCheckedChanged="Option_Changed" />

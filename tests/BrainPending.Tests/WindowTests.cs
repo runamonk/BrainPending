@@ -853,6 +853,43 @@ public sealed class WindowTests : IDisposable
         Assert.True(dialog.FindControl<RadioButton>("BrainScope")!.IsChecked);
         Assert.True(dialog.FindControl<CheckBox>("WholeWord")!.IsChecked);
         Assert.Equal(1, dialog.FindControl<NumericUpDown>("ContextLines")!.Value);
+
+        // Opening a match and closing both remember the query, newest first.
+        dialog.KeyPress(Key.Down, RawInputModifiers.Alt, PhysicalKey.ArrowDown, null);
+        var history = dialog.HistoryMenu!;
+        var recent = history.Items.OfType<MenuItem>().ToList();
+        Assert.All(recent, item => Assert.NotNull(TopLevel.GetTopLevel(item)));
+        Assert.Equal(new object?[] { "fin", "find", "Clear recent searches" }, recent.Select(i => i.Header));
+        recent[1].RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal("find", dialog.FindControl<TextBox>("Query")!.Text);
+        history.Hide();
+
+        // A query is also remembered once typing pauses.
+        dialog.FindControl<TextBox>("Query")!.Text = "zero";
+        await WaitFor(() =>
+        {
+            dialog.KeyPress(Key.Down, RawInputModifiers.Alt, PhysicalKey.ArrowDown, null);
+            var top = dialog.HistoryMenu!.Items.OfType<MenuItem>().First().Header;
+            dialog.HistoryMenu.Hide();
+            return Equals(top, "zero");
+        });
+
+        // Reopening restores the query and the selected match.
+        results = dialog.FindControl<ListBox>("Results")!;
+        await WaitFor(() => dialog.FindControl<TextBlock>("Status")!.Text!.StartsWith("1 match"));
+        var group = Assert.IsType<SearchGroupRow>(results.Items[0]);
+        results.SelectedItem = group;
+        results.ContainerFromItem(group)!.Focus();
+        dialog.KeyPress(Key.Right, RawInputModifiers.None, PhysicalKey.ArrowRight, null);
+        results.SelectedIndex = 1;
+        dialog.Close();
+        window.KeyPress(Key.G, RawInputModifiers.Control | RawInputModifiers.Shift, PhysicalKey.G, "g");
+        dialog = Assert.IsType<ThoughtSearchDialog>(Assert.Single(window.OwnedWindows));
+        Assert.Equal("zero", dialog.FindControl<TextBox>("Query")!.Text);
+        results = dialog.FindControl<ListBox>("Results")!;
+        await WaitFor(() => results.SelectedItem is SearchMatchRow);
+        var restored = Assert.IsType<SearchMatchRow>(results.SelectedItem);
+        Assert.Equal(("First", 0), (restored.Group.Name, restored.Ordinal));
     }
 
     private static async Task WaitFor(Func<bool> condition)

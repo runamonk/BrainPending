@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -103,23 +104,32 @@ internal static class ThoughtSearch
 public partial class ThoughtSearchDialog : Window
 {
     private const int MaxMatches = 1000;
+    private const int MaxHistory = 10;
     private readonly MainWindow? _owner;
     private readonly string? _settingsPath;
     private readonly ObservableCollection<object> _rows = [];
     private readonly ConcurrentDictionary<string, (DateTime Modified, long Length, IReadOnlyList<string> Lines)> _cache =
         new(PathRules.Comparer);
     private readonly DispatcherTimer _debounce = new() { Interval = TimeSpan.FromMilliseconds(250) };
+    // Long enough that half-typed words are not remembered.
+    private readonly DispatcherTimer _settle = new() { Interval = TimeSpan.FromSeconds(1.5) };
     private CancellationTokenSource? _search;
     private Regex? _pattern;
     private bool _restoring;
+    // Result to reselect once the restored query is searched; -1 selects the thought row.
+    private (string Query, string Path, int Match)? _restoreSelection;
+    private List<string> _history = [];
+    internal MenuFlyout? HistoryMenu { get; private set; }
 
     public ThoughtSearchDialog()
     {
         InitializeComponent();
         Results.ItemsSource = _rows;
         _debounce.Tick += (_, _) => { _debounce.Stop(); Search(); };
+        _settle.Tick += (_, _) => { _settle.Stop(); RememberQuery(); };
         Opened += (_, _) => FocusQuery();
         AddHandler(KeyDownEvent, OnKey, RoutingStrategies.Tunnel);
+        HistoryButton.Click += (_, _) => ShowHistory();
     }
 
     internal ThoughtSearchDialog(MainWindow owner, string? settingsPath) : this()
@@ -127,8 +137,8 @@ public partial class ThoughtSearchDialog : Window
         _owner = owner;
         _settingsPath = settingsPath;
         RestoreSettings();
-        Closing += (_, _) => SaveSettings();
-        Closed += (_, _) => { _debounce.Stop(); _search?.Cancel(); };
+        Closing += (_, _) => { RememberQuery(); SaveSettings(); };
+        Closed += (_, _) => { _debounce.Stop(); _settle.Stop(); _search?.Cancel(); };
     }
 
     public void FocusQuery()
@@ -154,6 +164,12 @@ public partial class ThoughtSearchDialog : Window
         WholeWord.IsChecked = saved.WholeWord;
         UseRegex.IsChecked = saved.UseRegex;
         ContextLines.Value = Math.Clamp(saved.ContextLines, 0, 10);
+        _history = (saved.History ?? []).Take(MaxHistory).ToList();
+        if (!string.IsNullOrEmpty(saved.LastQuery))
+        {
+            if (saved.SelectedPath != null) _restoreSelection = (saved.LastQuery, saved.SelectedPath, saved.SelectedMatch);
+            Query.Text = saved.LastQuery;
+        }
         _restoring = false;
         if (saved.Width is double width && double.IsFinite(width) && width > 0) Width = Math.Max(MinWidth, width);
         if (saved.Height is double height && double.IsFinite(height) && height > 0) Height = Math.Max(MinHeight, height);
@@ -176,11 +192,18 @@ public partial class ThoughtSearchDialog : Window
         {
             // Preserve preferences saved by the main window or another instance.
             var settings = BrainSettings.Read(_settingsPath);
+            (string Path, int Match)? selected = Results.SelectedItem switch
+            {
+                SearchGroupRow g => (g.Path, -1),
+                SearchMatchRow m => (m.Group.Path, m.Ordinal),
+                _ => null
+            };
             (settings with
             {
                 Search = new SearchSettings(BrainScope.IsChecked == true, MatchCase.IsChecked == true,
                     WholeWord.IsChecked == true, UseRegex.IsChecked == true, ContextLineCount,
-                    Position.X, Position.Y, ClientSize.Width, ClientSize.Height)
+                    Position.X, Position.Y, ClientSize.Width, ClientSize.Height, [.. _history],
+                    Query.Text, selected?.Path, selected?.Match ?? -1)
             }).Save(_settingsPath);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
@@ -191,10 +214,62 @@ public partial class ThoughtSearchDialog : Window
 
     private int ContextLineCount => (int)(ContextLines.Value ?? 2);
 
+    // Typing searches as it goes, so a query is remembered once typing pauses or it is used.
+    private void RememberQuery()
+    {
+        var text = Query.Text ?? "";
+        if (text.Trim().Length == 0) return;
+        _history.Remove(text);
+        _history.Insert(0, text);
+        if (_history.Count > MaxHistory) _history.RemoveRange(MaxHistory, _history.Count - MaxHistory);
+    }
+
+    // Built fresh each time; items added while a flyout opens are not shown.
+    private void ShowHistory()
+    {
+        var menu = new MenuFlyout { Placement = PlacementMode.BottomEdgeAlignedRight };
+        if (_history.Count == 0)
+            menu.Items.Add(new MenuItem { Header = "No recent searches", IsEnabled = false });
+        else
+        {
+            foreach (var text in _history)
+            {
+                var item = new MenuItem { Header = text };
+                item.Click += (_, _) => UseQuery(text);
+                menu.Items.Add(item);
+            }
+            menu.Items.Add(new Separator());
+            var clear = new MenuItem { Header = "Clear recent searches" };
+            clear.Click += (_, _) => _history.Clear();
+            menu.Items.Add(clear);
+        }
+        HistoryMenu = menu;
+        menu.ShowAt(HistoryButton);
+    }
+
+    private void UseQuery(string text)
+    {
+        Query.Text = text;
+        Query.CaretIndex = text.Length;
+        Query.Focus();
+        _debounce.Stop();
+        Search();
+    }
+
+    private void SearchButton_Click(object? sender, RoutedEventArgs e)
+    {
+        RememberQuery();
+        _debounce.Stop();
+        Search();
+        Query.Focus();
+    }
+
     private void Query_Changed(object? sender, TextChangedEventArgs e)
     {
         _debounce.Stop();
         _debounce.Start();
+        _settle.Stop();
+        _settle.Start();
     }
 
     private void Option_Changed(object? sender, RoutedEventArgs e)
@@ -291,6 +366,11 @@ public partial class ThoughtSearchDialog : Window
         Status.Text = (found == 1 ? "1 match" : $"{found:N0} matches") + $" in {files} thought{(files == 1 ? "" : "s")} · {scopeName}"
             + (capped ? $" · showing the first {MaxMatches:N0}" : "")
             + (unreadable > 0 ? $" · {unreadable} could not be read" : "");
+        if (_restoreSelection is { } restore)
+        {
+            _restoreSelection = null;
+            if (restore.Query == text) RestoreSelection(restore.Path, restore.Match);
+        }
         if (Results.SelectedIndex < 0 && _rows.Count > 0) Results.SelectedIndex = 0;
     }
 
@@ -310,6 +390,18 @@ public partial class ThoughtSearchDialog : Window
         EmptyMessage.Text = message;
         EmptyMessage.IsVisible = true;
         Status.Text = "";
+    }
+
+    private void RestoreSelection(string path, int match)
+    {
+        if (_rows.OfType<SearchGroupRow>().FirstOrDefault(g => PathRules.AreEqual(g.Path, path)) is not { } group) return;
+        if (match >= 0 && match < group.Matches.Count)
+        {
+            SetExpanded(group, true);
+            Results.SelectedItem = _rows.OfType<SearchMatchRow>().First(r => r.Group == group && r.Ordinal == match);
+        }
+        else Results.SelectedItem = group;
+        Results.ScrollIntoView(Results.SelectedItem!);
     }
 
     private void SetExpanded(SearchGroupRow group, bool expanded)
@@ -343,6 +435,7 @@ public partial class ThoughtSearchDialog : Window
             _ => (null, 0)
         };
         if (group == null) return;
+        RememberQuery();
         var error = _owner.OpenSearchMatch(group.Path, _pattern, ordinal);
         if (error != null) Status.Text = error;
     }
@@ -357,7 +450,9 @@ public partial class ThoughtSearchDialog : Window
 
     private void OnKey(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) { e.Handled = true; Close(); }
+        if (e.Key == Key.Down && e.KeyModifiers == KeyModifiers.Alt && Query.IsFocused)
+        { e.Handled = true; ShowHistory(); }
+        else if (e.Key == Key.Escape) { e.Handled = true; Close(); }
         else if (e.Key == Key.Enter && e.Source is not NumericUpDown) { e.Handled = true; OpenSelected(); }
         else if (e.Key is Key.Up or Key.Down && Query.IsFocused)
         {

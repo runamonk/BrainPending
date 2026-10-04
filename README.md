@@ -55,6 +55,8 @@ dotnet run --project src/BrainPending -- --brain ./Brain
   open matches. Search the current cluster or the whole brain, with match case, whole word
   and regex options. Results are grouped by thought; expand one with + to preview each match
   with adjustable context lines. Options and window placement are remembered.
+  The last 10 searches are in the search box's dropdown (Alt+Down). Reopening the window
+  brings back the last search and selected result.
 - Ctrl+F opens a slide-down find panel above the editor and focuses its input.
   Matches are highlighted as you type, with a match counter. F3 / Shift+F3
   (or Enter / Shift+Enter in the input) move between matches with wrap-around;

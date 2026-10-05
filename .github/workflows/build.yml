@@ -1,0 +1,48 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write   # needed to create releases
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Test
+        run: dotnet test tests/BrainPending.Tests -c Release
+
+      - name: Version
+        shell: pwsh
+        run: |
+          $v = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}'.TrimStart('v') } else { '0.0.0-ci.${{ github.run_number }}' }
+          "VERSION=$v" >> $env:GITHUB_ENV
+
+      - name: Publish
+        run: dotnet publish src/BrainPending -c Release -r win-x64 --self-contained true -p:Version=${{ env.VERSION }} -o artifacts/BrainPending
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive artifacts/BrainPending/* BrainPending-${{ env.VERSION }}-win-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BrainPending-${{ env.VERSION }}
+          path: BrainPending-*.zip
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: BrainPending-*.zip
+          generate_release_notes: true

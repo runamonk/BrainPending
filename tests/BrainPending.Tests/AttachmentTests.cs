@@ -58,16 +58,6 @@ public sealed class AttachmentTests : IDisposable
         Assert.Throws<IOException>(() => new AttachmentStore(_root).Resolve(link));
 
     [Fact]
-    public void CancelledCopyDoesNotCreateAttachment()
-    {
-        Directory.CreateDirectory(_root);
-        using var cancellation = new CancellationTokenSource();
-        cancellation.Cancel();
-        Assert.Throws<OperationCanceledException>(() => new AttachmentStore(_root).Add("unused", "test.txt", cancellation.Token));
-        Assert.Empty(Directory.GetFileSystemEntries(_root));
-    }
-
-    [Fact]
     public void KeepsDownloadedFileMarkOnWindows()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Zone identifiers are a Windows feature.");

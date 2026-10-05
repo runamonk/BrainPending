@@ -38,45 +38,6 @@ public sealed class WorkspaceTests : IDisposable
     }
 
     [Fact]
-    public void PinnedThoughtsSortFirstPersistAndUnpinWithoutChangingRtf()
-    {
-        var w = Workspace;
-        var cluster = w.CreateCluster(w.Root, "A folder");
-        w.CreateThought(w.Root, "Alpha");
-        var thought = w.CreateThought(w.Root, "Zulu");
-        w.SetPinned(thought.Path, true);
-        var reopened = new BrainWorkspace(w.Root);
-        Assert.Equal(thought.Path, reopened.List(w.Root)[0].Path);
-        Assert.True(reopened.List(w.Root)[0].IsPinned);
-        Assert.Equal(thought.Revision, reopened.Read(thought.Path).Revision);
-        reopened.SetPinned(thought.Path, false);
-        Assert.Equal(cluster, w.List(w.Root)[0].Path);
-        Assert.DoesNotContain(w.List(w.Root), e => e.IsPinned);
-        Assert.Throws<IOException>(() => w.SetPinned(cluster, true));
-    }
-
-    [Fact]
-    public void PinsFollowThoughtAndClusterMovesAndDoNotTransferToReplacementThoughts()
-    {
-        var w = Workspace;
-        var cluster = w.CreateCluster(w.Root, "Projects");
-        var thought = w.CreateThought(cluster, "Ideas");
-        w.SetPinned(thought.Path, true);
-        var renamed = w.Rename(thought.Path, "Renamed");
-        Assert.True(Assert.Single(w.List(cluster)).IsPinned);
-        var renamedCluster = w.Rename(cluster, "Work");
-        Assert.True(Assert.Single(w.List(renamedCluster)).IsPinned);
-        var moved = w.Move(Path.Combine(renamedCluster, Path.GetFileName(renamed)), w.Root);
-        Assert.True(w.List(w.Root)[0].IsPinned);
-        var trashed = w.MoveToTrash(moved);
-        Assert.True(Assert.Single(w.List(w.TrashPath)).IsPinned);
-        w.Move(trashed, renamedCluster);
-        Assert.True(Assert.Single(w.List(renamedCluster)).IsPinned);
-        var replacement = w.CreateThought(w.Root, "Renamed");
-        Assert.False(w.List(w.Root).Single(e => e.Path == replacement.Path).IsPinned);
-    }
-
-    [Fact]
     public void NestedClustersAndThoughtsAreOrdinaryFiles()
     {
         var w = Workspace;

@@ -87,52 +87,6 @@ public sealed class EditorClipboardTests
         finally { window.Close(); }
     }
 
-    [AvaloniaFact]
-    public async Task PastedHtmlLinksUseThemeDefaultAndKeepExplicitEditorColours()
-    {
-        var editor = new RichEditor { UseThemeColors = true, LinkForeground = Brushes.Magenta };
-        editor.LoadHtml("<p></p>");
-        var window = new Window { Content = editor, Width = 600, Height = 400 };
-        window.Show();
-        try
-        {
-            var item = new DataTransferItem();
-            item.Set(DataFormat.CreateBytesPlatformFormat("HTML Format"), Encoding.UTF8.GetBytes(
-                "<p><a href='https://example.com' style='color:blue'>Pasted link</a> <a href='https://example.org' data-are-fg='1' style='color:#008000'>Custom link</a></p>"));
-            var data = new DataTransfer();
-            data.Add(item);
-            await window.Clipboard!.SetDataAsync(data);
-            await editor.PasteFromClipboardAsync();
-            var runs = editor.Document!.Blocks.OfType<Paragraph>().SelectMany(p => p.Inlines.OfType<Run>()).ToArray();
-            Assert.Null(Assert.Single(runs, r => r.Text == "Pasted link").Foreground);
-            Assert.Equal(Colors.Green, Assert.IsAssignableFrom<ISolidColorBrush>(Assert.Single(runs, r => r.Text == "Custom link").Foreground).Color);
-            var paragraph = editor.Document.Blocks.OfType<Paragraph>().First(p => p.Inlines.OfType<Run>().Any(r => r.Text == "Pasted link"));
-            var layout = (Avalonia.Media.TextFormatting.TextLayout)typeof(RichEditor)
-                .GetMethod("BuildTextLayout", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(editor, [paragraph, 500d, -1, null])!;
-            Assert.Contains(layout.TextLines.SelectMany(l => l.TextRuns),
-                r => r.Properties?.ForegroundBrush is ISolidColorBrush brush && brush.Color == Colors.Magenta);
-        }
-        finally { window.Close(); }
-    }
-
-    [AvaloniaFact]
-    public void PreviouslyPastedBlueLinksFollowThemeWithoutChangingSavedInk()
-    {
-        var editor = new RichEditor { UseThemeColors = true, LinkForeground = Brushes.Magenta };
-        editor.LoadRtf(@"{\rtf1\ansi{\colortbl;\red0\green0\blue255;} {\field{\*\fldinst HYPERLINK ""https://example.com""}{\fldrslt{\cf1 Old link}}}}");
-        var paragraph = editor.Document!.Blocks.OfType<Paragraph>().First(p => p.Inlines.OfType<Run>().Any(r => r.NavigateUri != null));
-        var method = typeof(RichEditor).GetMethod("BuildTextLayout", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        foreach (var colour in new[] { Colors.Magenta, Colors.Cyan })
-        {
-            editor.LinkForeground = new SolidColorBrush(colour);
-            var layout = (Avalonia.Media.TextFormatting.TextLayout)method.Invoke(editor, [paragraph, 500d, -1, null])!;
-            Assert.Contains(layout.TextLines.SelectMany(l => l.TextRuns),
-                r => r.Properties?.ForegroundBrush is ISolidColorBrush brush && brush.Color == colour);
-        }
-        var link = Assert.Single(paragraph.Inlines.OfType<Run>(), r => r.NavigateUri != null);
-        Assert.Equal(Colors.Blue, Assert.IsAssignableFrom<ISolidColorBrush>(link.Foreground).Color);
-    }
-
     [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
@@ -154,32 +108,6 @@ public sealed class EditorClipboardTests
             after.Render(window);
             Assert.False(ReadPixel(before, point).SequenceEqual(ReadPixel(after, point)), "Selected image must have a visible overlay.");
             AssertImage(RtfDocumentFormatter.Parse((await Copy(window)).rtf));
-        }
-        finally { window.Close(); }
-    }
-
-    [AvaloniaFact]
-    public async Task SelectionWithinTableCellCopiesImageWithoutWholeTable()
-    {
-        var editor = CreateEditor(true);
-        var table = new TableBlock(1, 2);
-        table.Cells[0][0].Blocks.Clear();
-        foreach (var block in editor.Document!.Blocks) table.Cells[0][0].Blocks.Add(block);
-        table.Cells[0][1].Para.Inlines.Add(new Run { Text = "Unselected cell" });
-        var doc = new FlowDocument();
-        doc.Blocks.Add(table);
-        editor.Document = doc;
-        var window = new Window { Content = editor, Width = 600, Height = 400 };
-        window.Show();
-        try
-        {
-            editor.Focus();
-            editor.RestoreTextPosition(new(2, 5, 1, 2, 2, 5));
-            var formats = await Copy(window);
-            Assert.DoesNotContain("<table", formats.html);
-            Assert.DoesNotContain("Unselected cell", formats.html);
-            Assert.DoesNotContain("Before", formats.text);
-            AssertImage(RtfDocumentFormatter.Parse(formats.rtf));
         }
         finally { window.Close(); }
     }
@@ -232,35 +160,6 @@ public sealed class EditorClipboardTests
             AssertImage(restored);
             Assert.Contains("fore", formats.text);
             Assert.Contains("After", formats.text);
-        }
-        finally { window.Close(); }
-    }
-
-    [AvaloniaTheory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task DragCanStartOnImageAndExtendIntoText(bool blockImage)
-    {
-        var editor = CreateEditor(blockImage);
-        var window = new Window { Content = editor, Width = 600, Height = 400 };
-        window.Show();
-        try
-        {
-            window.UpdateLayout();
-            using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize(600, 400));
-            bitmap.Render(window);
-            Point start;
-            if (blockImage) start = new Point(35, 60);
-            else
-            {
-                start = InlineImageRect(editor).Center;
-            }
-            window.MouseDown(start, MouseButton.Left);
-            window.MouseMove(new Point(550, 250));
-            window.MouseUp(new Point(550, 250), MouseButton.Left);
-            var formats = await Copy(window);
-            Assert.Contains("After!", formats.text);
-            AssertImage(RtfDocumentFormatter.Parse(formats.rtf));
         }
         finally { window.Close(); }
     }

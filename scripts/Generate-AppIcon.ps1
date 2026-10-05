@@ -28,8 +28,8 @@ Fill-RoundedRect '#282A36' 2 2 252 252 54
 
 # Two lobes, one thought. Still waiting on the thought.
 $brainTransform = $graphics.Save()
-$graphics.TranslateTransform(128, 116)
-$graphics.ScaleTransform(1.2, 1.4)
+$graphics.TranslateTransform(128, 128)
+$graphics.ScaleTransform(1.24, 1.56)
 $graphics.TranslateTransform(-128, -110)
 $brain = [Drawing.Drawing2D.GraphicsPath]::new()
 $brain.AddBezier(128, 52, 112, 27, 79, 35, 72, 58)
@@ -57,14 +57,16 @@ $graphics.DrawBezier($outline, 52, 150, 65, 136, 81, 143, 80, 157)
 $graphics.DrawBezier($outline, 205, 152, 187, 140, 178, 145, 178, 160)
 $brain.Dispose(); $pink.Dispose(); $outline.Dispose()
 
-# A blank stare and a loading ellipsis.
-Fill-RoundedRect '#282A36' 88 115 14 22 7
-Fill-RoundedRect '#282A36' 153 115 14 22 7
-Fill-RoundedRect '#282A36' 117 151 22 7 3.5
+# Eyes glancing up, one brow raised, and a lopsided smirk.
+Fill-RoundedRect '#282A36' 94 110 14 20 7
+Fill-RoundedRect '#282A36' 158 117 13 13 6.5
+$face = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#282A36'), 5.5)
+$face.StartCap = $face.EndCap = [Drawing.Drawing2D.LineCap]::Round
+$graphics.DrawBezier($face, 90, 101, 96, 94, 104, 93, 111, 97)
+$graphics.DrawLine($face, 154, 119, 174, 118)
+$graphics.DrawBezier($face, 114, 151, 128, 153, 140, 152, 150, 142)
+$face.Dispose()
 $graphics.Restore($brainTransform)
-Fill-RoundedRect '#FF92C2' 87 232 16 16 8
-Fill-RoundedRect '#BD93F9' 120 232 16 16 8
-Fill-RoundedRect '#6272A4' 153 232 16 16 8
 $graphics.Dispose()
 
 $sizes = @(16, 20, 24, 28, 30, 32, 36, 40, 48, 60, 64, 72, 80, 96, 128, 256)

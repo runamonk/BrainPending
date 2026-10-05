@@ -10,6 +10,8 @@ using AvaloniaRichEditor.Formatters;
 using BrainPending.Core;
 
 [assembly: AvaloniaTestApplication(typeof(BrainPending.Tests.TestApplication))]
+// All UI tests share one dispatcher; parallel classes starve timing-sensitive tests on slow machines.
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace BrainPending.Tests;
 

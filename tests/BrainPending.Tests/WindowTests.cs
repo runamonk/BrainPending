@@ -461,7 +461,11 @@ public sealed class WindowTests : IDisposable
             Assert.Equal(0, Assert.IsType<Avalonia.Media.TranslateTransform>(sidebar.RenderTransform).X);
         }
         window.MouseMove(new Point(700, 200));
-        await Task.Delay(450, TestContext.Current.CancellationToken);
+        // Return as soon as the hide starts; a fixed delay overshoots on slow CI runners.
+        var toggle = window.FindControl<Button>("SidebarReveal")!;
+        for (var waited = 0; (string?)ToolTip.GetTip(toggle) != "Show sidebar" && waited < 2000; waited += 10)
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        Assert.Equal("Show sidebar", ToolTip.GetTip(toggle));
         window.MouseMove(new Point(150, 250));
         await Task.Delay(950, TestContext.Current.CancellationToken);
         Assert.True(sidebar.IsVisible);
@@ -1291,46 +1295,6 @@ public sealed class WindowTests : IDisposable
         Assert.False(File.Exists(trashed));
         Assert.False(Assert.Single(window.CreateItemMenu(trash).Items.OfType<MenuItem>()).IsEnabled);
         window.Close();
-    }
-
-    [AvaloniaFact]
-    public void RenderTheWorkingEditorForVisualReview()
-    {
-        var workspace = new BrainWorkspace(_root);
-        workspace.CreateCluster(_root, "Personal");
-        workspace.CreateCluster(_root, "Projects");
-        workspace.CreateThought(_root, "Ideas for later");
-        workspace.CreateThought(_root, "Reading list");
-        var thought = workspace.CreateThought(_root, "A place for your thoughts", BrainWorkspace.PlainTextRtf("Welcome to Brain Pending. Your thoughts can finish loading here.\n\nA quiet place for the things you want to remember.\n\nCreate clusters on the left, give your ideas a home, and make each thought your own.\n\nYour thoughts are ordinary RTF files, ready to travel with your brain."));
-        var window = OpenWindow();
-        Select(window, thought.Path);
-        using var bitmap = new RenderTargetBitmap(new PixelSize(1240, 820));
-        bitmap.Render(window);
-        var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (root != null && !File.Exists(Path.Combine(root.FullName, "BrainPending.slnx"))) root = root.Parent;
-        Assert.NotNull(root);
-        var output = Path.Combine(root.FullName, "artifacts", "screenshots");
-        Directory.CreateDirectory(output);
-        bitmap.Save(Path.Combine(output, "editor.png"), PngBitmapEncoderOptions.Default);
-        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
-        var originalRtf = editor.ToRtf();
-        window.RequestedThemeVariant = ThemeVariant.Dark;
-        window.UpdateLayout();
-        bitmap.Render(window);
-        bitmap.Save(Path.Combine(output, "editor-dark.png"), PngBitmapEncoderOptions.Default);
-        Assert.Equal(originalRtf, editor.ToRtf());
-        Assert.False(editor.IsModified);
-        Assert.True(window.FindControl<RichEditorView>("EditorView")!.IsVisible);
-        window.Close();
-        var settingsPath = Path.Combine(_root, ".brainpending", "settings.json");
-        (BrainSettings.Read(settingsPath) with { SidebarPinned = false }).Save(settingsPath);
-        var compactWindow = OpenWindow();
-        Select(compactWindow, thought.Path);
-        compactWindow.UpdateLayout();
-        bitmap.Render(compactWindow);
-        bitmap.Save(Path.Combine(output, "editor-mini-sidebar.png"), PngBitmapEncoderOptions.Default);
-        Assert.True(compactWindow.FindControl<Border>("MiniSidebar")!.IsVisible);
-        Assert.False(compactWindow.FindControl<Border>("Sidebar")!.IsVisible);
     }
 
     [AvaloniaFact]

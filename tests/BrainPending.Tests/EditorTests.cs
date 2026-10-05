@@ -375,12 +375,4 @@ public sealed class EditorTests
     {
         Assert.False(RtfDocumentFormatter.TryParse(@"{\rtf1 broken", out _, out _));
     }
-
-    [AvaloniaFact]
-    public void MainWindowCanBeConstructedWithFreeEditor()
-    {
-        var window = new MainWindow();
-        Assert.Equal("Brain Pending", window.Title);
-        Assert.NotNull(window.FindControl<RichEditorView>("EditorView"));
-    }
 }

@@ -978,7 +978,9 @@ public partial class MainWindow : Window
             var label = new TextBlock { Text = theme.Name };
             Grid.SetColumn(label, 1);
             row.Children.Add(label);
-            var swatch = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), Background = new SolidColorBrush(Color.Parse(theme.Accent)) };
+            var swatch = new Border { Width = 16, Height = 16, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(1),
+                Background = new SolidColorBrush(Color.Parse(theme.Swatch ?? theme.Accent)) };
+            swatch.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppLineBrush"));
             Grid.SetColumn(swatch, 2);
             row.Children.Add(swatch);
             var item = new MenuItem { Header = row, Tag = theme.Name };

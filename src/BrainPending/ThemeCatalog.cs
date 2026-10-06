@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Avalonia.Media;
 using BrainPending.Core;
 
@@ -9,8 +10,11 @@ internal sealed class ThemeCatalog
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true, PropertyNameCaseInsensitive = true,
-        ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true
+        ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+
+    private static readonly AppColorTheme RetiredDark = new("Dark", true, "#252525", "#EEEEEE", "#BB86D9", "#44384F", "#C5A3DB", "#64516E", "#82B1FF");
 
     public string FilePath { get; }
     public IReadOnlyList<AppColorTheme> Themes { get; private set; } = AppThemes.All;
@@ -26,7 +30,7 @@ internal sealed class ThemeCatalog
     public AppColorTheme Resolve(BrainSettings settings, bool? systemDark = null)
     {
         var fallback = AppThemes.Resolve(settings, systemDark);
-        return Themes.FirstOrDefault(t => string.Equals(t.Name, settings.ColorTheme, StringComparison.OrdinalIgnoreCase))
+        return Themes.FirstOrDefault(t => string.Equals(t.Name, AppThemes.CurrentName(settings.ColorTheme), StringComparison.OrdinalIgnoreCase))
             ?? Themes.FirstOrDefault(t => t.Name == fallback.Name)
             ?? fallback;
     }
@@ -39,12 +43,22 @@ internal sealed class ThemeCatalog
     public void Reload()
     {
         EnsureFile();
-        var themes = Read();
-        // Add the new system-dark default to older catalogs without replacing edited palettes.
-        if (!themes.Any(t => string.Equals(t.Name, "Default Dark", StringComparison.OrdinalIgnoreCase)))
+        var read = Read();
+        // Bring older catalogs up to date without replacing edited palettes: drop the old purple
+        // "Dark" unless it was edited, rename Default / Default Dark, and add Dark if it is missing.
+        var themes = read.Where(t => t != RetiredDark).ToArray();
+        foreach (var (old, name) in new[] { ("Default", "Light"), ("Default Dark", "Dark") })
+        {
+            if (themes.Any(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase))) continue;
+            var swatch = AppThemes.All.Single(t => t.Name == name).Swatch;
+            themes = themes.Select(t => string.Equals(t.Name, old, StringComparison.OrdinalIgnoreCase)
+                ? t with { Name = name, Swatch = t.Swatch ?? swatch } : t).ToArray();
+        }
+        if (!themes.Any(t => string.Equals(t.Name, "Dark", StringComparison.OrdinalIgnoreCase)))
+            themes = themes.Append(AppThemes.All.Single(t => t.Name == "Dark")).ToArray();
+        if (!themes.SequenceEqual(read))
         {
             File.Copy(FilePath, FilePath + $".{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.bak");
-            themes = themes.Append(AppThemes.All.Single(t => t.Name == "Default Dark")).ToArray();
             Write(themes);
         }
         // Only publish a fully validated catalog; failed reloads keep the current palette.
@@ -66,6 +80,7 @@ internal sealed class ThemeCatalog
             foreach (var property in typeof(AppColorTheme).GetProperties().Where(p => p.PropertyType == typeof(string) && p.Name != "Name"))
             {
                 var value = (string?)property.GetValue(theme);
+                if (value == null && property.Name == nameof(AppColorTheme.Swatch)) continue; // Optional.
                 if (value == null || !Color.TryParse(value, out _))
                     throw new InvalidDataException($"Theme '{theme.Name}' has an invalid or missing {property.Name} color.");
             }

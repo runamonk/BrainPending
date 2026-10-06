@@ -7,6 +7,20 @@
 A portable note-taking app built with C# / .NET 10 and Avalonia. No WPF, WinForms,
 browser shell, or paid editor components.
 
+## Screenshots
+
+![Brain Pending in the Dracula dark theme, with a project note open](docs/screenshots/dark.png)
+
+*Dracula dark theme: a cluster's thoughts on the left, and a thought with headings, lists, a table and a link.*
+
+![Brain Pending in the default light theme, with clusters and a pinned thought in the sidebar](docs/screenshots/light.png)
+
+*Default light theme: clusters are folders, thoughts are `.rtf` files, and pinned thoughts stay on top.*
+
+![Brain Pending with the sidebar collapsed to a narrow toolbar](docs/screenshots/compact.png)
+
+*Unpin the sidebar to collapse it to a narrow toolbar and give the editor the room.*
+
 ## Run in VS Code
 
 Install the .NET 10 SDK and Microsoft's C# extension (C# Dev Kit is recommended).
@@ -137,8 +151,7 @@ dotnet test BrainPending.slnx
 
 Tests cover persistence, competing instances, external changes in an open window,
 save-on-close and RTF round-trips for links, images, Unicode, fonts,
-highlighting, lists and alignment. A headless Skia-rendered screenshot is written
-to `artifacts/screenshots/editor.png` by the visual-review test.
+highlighting, lists and alignment.
 
 This is the first working version. Full-brain content search,
 history restore screens, and automatic handling
@@ -152,7 +165,7 @@ are kept. Windows is the validated target; macOS/Linux have not been validated.
 
 ## App icon
 
-The pink brain has a blank stare and three loading dots. Thinking is pending;
+The pink brain wears a lopsided smirk, mid-thought. Thinking is pending;
 your notes are saved. The window and Windows executable use the same icon.
 Regenerate the PNG and multi-size ICO (16–256 px) on Windows with:
 
@@ -182,7 +195,8 @@ The file lives at `%LOCALAPPDATA%\BrainPending\themes.json` and is created on fi
 launch. External edits can still be applied with **Reload themes**; themes also
 load on startup. `Dark` selects light/dark control styling; `Surface`, `Text`, `Accent`,
 `Selection`, `Icon`, `Line`, and `Link` define the palette colors (for example,
-`#FF79C6`). JSON comments and trailing commas are supported.
+`#FF79C6`). The optional `Swatch` sets the color of the theme's circle in the menu;
+without it the circle uses `Accent`. JSON comments and trailing commas are supported.
 
 Invalid files show an error without replacing the current palette; startup uses
 bundled defaults if loading fails. **Reset built-in themes** restores all supplied

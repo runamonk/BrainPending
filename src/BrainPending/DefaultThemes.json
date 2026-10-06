@@ -1,6 +1,6 @@
 [
   {
-    "Name": "Default",
+    "Name": "Light",
     "Dark": false,
     "Surface": "#FAFAFA",
     "Text": "#202020",
@@ -8,10 +8,11 @@
     "Selection": "#C8DCCE",
     "Icon": "#526B59",
     "Line": "#A5B8AB",
-    "Link": "#2457A7"
+    "Link": "#2457A7",
+    "Swatch": "#FFFFFF"
   },
   {
-    "Name": "Default Dark",
+    "Name": "Dark",
     "Dark": true,
     "Surface": "#202020",
     "Text": "#FFFFFF",
@@ -19,7 +20,8 @@
     "Selection": "#383838",
     "Icon": "#FFFFFF",
     "Line": "#454545",
-    "Link": "#60CDFF"
+    "Link": "#60CDFF",
+    "Swatch": "#404040"
   },
   {
     "Name": "Autobiography",
@@ -31,17 +33,6 @@
     "Icon": "#D8BC86",
     "Line": "#75644E",
     "Link": "#E6B86A"
-  },
-  {
-    "Name": "Dark",
-    "Dark": true,
-    "Surface": "#252525",
-    "Text": "#EEEEEE",
-    "Accent": "#BB86D9",
-    "Selection": "#44384F",
-    "Icon": "#C5A3DB",
-    "Line": "#64516E",
-    "Link": "#82B1FF"
   },
   {
     "Name": "Carbon",

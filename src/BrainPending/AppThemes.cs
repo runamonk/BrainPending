@@ -7,7 +7,8 @@ using Avalonia.Themes.Fluent;
 
 namespace BrainPending;
 
-internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon, string Line, string Link);
+// Swatch is the menu circle's color; without one the menu shows Accent.
+internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon, string Line, string Link, string? Swatch = null);
 
 internal static class AppThemes
 {
@@ -44,9 +45,17 @@ internal static class AppThemes
     {
         var dark = settings.DarkTheme ?? systemDark
             ?? (Application.Current?.PlatformSettings?.GetColorValues().ThemeVariant == Avalonia.Platform.PlatformThemeVariant.Dark);
-        return All.FirstOrDefault(t => t.Name == settings.ColorTheme)
-            ?? All.Single(t => t.Name == (dark ? "Default Dark" : "Default"));
+        return All.FirstOrDefault(t => t.Name == CurrentName(settings.ColorTheme))
+            ?? All.Single(t => t.Name == (dark ? "Dark" : "Light"));
     }
+
+    // Default and Default Dark were renamed; older settings still use the old names.
+    public static string? CurrentName(string? name) => name switch
+    {
+        "Default" => "Light",
+        "Default Dark" => "Dark",
+        _ => name
+    };
 
     public static void Apply(AppColorTheme theme)
     {

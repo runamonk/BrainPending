@@ -24,8 +24,6 @@ function Fill-RoundedRect($color, [single]$x, [single]$y, [single]$width, [singl
     $path.Dispose()
 }
 
-Fill-RoundedRect '#282A36' 2 2 252 252 54
-
 # Two lobes, one thought. Still waiting on the thought.
 $brainTransform = $graphics.Save()
 $graphics.TranslateTransform(128, 128)

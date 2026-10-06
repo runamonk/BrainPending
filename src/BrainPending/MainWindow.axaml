@@ -146,6 +146,10 @@
             <Path Width="20" Height="20" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5"
                   Data="M 17,10 A 7,7 0 1 1 14.95,5.05 M 11,5.05 L 14.95,5.05 L 14.95,1.1" />
           </Button>
+          <Button x:Name="SettingsButton" Classes="quiet" Width="30" Height="30" Padding="5" ToolTip.Tip="Settings" AutomationProperties.Name="Settings" Click="Settings_Click">
+            <Path Width="20" Height="20" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.5"
+                  Data="M 13,10 A 3,3 0 1 0 7,10 A 3,3 0 1 0 13,10 M 16,10 A 6,6 0 1 0 4,10 A 6,6 0 1 0 16,10 M 10,1 L 10,4 M 10,16 L 10,19 M 1,10 L 4,10 M 16,10 L 19,10 M 3.6,3.6 L 5.8,5.8 M 14.2,14.2 L 16.4,16.4 M 3.6,16.4 L 5.8,14.2 M 14.2,5.8 L 16.4,3.6" />
+          </Button>
         </StackPanel>
       </Grid>
     </Border>

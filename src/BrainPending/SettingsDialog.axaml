@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BrainPending.SettingsDialog"
+        Title="Settings" Width="500" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}">
+  <StackPanel Margin="26" Spacing="14">
+    <TextBlock Text="Settings" FontSize="23" FontWeight="SemiBold" />
+
+    <TextBlock Text="EDITOR" FontSize="12" FontWeight="SemiBold" Margin="0,6,0,0" />
+    <TextBlock Text="Applies to new text. Text that already has its own font, size or color keeps it." TextWrapping="Wrap" Opacity="0.65" />
+    <Grid ColumnDefinitions="70,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
+      <TextBlock Text="Font" VerticalAlignment="Center" />
+      <ComboBox x:Name="FontFamilies" Grid.Column="1" HorizontalAlignment="Stretch" MaxDropDownHeight="320" AutomationProperties.Name="Default font" />
+      <TextBlock Grid.Row="1" Text="Size" VerticalAlignment="Center" />
+      <NumericUpDown x:Name="FontSizeInput" Grid.Row="1" Grid.Column="1" Width="130" HorizontalAlignment="Left"
+                     Minimum="6" Maximum="72" Increment="1" FormatString="0" AutomationProperties.Name="Default font size" />
+      <TextBlock Grid.Row="2" Text="Color" VerticalAlignment="Center" />
+      <Button x:Name="ColorButton" Grid.Row="2" Grid.Column="1" HorizontalAlignment="Left" AutomationProperties.Name="Default text color">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Border x:Name="ColorSwatch" Width="16" Height="16" CornerRadius="8" BorderThickness="1" BorderBrush="{DynamicResource AppLineBrush}" VerticalAlignment="Center" />
+          <TextBlock x:Name="ColorLabel" VerticalAlignment="Center" />
+          <TextBlock Text="▾" VerticalAlignment="Center" Opacity="0.6" />
+        </StackPanel>
+      </Button>
+    </Grid>
+    <Border BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10">
+      <TextBlock x:Name="Preview" Text="Thinking is pending; your notes are saved." TextWrapping="Wrap" />
+    </Border>
+
+    <TextBlock Text="UPDATES" FontSize="12" FontWeight="SemiBold" Margin="0,10,0,0" />
+    <CheckBox x:Name="CheckOnStartup" Content="Check for updates when Brain Pending starts" />
+    <StackPanel x:Name="EveryDaysRow" Orientation="Horizontal" Spacing="10" Margin="28,0,0,0">
+      <TextBlock Text="Only once every" VerticalAlignment="Center" />
+      <NumericUpDown x:Name="EveryDays" Width="120" Minimum="0" Maximum="365" Increment="1" FormatString="0" AutomationProperties.Name="Days between update checks" />
+      <TextBlock Text="days (0 checks every time)" VerticalAlignment="Center" Opacity="0.65" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Classes="action quiet" Content="Cancel" Click="Cancel_Click" />
+      <Button Classes="action" Content="Save" Background="{DynamicResource AppAccentBrush}" Foreground="{DynamicResource AppAccentTextBrush}" Click="Save_Click" />
+    </StackPanel>
+  </StackPanel>
+</Window>

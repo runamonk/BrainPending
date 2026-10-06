@@ -71,8 +71,7 @@ public partial class MainWindow : Window
         EditorView.Toolbar.ToolbarLevel = ToolbarLevel.Normal;
         EditorView.Toolbar.Compact = true;
         EditorView.Toolbar.AttachFileRequested += AttachFile_Click;
-        EditorView.Editor.DefaultFontFamily = new FontFamily("Segoe UI");
-        EditorView.Editor.DefaultFontSize = 12;
+        ApplyEditorSettings();
         // The editor adds a 10px text inset; align with the 14px title inset.
         EditorView.Editor.Margin = new Thickness(4, 0, 4, 24);
         EditorView.Editor.UseThemeColors = true;
@@ -658,6 +657,8 @@ public partial class MainWindow : Window
             if (_thoughtFormatting is { } format)
                 EditorView.Editor.RestoreTypingFormat(format.FontFamily, format.FontSize,
                     format.Color == null ? null : new SolidColorBrush(Color.Parse(format.Color)));
+            else if (_settings.Editor is { Color: { } color } editor)
+                EditorView.Editor.RestoreTypingFormat(editor.FontFamily, editor.FontSize, new SolidColorBrush(Color.Parse(color)));
             SaveStatus.Text = "Saved locally";
             Title = ThoughtTitle.Text + " — Brain Pending " + AppVersion;
         }

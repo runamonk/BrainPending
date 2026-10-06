@@ -7,7 +7,7 @@ internal sealed record BrainSettings(string? BrainPath = null, bool? DarkTheme =
     string[]? RecentBrains = null, bool SkipAutomaticBrain = false,
     double? WindowWidth = null, double? WindowHeight = null, bool WindowMaximized = false,
     Dictionary<string, string>? LastOpenThoughts = null, string? ColorTheme = null, bool SidebarPinned = true,
-    SearchSettings? Search = null)
+    SearchSettings? Search = null, EditorSettings? Editor = null, UpdateSettings? Updates = null)
 {
     public string? LastThought(string brain) => LastOpenThoughts?.FirstOrDefault(p =>
         PathRules.AreEqual(p.Key, brain)).Value;
@@ -48,3 +48,9 @@ internal sealed record BrainSettings(string? BrainPath = null, bool? DarkTheme =
 internal sealed record SearchSettings(bool WholeBrain = false, bool MatchCase = false, bool WholeWord = false,
     bool UseRegex = false, int ContextLines = 2, int? X = null, int? Y = null, double? Width = null, double? Height = null,
     string[]? History = null, string? LastQuery = null, string? SelectedPath = null, int SelectedMatch = -1);
+
+// A null Color means new text uses the theme's text color.
+internal sealed record EditorSettings(string FontFamily = "Segoe UI", double FontSize = 12, string? Color = null);
+
+// EveryDays = 0 checks on every startup.
+internal sealed record UpdateSettings(bool CheckOnStartup = true, int EveryDays = 0, DateTime? LastCheckUtc = null);

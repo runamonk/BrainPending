@@ -23,11 +23,25 @@ public partial class MainWindow
         try { if (Directory.Exists(UpdateFolder)) Directory.Delete(UpdateFolder, true); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         Closed += (_, _) => StartUpdater();
+        Opened += async (_, _) => await CheckForUpdatesOnStartup();
     }
 
-    private async void CheckForUpdates_Click(object? sender, RoutedEventArgs e) => await Run(CheckForUpdates);
+    private async void CheckForUpdates_Click(object? sender, RoutedEventArgs e) => await Run(() => CheckForUpdates());
 
-    private async Task CheckForUpdates()
+    // Quiet: only speaks up when there is an update. Dev builds never check.
+    private async Task CheckForUpdatesOnStartup()
+    {
+        var updates = _settings.Updates ?? new();
+        if (!updates.CheckOnStartup || !Version.TryParse(AppVersion, out _)) return;
+        if (updates.LastCheckUtc is { } last && DateTime.UtcNow - last < TimeSpan.FromDays(updates.EveryDays)) return;
+        // Let the brain open first.
+        await Task.Delay(TimeSpan.FromSeconds(3));
+        if (_closed) return;
+        try { await CheckForUpdates(quiet: true); }
+        catch (Exception e) { Trace.TraceWarning("Startup update check failed: " + e.Message); }
+    }
+
+    private async Task CheckForUpdates(bool quiet = false)
     {
         if (_updateZip != null) { await RestartToUpdate(); return; }
         if (!Version.TryParse(AppVersion, out var current))
@@ -41,15 +55,16 @@ public partial class MainWindow
         {
             using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
             http.DefaultRequestHeaders.UserAgent.ParseAdd("BrainPending/" + AppVersion);
-            ShowNotice("Checking for updates…");
+            if (!quiet) ShowNotice("Checking for updates…");
             using var check = new CancellationTokenSource(TimeSpan.FromSeconds(30));
             using var release = JsonDocument.Parse(await http.GetStringAsync(LatestReleaseUrl, check.Token));
+            RememberUpdateCheck();
             var tag = release.RootElement.GetProperty("tag_name").GetString() ?? "";
             if (!Version.TryParse(tag.TrimStart('v'), out var latest))
                 throw new IOException($"The latest release has an unexpected version ({tag}).");
             if (latest <= current)
             {
-                ShowNotice($"You're on the latest version ({AppVersion}).");
+                if (!quiet) ShowNotice($"You're on the latest version ({AppVersion}).");
                 return;
             }
             var asset = release.RootElement.GetProperty("assets").EnumerateArray()
@@ -74,6 +89,14 @@ public partial class MainWindow
         }
         catch (OperationCanceledException) { throw new IOException("GitHub didn't answer in time. Try again later."); }
         finally { _checkingForUpdates = false; }
+    }
+
+    private void RememberUpdateCheck()
+    {
+        var saved = BrainSettings.Read(_settingsPath);
+        _settings = saved with { Updates = (saved.Updates ?? new()) with { LastCheckUtc = DateTime.UtcNow } };
+        try { _settings.Save(_settingsPath); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Trace.TraceWarning("Could not remember the update check: " + e.Message); }
     }
 
     private async Task Download(HttpClient http, string url, string zip, string sha256, Version version)

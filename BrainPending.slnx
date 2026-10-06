@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/BrainPending.Core/BrainPending.Core.csproj" />
     <Project Path="src/BrainPending/BrainPending.csproj" />
+    <Project Path="src/BrainPending.Updater/BrainPending.Updater.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/BrainPending.Tests/BrainPending.Tests.csproj" />

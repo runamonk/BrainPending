@@ -62,6 +62,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         InitializeFind();
         InitializeSidebar();
+        InitializeUpdates();
         OpenBrainButton.Flyout = _recentBrainsMenu;
         _recentBrainsMenu.Opening += (_, _) => RefreshRecentBrains();
         RefreshRecentBrains();
@@ -658,7 +659,7 @@ public partial class MainWindow : Window
                 EditorView.Editor.RestoreTypingFormat(format.FontFamily, format.FontSize,
                     format.Color == null ? null : new SolidColorBrush(Color.Parse(format.Color)));
             SaveStatus.Text = "Saved locally";
-            Title = ThoughtTitle.Text + " — Brain Pending";
+            Title = ThoughtTitle.Text + " — Brain Pending " + AppVersion;
         }
         finally { _loading = false; }
         _recentThoughts.RemoveAll(p => PathRules.AreEqual(p, thought.Path));
@@ -681,7 +682,7 @@ public partial class MainWindow : Window
         Welcome.IsVisible = true;
         ThoughtTitle.Text = "";
         Breadcrumb.Text = "";
-        Title = "Brain Pending";
+        Title = "Brain Pending " + AppVersion;
     }
 
     private async Task Navigate(string path, bool backwards = false)

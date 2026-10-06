@@ -9,6 +9,8 @@
     <AssemblyTitle>Brain Pending</AssemblyTitle>
     <Product>Brain Pending</Product>
     <Description>A place for thoughts still loading.</Description>
+    <!-- Release builds get the tag's version from CI; anything else is a dev build that never updates. -->
+    <Version>0.0.0-dev</Version>
   </PropertyGroup>
 
   <ItemGroup>

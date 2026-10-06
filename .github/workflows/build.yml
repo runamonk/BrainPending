@@ -31,6 +31,12 @@ jobs:
       - name: Publish
         run: dotnet publish src/BrainPending -c Release -r win-x64 --self-contained true -p:Version=${{ env.VERSION }} -o artifacts/BrainPending
 
+      - name: Publish updater
+        shell: pwsh
+        run: |
+          dotnet publish src/BrainPending.Updater -c Release -p:Version=${{ env.VERSION }} -o artifacts/updater
+          Copy-Item artifacts/updater/BrainPendingUpdater.exe artifacts/BrainPending/
+
       - name: Zip
         shell: pwsh
         run: Compress-Archive artifacts/BrainPending/* BrainPending-${{ env.VERSION }}-win-x64.zip

@@ -682,7 +682,6 @@ public partial class MainWindow : Window
         Welcome.IsVisible = true;
         ThoughtTitle.Text = "";
         Breadcrumb.Text = "";
-        Title = "Brain Pending " + AppVersion;
     }
 
     private async Task Navigate(string path, bool backwards = false)

@@ -970,7 +970,10 @@ public partial class MainWindow : Window
     {
         var active = _themes.Resolve(_settings);
         var menu = new MenuFlyout { Placement = PlacementMode.Top };
-        menu.Items.Add(new MenuItem { Header = "APPEARANCE", IsEnabled = false });
+        // Disabled so it can't be picked, but in the theme's text color rather than the dim disabled one.
+        var heading = new TextBlock { Text = "APPEARANCE" };
+        heading.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextBrush"));
+        menu.Items.Add(new MenuItem { Header = heading, IsEnabled = false });
         foreach (var theme in _themes.Themes)
         {
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("24,*,24"), Width = 230 };

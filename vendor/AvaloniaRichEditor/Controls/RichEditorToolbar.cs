@@ -79,7 +79,7 @@ public partial class RichEditorToolbar : UserControl
             Focusable = false
         };
         Avalonia.Automation.AutomationProperties.SetName(button, "Attach file");
-        ToolTip.SetTip(button, "Attach link to file");
+        ToolTip.SetTip(button, "Attach file");
         button.Click += (_, _) => _attachFileRequested?.Invoke(this, EventArgs.Empty);
         return button;
     }

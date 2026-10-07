@@ -80,6 +80,8 @@ public partial class MainWindow : Window
         EditorView.Editor.Bind(RichEditor.SelectionBrushProperty, new DynamicResourceExtension("AppSelectionBrush"));
         EditorView.Editor.AllowRemoteImagesOnPaste = false;
         EditorView.Editor.LinkHandler = HandleAttachmentLink;
+        EditorView.Editor.FileDropHandler = HandleFileDrop;
+        EditorView.Editor.LinkMenuItems = AttachmentMenuItems;
         EditorView.Editor.TextChanged += (_, _) =>
         {
             if (_loading || _thought == null || !EditorView.Editor.IsModified) return;
@@ -1216,34 +1218,95 @@ public partial class MainWindow : Window
     private async void AttachFile_Click(object? sender, EventArgs e) => await Run(async () =>
     {
         if (_workspace == null || _thought == null) return;
-        var workspace = _workspace;
-        var thoughtPath = _thought.Path;
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         { Title = "Attach files to thought", AllowMultiple = true });
+        await AttachFiles(files.Select(f => f.TryGetLocalPath()).OfType<string>().ToArray(), false);
+    });
+
+    // Dropped images still embed as pictures; anything else becomes an attachment.
+    private bool HandleFileDrop(string[] paths)
+    {
+        if (_workspace == null || _thought == null || _inDialog) return true;
+        _ = Run(() => AttachFiles(paths, true));
+        return true;
+    }
+
+    private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"];
+
+    private async Task AttachFiles(string[] paths, bool embedImages)
+    {
+        if (_workspace == null || _thought == null) return;
+        var workspace = _workspace;
+        var thoughtPath = _thought.Path;
         var store = new AttachmentStore(workspace.Root);
-        foreach (var file in files)
+        foreach (var path in paths)
         {
-            if (file.TryGetLocalPath() is not { } path) continue;
-            var attachment = await Task.Run(() => store.Add(path, file.Name));
+            if (Directory.Exists(path)) throw new IOException("Folders can't be attached. Drop the files instead.");
+            if (embedImages && ImageExtensions.Contains(Path.GetExtension(path).ToLowerInvariant()))
+            {
+                EditorView.Editor.InsertImageBytes(await File.ReadAllBytesAsync(path));
+                continue;
+            }
+            var attachment = await Task.Run(() => store.Add(path, Path.GetFileName(path)));
             if (_workspace != workspace || !PathRules.AreEqual(_thought?.Path, thoughtPath))
             {
                 store.Discard(attachment);
                 throw new IOException("The selected thought changed. Please attach the file again.");
             }
-            EditorView.Editor.InsertHtml($"<p><a href=\"{WebUtility.HtmlEncode(attachment.Link)}\">Attachment: {WebUtility.HtmlEncode(attachment.Name)} ({attachment.Size:N0} bytes)</a></p>");
+            EditorView.Editor.InsertHtml($"<p><a href=\"{WebUtility.HtmlEncode(attachment.Link)}\">{WebUtility.HtmlEncode(attachment.Name)}</a></p>");
         }
         SaveCurrent();
-    });
+    }
 
     private bool HandleAttachmentLink(string link)
     {
         if (!link.StartsWith(AttachmentStore.Scheme, StringComparison.Ordinal)) return false;
-        _ = Run(async () =>
+        _ = Run(() => OpenAttachment(link, _settings.Editor?.OpenAttachmentsOnClick == true));
+        return true;
+    }
+
+    private async Task OpenAttachment(string link, bool skipDialog)
+    {
+        if (_workspace == null || _inDialog) return;
+        var attachment = new AttachmentStore(_workspace.Root).Resolve(link);
+        var editInPlace = _settings.Editor?.EditAttachmentsInPlace == true;
+        // Risky files always go through the dialog, which carries the warning.
+        if (skipDialog && !AttachmentDialog.IsDangerous(attachment.Name))
+            await AttachmentDialog.OpenAsync(attachment, editInPlace);
+        else if (await ShowOwnedDialogAsync<bool>(new AttachmentDialog(attachment, editInPlace)))
+            await DeleteAttachment(link);
+    }
+
+    private async Task DeleteAttachment(string link)
+    {
+        if (_workspace == null) return;
+        var workspace = _workspace;
+        if (!EditorView.Editor.RemoveLinkedText(link) || !SaveCurrent()) return;
+        // Save first so the check sees this thought without the link. Shared files stay.
+        var store = new AttachmentStore(workspace.Root);
+        if (!await Task.Run(() => store.IsLinked(link))) await Task.Run(() => store.MoveToTrash(link));
+    }
+
+    // Attachments get their own menu; the editor's link items would orphan or break them.
+    private IEnumerable<MenuItem>? AttachmentMenuItems(string link)
+    {
+        if (!link.StartsWith(AttachmentStore.Scheme, StringComparison.Ordinal)) return null;
+        var open = new MenuItem { Header = "Open attachment" };
+        open.Click += (_, _) => _ = Run(() => OpenAttachment(link, true));
+        var save = new MenuItem { Header = "Save attachment as…" };
+        save.Click += (_, _) => _ = Run(async () =>
+        {
+            if (_workspace == null) return;
+            await AttachmentDialog.SaveAsAsync(StorageProvider, new AttachmentStore(_workspace.Root).Resolve(link));
+        });
+        var delete = new MenuItem { Header = "Delete attachment" };
+        delete.Click += (_, _) => _ = Run(async () =>
         {
             if (_workspace == null || _inDialog) return;
-            var attachment = new AttachmentStore(_workspace.Root).Resolve(link);
-            await ShowOwnedDialogAsync<object?>(new AttachmentDialog(attachment));
+            var name = new AttachmentStore(_workspace.Root).Resolve(link).Name;
+            if (await Confirm("Delete attachment", $"Remove “{name}” from this thought? The file moves to Trash, and Undo brings it back.", "Delete"))
+                await DeleteAttachment(link);
         });
-        return true;
+        return [open, save, delete];
     }
 }

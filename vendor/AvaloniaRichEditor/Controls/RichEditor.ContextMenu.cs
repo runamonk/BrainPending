@@ -299,7 +299,8 @@ public partial class RichEditor
         else
         {
             _selectedInline = null;
-            var link = GetLinkRunAtPoint(point);
+            // With a selection it's all text: link items belong to a plain right-click on a link.
+            var link = hasSelection ? null : GetLinkRunAtPoint(point);
             if (link != null && !string.IsNullOrEmpty(link.NavigateUri))
                 BuildLinkMenu(items, hasSelection, link);
             else
@@ -454,28 +455,23 @@ public partial class RichEditor
         items.Add(Mi(Loc("Copy"), () => { _ = CopyImageToClipboardAsync(img.RawBytes, img.Image, inline: false, img.Width, img.Height); }, img.RawBytes != null || img.Image != null, RichEditorIcon.Copy, RichEditorShortcuts.Gesture(ShortcutId.Copy)));
         // A read-only image menu exposes Copy only; the generic text menu cannot copy the selected image.
         if (IsReadOnly) return;
-        items.Add(new Separator());
-        // Size presets in a submenu. "Original" resets to natural size; the fractions scale the
-        // current display size (so they compound). Width/Height only — encoded bytes untouched.
-        items.Add(Sub(Loc("ImageSize"),
-            Mi(Loc("OriginalSize"), () => ResetImageSize(img), img.Image != null),
-            Mi(Loc("HalfSize"), () => ScaleImageSize(img, 1.0 / 2), img.Image != null),
-            Mi(Loc("ThirdSize"), () => ScaleImageSize(img, 1.0 / 3), img.Image != null),
-            Mi(Loc("QuarterSize"), () => ScaleImageSize(img, 1.0 / 4), img.Image != null)));
-        // HWP-style toggle: unchecked here (block image); checking it demotes to an inline character.
-        // Disabled for a cell image: block<->inline conversion anchors to top-level paragraphs, which a
-        // cell image doesn't have (mirrors the inline-image menu's guard inside cells).
-        items.Add(CheckItem(Loc("InlineWithText"), false, () => ConvertImageBlockToInline(img), img.Parent is FlowDocument));
-        items.Add(MarginMenu(img));
-        items.Add(new Separator());
-        items.Add(Mi(Loc("ReplaceImage"), () => { _ = ReplaceImageAsync(img); }, icon: RichEditorIcon.ReplaceImage));
+        // BrainPending: size, inline, margin and replace are left out of the menu.
         items.Add(Mi(Loc("SaveImageAs"), () => { _ = SaveImageAsync(img); }, img.Image != null, RichEditorIcon.SaveImageAs));
         items.Add(new Separator());
         items.Add(Mi(Loc("Delete"), () => DeleteBlock(img), icon: RichEditorIcon.Delete));
     }
 
+    /// <summary>Lets the host replace a link's right-click items (e.g. for its own link schemes).
+    /// Return null to keep the editor's link items.</summary>
+    public Func<string, IEnumerable<MenuItem>?>? LinkMenuItems { get; set; }
+
     private void BuildLinkMenu(List<Control> items, bool hasSelection, Run link)
     {
+        if (LinkMenuItems?.Invoke(link.NavigateUri!) is { } own)
+        {
+            items.AddRange(own);
+            return;
+        }
         items.Add(Mi(Loc("OpenLink"), () => OpenUrl(link.NavigateUri!), icon: RichEditorIcon.OpenLink));
         items.Add(Mi(Loc("EditLink"), () => { _ = EditHyperlinkAsync(link.NavigateUri, link); }, icon: RichEditorIcon.EditLink));
         items.Add(Mi(Loc("RemoveLink"), () => SetHyperlink(null, link), icon: RichEditorIcon.RemoveLink));
@@ -483,25 +479,13 @@ public partial class RichEditor
         {
             if (link.NavigateUri != null) TopLevel.GetTopLevel(this)?.Clipboard?.SetTextAsync(link.NavigateUri);
         }, !string.IsNullOrEmpty(link.NavigateUri), RichEditorIcon.CopyLink));
-        items.Add(new Separator());
-        items.Add(Mi(Loc("Copy"), CopySelectionToClipboard, hasSelection, RichEditorIcon.Copy));
     }
 
     private void BuildInlineImageMenu(List<Control> items, Paragraph p, InlineImage img)
     {
         items.Add(Mi(Loc("Copy"), () => { _ = CopyImageToClipboardAsync(img.RawBytes, img.Image, inline: true, img.Width, img.Height); }, img.RawBytes != null || img.Image != null, RichEditorIcon.Copy, RichEditorShortcuts.Gesture(ShortcutId.Copy)));
         if (IsReadOnly) return;
-        items.Add(new Separator());
-        items.Add(Sub(Loc("ImageSize"),
-            Mi(Loc("OriginalSize"), () => ResetInlineImageSize(img), img.Image != null),
-            Mi(Loc("HalfSize"), () => ScaleInlineImageSize(img, 1.0 / 2), img.Image != null),
-            Mi(Loc("ThirdSize"), () => ScaleInlineImageSize(img, 1.0 / 3), img.Image != null),
-            Mi(Loc("QuarterSize"), () => ScaleInlineImageSize(img, 1.0 / 4), img.Image != null)));
-        // Block/inline conversion requires a top-level host paragraph; disable it inside cells.
-        bool canBlock = Document != null && Document.Blocks.IndexOf(p) >= 0;
-        items.Add(CheckItem(Loc("InlineWithText"), true, () => ConvertInlineImageToBlock(p, img), canBlock));
-        items.Add(new Separator());
-        items.Add(Mi(Loc("ReplaceImage"), () => { _ = ReplaceInlineImageAsync(img); }, icon: RichEditorIcon.ReplaceImage));
+        // BrainPending: size, inline and replace are left out of the menu.
         items.Add(Mi(Loc("SaveImageAs"), () => { _ = SaveBitmapAsync(img.Image); }, img.Image != null, RichEditorIcon.SaveImageAs));
         items.Add(new Separator());
         items.Add(Mi(Loc("Delete"), () => DeleteInlineImage(p, img), icon: RichEditorIcon.Delete));

@@ -50,7 +50,10 @@ internal sealed record SearchSettings(bool WholeBrain = false, bool MatchCase = 
     string[]? History = null, string? LastQuery = null, string? SelectedPath = null, int SelectedMatch = -1);
 
 // A null Color means new text uses the theme's text color.
-internal sealed record EditorSettings(string FontFamily = "Segoe UI", double FontSize = 12, string? Color = null);
+// EditAttachmentsInPlace opens the stored file itself, so saved edits change the attachment.
+// OpenAttachmentsOnClick skips the attachment dialog, except for files that can run programs.
+internal sealed record EditorSettings(string FontFamily = "Segoe UI", double FontSize = 12, string? Color = null,
+    bool EditAttachmentsInPlace = false, bool OpenAttachmentsOnClick = false);
 
 // EveryDays = 0 checks on every startup.
 internal sealed record UpdateSettings(bool CheckOnStartup = true, int EveryDays = 0, DateTime? LastCheckUtc = null);

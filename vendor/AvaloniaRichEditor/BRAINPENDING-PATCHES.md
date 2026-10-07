@@ -47,5 +47,10 @@ NuGet package without passing the persistence tests.
   paragraphs instead of copying unselected text. Selections within a cell retain block images.
 - `LinkHandler` lets the app handle notebook attachment links before the editor's
   normal HTTP/HTTPS-only launcher. Other local/custom schemes remain blocked.
+- `FileDropHandler` lets the app take dropped files (as attachments) before the editor's
+  image-only drop.
+- `LinkMenuItems` lets the app replace a link's right-click items (attachment open/save/delete).
+- Image right-click menus drop Size, Inline with Text, Margin and Replace Image.
+- `RemoveLinkedText(uri)` removes an attachment link (and its emptied paragraph) as one undo step.
 - Regex find highlight (`SetFindHighlight(Regex?)`), `SelectFindMatch` and static
   `ParagraphTexts` support searching inside thoughts with whole-word and regex options.

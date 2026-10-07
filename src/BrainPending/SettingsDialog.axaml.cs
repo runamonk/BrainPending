@@ -35,6 +35,8 @@ public partial class SettingsDialog : Window
         FontSizeInput.Value = (decimal)editor.FontSize;
         _color = editor.Color == null ? null : Color.Parse(editor.Color);
         ColorButton.Flyout = ColorPicker();
+        EditAttachmentsInPlace.IsChecked = editor.EditAttachmentsInPlace;
+        OpenAttachmentsOnClick.IsChecked = editor.OpenAttachmentsOnClick;
         CheckOnStartup.IsChecked = updates.CheckOnStartup;
         EveryDays.Value = updates.EveryDays;
         UpdateEveryDaysRow();
@@ -119,7 +121,8 @@ public partial class SettingsDialog : Window
 
     private void Save_Click(object? sender, RoutedEventArgs e) => Close(new Result(
         new EditorSettings(FontFamilies.SelectedItem as string ?? new EditorSettings().FontFamily, (double)(FontSizeInput.Value ?? 12),
-            _color is { } c ? Hex(c) : null),
+            _color is { } c ? Hex(c) : null, EditAttachmentsInPlace.IsChecked == true,
+            OpenAttachmentsOnClick.IsChecked == true),
         _updates with { CheckOnStartup = CheckOnStartup.IsChecked == true, EveryDays = (int)(EveryDays.Value ?? 0) }));
 
     private void Cancel_Click(object? sender, RoutedEventArgs e) => Close();

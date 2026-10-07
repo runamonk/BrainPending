@@ -232,6 +232,8 @@ public sealed class BrainWorkspace
             File.Move(temp, path, true);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
+        // An undo or paste can bring back a link whose file is in Trash.
+        if (!IsInTrash(path)) MoveAttachments(path, false);
         return new(new(path, rtf, revision), false);
     }
 
@@ -293,7 +295,37 @@ public sealed class BrainWorkspace
         if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists in the destination cluster.");
         if (isCluster) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
+        if (IsInTrash(path) != IsInTrash(target)) MoveAttachments(target, IsInTrash(target));
         return target;
+    }
+
+    // Attachment files travel with their thoughts into and out of Trash. A file another
+    // thought outside Trash still links to stays put.
+    private void MoveAttachments(string movedPath, bool toTrash)
+    {
+        try
+        {
+            var store = new AttachmentStore(Root);
+            var thoughts = Directory.Exists(movedPath)
+                ? Directory.EnumerateFiles(movedPath, "*.rtf", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint })
+                : [movedPath];
+            foreach (var link in thoughts.SelectMany(t => AttachmentStore.LinksIn(File.ReadAllText(t))).Distinct().ToList())
+            {
+                try
+                {
+                    if (!toTrash) store.RestoreIfTrashed(link);
+                    else if (!store.IsLinked(link)) store.MoveToTrash(link);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+                {
+                    Warning?.Invoke(this, "An attachment could not be moved with its thought: " + error.Message);
+                }
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            Warning?.Invoke(this, "Attachments could not be moved with the thought: " + error.Message);
+        }
     }
 
     public string MoveToTrash(string path)
@@ -315,6 +347,7 @@ public sealed class BrainWorkspace
         {
             Warning?.Invoke(this, "The item was moved to Trash, but its original location could not be recorded: " + error.Message);
         }
+        MoveAttachments(target, true);
         return target;
     }
 

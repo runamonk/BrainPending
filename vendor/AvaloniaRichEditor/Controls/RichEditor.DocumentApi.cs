@@ -190,4 +190,31 @@ public partial class RichEditor
         InsertParsedDocument(parsed);
         InvalidateVisual();
     }
+
+    /// <summary>Removes every run linking to <paramref name="uri"/>, and any paragraph that leaves empty.
+    /// Undoable. Returns false when nothing links there.</summary>
+    public bool RemoveLinkedText(string uri)
+    {
+        if (Document == null || IsReadOnly) return false;
+        var hits = ParagraphsInBlocks(Document.Blocks)
+            .Where(p => p.Inlines.Any(i => i is Run r && r.NavigateUri == uri)).ToList();
+        if (hits.Count == 0) return false;
+        PushUndo();
+        foreach (var p in hits)
+        {
+            p.Inlines.RemoveAll(i => i is Run r && r.NavigateUri == uri);
+            if (p.Inlines.All(i => i is Run r && string.IsNullOrEmpty(r.Text))) RemoveBlockAnywhere(p);
+        }
+        UpdateParents(Document);
+        // The caret's paragraph may be gone or shorter; keep it somewhere valid.
+        var paras = GetAllParagraphsInOrder();
+        if (_caretPosition.Paragraph is not { } cp || !paras.Contains(cp))
+            _caretPosition = new TextPointer(paras.FirstOrDefault(), 0);
+        else
+            _caretPosition = new TextPointer(cp, Math.Min(_caretPosition.Offset, GetParagraphLength(cp)));
+        CollapseSelectionToCaret();
+        InvalidateMeasure();
+        InvalidateVisual();
+        return true;
+    }
 }

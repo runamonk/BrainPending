@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -231,20 +232,25 @@ public partial class RichEditor
         InsertBlockAtCaret(tb);
     }
 
+    /// <summary>Lets the host take dropped files (e.g. as attachments). Return true when handled;
+    /// otherwise each file is inserted as an image.</summary>
+    public Func<string[], bool>? FileDropHandler { get; set; }
+
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        e.DragEffects = (!IsReadOnly && AllowImages && e.DataTransfer.Contains(DataFormat.File)) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.DragEffects = (!IsReadOnly && (AllowImages || FileDropHandler != null) && e.DataTransfer.Contains(DataFormat.File)) ? DragDropEffects.Copy : DragDropEffects.None;
     }
 
     private void OnDrop(object? sender, DragEventArgs e)
     {
-        if (IsReadOnly || !AllowImages) return;
+        if (IsReadOnly) return;
         var files = e.DataTransfer.TryGetFiles();
         if (files == null) return;
-        foreach (var f in files)
+        var paths = files.Select(f => f.Path?.LocalPath).OfType<string>().Where(p => p.Length > 0).ToArray();
+        if (FileDropHandler?.Invoke(paths) == true) return;
+        if (!AllowImages) return;
+        foreach (var path in paths)
         {
-            var path = f.Path?.LocalPath;
-            if (string.IsNullOrEmpty(path)) continue;
             try
             {
                 InsertImageBytes(System.IO.File.ReadAllBytes(path));

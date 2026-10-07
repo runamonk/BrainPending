@@ -418,6 +418,7 @@ public partial class RichEditor
             items.Add(CheckItem(Loc("Bold"), fmt.Bold, ToggleBold, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Bold)));
             items.Add(CheckItem(Loc("Italic"), fmt.Italic, ToggleItalic, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Italic)));
             items.Add(CheckItem(Loc("Underline"), fmt.Underline, ToggleUnderline, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Underline)));
+            items.Add(Mi(Loc("ClearFormatting"), ClearFormatting, hasSelection, RichEditorIcon.ClearFormatting));
         }
 
         items.Add(new Separator());

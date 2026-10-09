@@ -51,6 +51,9 @@ NuGet package without passing the persistence tests.
   image-only drop.
 - `LinkMenuItems` lets the app replace a link's right-click items (attachment open/save/delete).
 - Image right-click menus drop Size, Inline with Text, Margin and Replace Image.
+- `WordWrap` (default on) lets top-level paragraphs run unwrapped with horizontal scrolling in the
+  continuous layout; page view and table cells always wrap. Toggled by a toolbar button
+  (`RichEditorIcon.WordWrap`) and a Word Wrap check item in the text right-click menu.
 - `RemoveLinkedText(uri)` removes an attachment link (and its emptied paragraph) as one undo step.
 - Regex find highlight (`SetFindHighlight(Regex?)`), `SelectFindMatch` and static
   `ParagraphTexts` support searching inside thoughts with whole-word and regex options.

@@ -82,6 +82,7 @@ public partial class MainWindow : Window
         EditorView.Editor.LinkHandler = HandleAttachmentLink;
         EditorView.Editor.FileDropHandler = HandleFileDrop;
         EditorView.Editor.LinkMenuItems = AttachmentMenuItems;
+        EditorView.Editor.PropertyChanged += (_, e) => { if (e.Property == RichEditor.WordWrapProperty) SaveWordWrap(); };
         EditorView.Editor.TextChanged += (_, _) =>
         {
             if (_loading || _thought == null || !EditorView.Editor.IsModified) return;

@@ -69,6 +69,31 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void WordWrapOffRunsLinesPastTheViewportAndIsRemembered()
+    {
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Long");
+        var window = OpenWindow();
+        Select(window, thought.Path);
+        var view = window.FindControl<RichEditorView>("EditorView")!;
+        var editor = view.Editor;
+        editor.InsertText(string.Concat(Enumerable.Repeat("a long line of words ", 200)));
+        window.UpdateLayout();
+        var wrappedWidth = editor.Bounds.Width;
+        Assert.True(wrappedWidth < view.Bounds.Width);
+        Assert.Contains(view.Toolbar.GetVisualDescendants().OfType<Button>(), b => b.IsVisible && Equals(ToolTip.GetTip(b), "Word Wrap"));
+
+        editor.WordWrap = false;
+        window.UpdateLayout();
+        Assert.True(editor.Bounds.Width > view.Bounds.Width * 2);
+        Assert.False(BrainSettings.Read(Path.Combine(_root, ".brainpending", "settings.json")).Editor!.WordWrap);
+
+        editor.WordWrap = true;
+        window.UpdateLayout();
+        Assert.Equal(wrappedWidth, editor.Bounds.Width);
+    }
+
+    [AvaloniaFact]
     public async Task PersistentFileLockEventuallyReportsFailureWithoutDiscardingEdits()
     {
         var workspace = new BrainWorkspace(_root);

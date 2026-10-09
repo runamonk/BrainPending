@@ -57,6 +57,7 @@ public enum RichEditorIcon
     LineSpacing,
     FontSizeIncrease,
     FontSizeDecrease,
+    WordWrap,
 }
 
 /// <summary>

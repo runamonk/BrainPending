@@ -52,8 +52,9 @@ internal sealed record SearchSettings(bool WholeBrain = false, bool MatchCase = 
 // A null Color means new text uses the theme's text color.
 // EditAttachmentsInPlace opens the stored file itself, so saved edits change the attachment.
 // OpenAttachmentsOnClick skips the attachment dialog, except for files that can run programs.
+// WordWrap is toggled from the editor toolbar or right-click menu, not the settings dialog.
 internal sealed record EditorSettings(string FontFamily = "Segoe UI", double FontSize = 12, string? Color = null,
-    bool EditAttachmentsInPlace = false, bool OpenAttachmentsOnClick = false);
+    bool EditAttachmentsInPlace = false, bool OpenAttachmentsOnClick = false, bool WordWrap = true);
 
 // EveryDays = 0 checks on every startup.
 internal sealed record UpdateSettings(bool CheckOnStartup = true, int EveryDays = 0, DateTime? LastCheckUtc = null);

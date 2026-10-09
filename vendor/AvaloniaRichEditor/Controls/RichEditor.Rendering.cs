@@ -53,6 +53,18 @@ public partial class RichEditor
         return yOffset + 40; // a little breathing room at the bottom
     }
 
+    // Widest unwrapped line, plus the same left/right gutters the wrap width leaves.
+    private double MeasureContentWidth(double width)
+    {
+        if (Document == null) return 0;
+        double widest = 0;
+        foreach (var block in Document.Blocks)
+            if (block is Paragraph p && Unwrapped(p))
+                widest = Math.Max(widest, BuildTextLayout(p, ParagraphWrapWidth(p, width)).WidthIncludingTrailingWhitespace
+                    + 20 + ParaLeft(p) + p.MarginRight);
+        return widest;
+    }
+
     private double _measuredHeight;
 
     /// <inheritdoc/>
@@ -89,6 +101,8 @@ public partial class RichEditor
                 return new Size(noWidth ? cw : Math.Max(availableSize.Width, cw), _measuredHeight);
             }
             double w = noWidth ? A4ContentWidth : availableSize.Width;
+            // Unwrapped lines set the width; the host's MinWidth keeps it at least the viewport.
+            if (!WordWrap) w = Math.Max(MinWidth, MeasureContentWidth(Math.Max(MinWidth, Bounds.Width)));
             _measuredHeight = Math.Max(MinHeight, MeasureContentHeight(w));
             return new Size(w, _measuredHeight);
         }

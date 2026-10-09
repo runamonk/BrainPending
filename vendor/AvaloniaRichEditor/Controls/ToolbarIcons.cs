@@ -75,6 +75,12 @@ internal static class ToolbarIcons
         RichEditorIcon.InsertDivider => Build(20,
             ("M4 12 H20", false)),
 
+        // Top line, a line that runs to the edge and hooks back under itself, and a short last line.
+        RichEditorIcon.WordWrap => Build(20,
+            ("M4 6 H20 M4 18 H8", false),
+            ("M4 12 H16.5 A3 3 0 0 1 16.5 18 H13", false),
+            ("M11 18 L14 15.5 L14 20.5 Z", true)),
+
         RichEditorIcon.Undo => Build(20,
             ("M5 11 H14 A4.5 4.5 0 0 1 14 20 H9", false),
             ("M5 11 L9 7.5 L9 14.5 Z", true)),

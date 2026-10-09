@@ -181,6 +181,11 @@ public class RichEditorView : UserControl
                 UpdateHorizontalScroll();
                 ApplyFitWidth(); // paper/orientation/outline change the fit target
             }
+            else if (e.Property == RichEditor.WordWrapProperty)
+            {
+                UpdateHorizontalScroll();
+                UpdateEditorFillHeight();
+            }
         };
         SizeChanged += (_, _) => ApplyFitWidth();
 
@@ -207,17 +212,23 @@ public class RichEditorView : UserControl
     // A horizontal scrollbar only makes sense for a fixed-width paged column that overflows the
     // viewport. In fit-to-width the column is scaled to the viewport, so it never overflows — and the
     // continuous layout reflows — so both disable it.
+    // Unwrapped lines can run past the viewport too.
     private void UpdateHorizontalScroll()
-        => _scroller.HorizontalScrollBarVisibility = (Editor.IsPaged && !FitToWidth)
+        => _scroller.HorizontalScrollBarVisibility = (Editor.IsPaged && !FitToWidth) || (!Editor.WordWrap && !Editor.IsPaged)
             ? ScrollBarVisibility.Auto
             : ScrollBarVisibility.Disabled;
 
     // Fill the viewport for short notes. Cap the minimum height to avoid scrollbar/viewport feedback loops.
+    // Unwrapped, the scroller stops giving the editor a width, so keep it at least the viewport wide.
     private void UpdateEditorFillHeight()
     {
         double vh = _scroller.Viewport.Height;
         double zoom = ZoomFactor > 0 ? ZoomFactor : 1.0;
         if (vh > 0) Editor.MinHeight = vh / zoom;
+        double vw = _scroller.Viewport.Width;
+        Editor.MinWidth = !Editor.WordWrap && !Editor.IsPaged && vw > 0
+            ? Math.Max(0, vw / zoom - Editor.Margin.Left - Editor.Margin.Right)
+            : 0;
     }
 
     // Scales the document so the page (chrome) or fixed content column (no chrome) fills the viewport
@@ -252,6 +263,7 @@ public class RichEditorView : UserControl
         if (change.Property == ZoomFactorProperty)
         {
             _zoomHost.LayoutTransform = new ScaleTransform(ZoomFactor, ZoomFactor);
+            UpdateEditorFillHeight(); // the viewport in editor px changes with zoom
             // An explicit zoom (not our own fit write) cancels fit-to-width.
             if (!_settingZoomInternally) SetCurrentValue(FitToWidthProperty, false);
             Toolbar.RefreshPageControls(); // zoom is view-level, so push it onto the toolbar's zoom combo

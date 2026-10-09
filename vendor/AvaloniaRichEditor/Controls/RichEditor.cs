@@ -318,6 +318,12 @@ public partial class RichEditor : Control
             InvalidateMeasure();
             InvalidateVisual();
         }
+        if (change.Property == WordWrapProperty)
+        {
+            _layoutCache.Clear(); // cached layouts were shaped with the other wrapping
+            InvalidateMeasure();
+            InvalidateVisual();
+        }
         if (change.Property == PageSizeProperty || change.Property == ShowPageBoundariesProperty
             || change.Property == PageOrientationProperty)
         {
@@ -1113,6 +1119,20 @@ public partial class RichEditor : Control
         => 10 + p.Indent + p.ListLevel * 20 + (p.ListType != ListKind.None ? ListMarkerWidth : 0);
 
     // Measure, render, and hit testing must use the same wrap width or line boundaries diverge.
+    /// <summary>When <see langword="false"/>, top-level paragraphs run on as single lines and the editor
+    /// grows wide enough to scroll horizontally. Page view and table cells always wrap. Default
+    /// <see langword="true"/>.</summary>
+    public static readonly StyledProperty<bool> WordWrapProperty =
+        AvaloniaProperty.Register<RichEditor, bool>(nameof(WordWrap), true);
+
+    public bool WordWrap
+    {
+        get => GetValue(WordWrapProperty);
+        set => SetValue(WordWrapProperty, value);
+    }
+
+    private bool Unwrapped(Paragraph p) => !WordWrap && !IsPaged && p.Parent is FlowDocument;
+
     private static double ParagraphWrapWidth(Paragraph p, double maxWidth)
         => Math.Max(10, maxWidth - 20 - ParaLeft(p) - p.MarginRight);
 
@@ -1402,7 +1422,7 @@ public partial class RichEditor : Control
             true,
             false,
             defaultProps,
-            TextWrapping.Wrap,
+            Unwrapped(p) ? TextWrapping.NoWrap : TextWrapping.Wrap,
             lh,
             0,
             0);

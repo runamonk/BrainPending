@@ -433,6 +433,12 @@ public partial class RichEditor
         {
             items.Add(Mi(Loc("InsertLink"), () => { _ = EditHyperlinkAsync(null, null); }, _caretPosition.Paragraph != null, RichEditorIcon.InsertLink));
         }
+        // Page view always wraps, so the toggle would do nothing there.
+        if (!IsPaged)
+        {
+            items.Add(new Separator());
+            items.Add(CheckItem(Loc("WordWrap"), WordWrap, () => WordWrap = !WordWrap));
+        }
         items.Add(new Separator());
         items.Add(Mi(Loc("SelectAll"), SelectAll, icon: RichEditorIcon.SelectAll, gesture: RichEditorShortcuts.Gesture(ShortcutId.SelectAll)));
         items.Add(Mi(Loc("Undo"), DoUndo, CanUndo, RichEditorIcon.Undo, RichEditorShortcuts.Gesture(ShortcutId.Undo)));

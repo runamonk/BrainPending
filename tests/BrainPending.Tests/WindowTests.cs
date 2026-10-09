@@ -94,6 +94,57 @@ public sealed class WindowTests : IDisposable
     }
 
     [AvaloniaFact]
+    public void UpArrowMovesOneLineOverShortSpacedEmptyLines()
+    {
+        // Same paragraph formatting as a real thought where ↑ skipped blank lines.
+        const string para = @"\pard\sl200\slmult1\sb0\sa0\ql ";
+        var rtf = @"{\rtf1\ansi " + para + @"{\fs24 Top}\par " + para + @"\par " + para + @"\par " + para + @"{\fs24 Bottom}\par}";
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Spaced", rtf);
+        var window = OpenWindow();
+        Select(window, thought.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        editor.Focus();
+        int Line() { window.CaptureRenderedFrame(); Dispatcher.UIThread.RunJobs(); return editor.GetStatus().line; }
+        window.KeyPress(Key.End, RawInputModifiers.Control, PhysicalKey.End, null);
+        var last = Line();
+        for (var expected = last - 1; expected >= 1; expected--)
+        {
+            window.KeyPress(Key.Up, RawInputModifiers.None, PhysicalKey.ArrowUp, null);
+            Assert.Equal(expected, Line());
+        }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(8)]
+    [InlineData(12)]
+    [InlineData(20)]
+    public void ArrowKeysMoveOneEmptyLineAtATime(double fontSize)
+    {
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Lines");
+        var window = OpenWindow();
+        Select(window, thought.Path);
+        var editor = window.FindControl<RichEditorView>("EditorView")!.Editor;
+        editor.DefaultFontSize = fontSize;
+        editor.Focus();
+        // Draw a frame after each key like the real app; the editor tracks the caret's position when it draws.
+        int Line() { window.CaptureRenderedFrame(); Dispatcher.UIThread.RunJobs(); return editor.GetStatus().line; }
+        for (var i = 0; i < 3; i++) { window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null); Line(); }
+        Assert.Equal(4, Line());
+        foreach (var expected in new[] { 3, 2, 1 })
+        {
+            window.KeyPress(Key.Up, RawInputModifiers.None, PhysicalKey.ArrowUp, null);
+            Assert.Equal(expected, Line());
+        }
+        foreach (var expected in new[] { 2, 3, 4 })
+        {
+            window.KeyPress(Key.Down, RawInputModifiers.None, PhysicalKey.ArrowDown, null);
+            Assert.Equal(expected, Line());
+        }
+    }
+
+    [AvaloniaFact]
     public async Task PersistentFileLockEventuallyReportsFailureWithoutDiscardingEdits()
     {
         var workspace = new BrainWorkspace(_root);

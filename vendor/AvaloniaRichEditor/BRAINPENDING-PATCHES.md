@@ -51,6 +51,9 @@ NuGet package without passing the persistence tests.
   image-only drop.
 - `LinkMenuItems` lets the app replace a link's right-click items (attachment open/save/delete).
 - Image right-click menus drop Size, Inline with Text, Margin and Replace Image.
+- ↑ from a top-level paragraph aims at the bottom of the block above instead of a fixed 20px step,
+  which skipped empty lines shorter than 20px. Hit testing also gives a shared paragraph edge to
+  the lower paragraph.
 - `WordWrap` (default on) lets top-level paragraphs run unwrapped with horizontal scrolling in the
   continuous layout; page view and table cells always wrap. Toggled by a toolbar button
   (`RichEditorIcon.WordWrap`) and a Word Wrap check item in the text right-click menu.

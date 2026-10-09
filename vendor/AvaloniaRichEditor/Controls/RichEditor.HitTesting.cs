@@ -557,10 +557,13 @@ public partial class RichEditor
             }
             else if (block is Paragraph paragraph)
             {
+                // Ties go to the later paragraph (<=): a point on the edge two paragraphs share belongs to
+                // the lower one. With `<` the ↑ key's fixed 20px step, landing exactly on that edge
+                // between 20px empty lines, picked the paragraph above and skipped a line.
                 if (ft == null) // empty paragraph: extent is a single line height
                 {
                     double dY = p.Y < top ? top - p.Y : (p.Y > top + h ? p.Y - (top + h) : 0);
-                    if (dY < bestDistY) { bestDistY = dY; bestPara = paragraph; bestLocalIndex = 0; }
+                    if (dY <= bestDistY) { bestDistY = dY; bestPara = paragraph; bestLocalIndex = 0; }
                 }
                 else
                 {
@@ -569,7 +572,7 @@ public partial class RichEditor
                         InlineTableHitDescent(paragraph, ft, ppos, top, p) is { } descended)
                         return descended;
                     double distY2 = p.Y < top ? top - p.Y : (p.Y > top + h ? p.Y - (top + h) : 0);
-                    if (distY2 < bestDistY)
+                    if (distY2 <= bestDistY)
                     {
                         bestDistY = distY2;
                         bestPara = paragraph;

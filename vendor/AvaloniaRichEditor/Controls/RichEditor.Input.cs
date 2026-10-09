@@ -1145,7 +1145,8 @@ public partial class RichEditor
             }
             // In a (possibly tall) cell, step just above the cell's top edge so the move always clears
             // it into the row above; outside a cell, a small fixed step is enough.
-            double ty = CaretCellRect() is { } upCell ? upCell.Top - 2 : Math.Max(0, _lastCaretPoint.Y - 20);
+            double ty = CaretCellRect() is { } upCell ? upCell.Top - 2
+                : PrevBlockBottom() ?? Math.Max(0, _lastCaretPoint.Y - 20);
             if (!shift && BlockAtY(ty) is { } ub && !CaretInBlock(ub))
             {
                 // HWP: ↑ arriving at a table steps INTO its last row (the column under the caret's x).
@@ -1689,6 +1690,25 @@ public partial class RichEditor
         _caretBlock = null;
         _caretPosition = tp;
         return true;
+    }
+
+    // The bottom pixel row of the block above the caret's top-level paragraph, so ↑ lands on its last
+    // line. A fixed 20px step overshot empty lines shorter than that (line spacing below 1) and
+    // skipped one. Null outside the continuous layout or when there is no block above.
+    private double? PrevBlockBottom()
+    {
+        if (Document == null || IsPaged || _caretPosition.Paragraph is not { Parent: FlowDocument } p) return null;
+        double yOffset = 0, maxWidth = ContentLayoutWidth;
+        double? prevBottom = null;
+        foreach (var block in Document.Blocks)
+        {
+            yOffset += block.MarginTop;
+            if (ReferenceEquals(block, p)) return prevBottom;
+            double h = BlockExtent(block, maxWidth, yOffset, out _, out _);
+            prevBottom = yOffset + Math.Max(0, h - 1);
+            yOffset += h + block.MarginBottom;
+        }
+        return null;
     }
 
     private Block? BlockAtY(double y)

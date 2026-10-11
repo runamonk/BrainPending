@@ -30,7 +30,7 @@
 
     <TextBlock Text="ATTACHMENTS" FontSize="12" FontWeight="SemiBold" Margin="0,10,0,0" />
     <CheckBox x:Name="EditAttachmentsInPlace" Content="Open attachments for editing" />
-    <TextBlock Text="Saved changes go straight into the brain. There is no undo or history for attachment edits."
+    <TextBlock Text="Open attachments directly from brain location. Otherwise attachments are copied out to a temporary folder for editing. This is safer, but slower."
                TextWrapping="Wrap" Opacity="0.65" Margin="28,-8,0,0" />
     <CheckBox x:Name="OpenAttachmentsOnClick" Content="Open attachments when clicked" />
     <TextBlock Text="Skips the attachment window. Right-click an attachment to save it. Files that can run programs still ask first."

@@ -745,6 +745,11 @@ public partial class MainWindow : Window
         try { RefreshBrowser(); } catch (Exception error) { ShowNotice(error.Message); }
     }
     private async void Home_Click(object? sender, RoutedEventArgs e) => await Run(async () => { if (_workspace != null) await Navigate(_workspace.Root, true); });
+    private async void Logo_Tapped(object? sender, TappedEventArgs e)
+    {
+        try { await Launcher.LaunchUriAsync(new Uri("https://github.com/runamonk/BrainPending")); }
+        catch (Exception error) { ShowNotice(error.Message); }
+    }
     private void ThoughtTitle_DoubleTapped(object? sender, TappedEventArgs e)
     {
         if (_thought == null) return;

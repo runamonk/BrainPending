@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BrainPending.CustomizeDialog"
+        Title="Customize" Width="560" Height="480" MinWidth="460" MinHeight="360"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}">
+  <Grid Margin="24" RowDefinitions="Auto,Auto,*,Auto" ColumnDefinitions="*,Auto,*,Auto" ColumnSpacing="10">
+    <TextBlock x:Name="Heading" Grid.ColumnSpan="4" FontSize="21" FontWeight="SemiBold" Margin="0,0,0,14" />
+    <TextBlock Grid.Row="1" Text="AVAILABLE" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+    <TextBlock x:Name="ShownLabel" Grid.Row="1" Grid.Column="2" Text="SHOWN" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+
+    <ListBox x:Name="Available" Grid.Row="2" BorderThickness="1" BorderBrush="{DynamicResource AppLineBrush}" CornerRadius="6"
+             SelectionChanged="List_SelectionChanged" DoubleTapped="Add_Click" AutomationProperties.Name="Available items" />
+    <StackPanel Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" Spacing="8">
+      <Button x:Name="AddButton" Classes="action quiet" Content="Add →" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="Add_Click" />
+      <Button x:Name="RemoveButton" Classes="action quiet" Content="← Remove" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="Remove_Click" />
+    </StackPanel>
+    <ListBox x:Name="Shown" Grid.Row="2" Grid.Column="2" BorderThickness="1" BorderBrush="{DynamicResource AppLineBrush}" CornerRadius="6"
+             SelectionChanged="List_SelectionChanged" DoubleTapped="Remove_Click" AutomationProperties.Name="Shown items" />
+    <StackPanel Grid.Row="2" Grid.Column="3" VerticalAlignment="Center" Spacing="8">
+      <Button x:Name="UpButton" Classes="action quiet" Content="Move up" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="Up_Click" />
+      <Button x:Name="DownButton" Classes="action quiet" Content="Move down" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="Down_Click" />
+    </StackPanel>
+
+    <Grid Grid.Row="3" Grid.ColumnSpan="4" ColumnDefinitions="Auto,*,Auto" Margin="0,16,0,0">
+      <Button Classes="action quiet" Content="Reset to defaults" Click="Reset_Click" />
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+        <Button Classes="action quiet" Content="Cancel" Click="Cancel_Click" />
+        <Button Classes="action" Content="Save" Background="{DynamicResource AppAccentBrush}" Foreground="{DynamicResource AppAccentTextBrush}" Click="Save_Click" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

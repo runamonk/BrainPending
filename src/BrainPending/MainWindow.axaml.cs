@@ -71,6 +71,12 @@ public partial class MainWindow : Window
         EditorView.Toolbar.ToolbarLevel = ToolbarLevel.Normal;
         EditorView.Toolbar.Compact = true;
         EditorView.Toolbar.AttachFileRequested += AttachFile_Click;
+        EditorView.Toolbar.CustomizeRequested += CustomizeToolbar_Click;
+        EditorView.Editor.TextMenuPinnedItems = EditorMenuItems;
+        // Lets right-click-only users attach files from the menu.
+        EditorView.Editor.HostTextMenuItems["attach"] = ("Attach file…", () => AttachFile_Click(null, EventArgs.Empty));
+        EditorView.Editor.HostTextMenuItems["find"] = ("Find…", OpenFind);
+        EditorView.Toolbar.HostItems["find"] = ("Find", FindButton);
         ApplyEditorSettings();
         // The editor adds a 10px text inset; align with the 14px title inset.
         EditorView.Editor.Margin = new Thickness(4, 0, 4, 24);

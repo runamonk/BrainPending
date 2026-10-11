@@ -55,6 +55,90 @@ public partial class RichEditorToolbar : UserControl
         remove { _attachFileRequested -= value; Build(); Sync(); }
     }
 
+    private EventHandler? _customizeRequested;
+
+    /// <summary>Raised by the strip's "Customize toolbar…" right-click item, shown when a host handles this event.</summary>
+    public event EventHandler? CustomizeRequested
+    {
+        add { _customizeRequested += value; Build(); Sync(); }
+        remove { _customizeRequested -= value; Build(); Sync(); }
+    }
+
+    /// <summary>The separator id in <see cref="Items"/>.</summary>
+    public const string SeparatorItem = "|";
+
+    /// <summary>The compact strip's items, used when <see cref="Items"/> is null.</summary>
+    public static System.Collections.Generic.IReadOnlyList<string> DefaultItems { get; } =
+        ["bold", "italic", "underline", "strike", "color", "highlight", "font", "size", "bullets", "numbers",
+         SeparatorItem, "link", "image", "attach", SeparatorItem, "wrap"];
+
+    private System.Collections.Generic.IReadOnlyList<string>? _items;
+
+    /// <summary>Item ids to show, in order, with <see cref="SeparatorItem"/> for a divider. Unknown ids are
+    /// skipped. Null keeps the built-in layout. An empty list hides the strip.</summary>
+    public System.Collections.Generic.IReadOnlyList<string>? Items
+    {
+        get => _items;
+        set { _items = value; Build(); Sync(); }
+    }
+
+    /// <summary>Host controls the toolbar can show by id; list an id in <see cref="Items"/> to show it.
+    /// Fill this before setting <see cref="Items"/>.</summary>
+    public System.Collections.Generic.Dictionary<string, (string Label, Func<Control> Create)> HostItems { get; } = new();
+
+    /// <summary>Every item id this toolbar can show right now, separator excluded.</summary>
+    public System.Collections.Generic.IReadOnlyList<string> AvailableItems
+    {
+        get
+        {
+            var ids = new System.Collections.Generic.List<string> { "bold", "italic", "underline", "strike",
+                "color", "highlight", "font", "size", "fontlarger", "fontsmaller", "wrap", "bullets", "numbers",
+                "heading", "align", "indent", "outdent", "spacing", "undo", "redo", "painter" };
+            if (Target?.AllowTables != false) ids.Add("table");
+            if (Target?.AllowImages != false) ids.Add("image");
+            if (_attachFileRequested != null) ids.Add("attach");
+            if (Target is not { AllowTables: false, AllowImages: false }) ids.Add("divider");
+            ids.Add("link");
+            ids.Add("clear");
+            ids.AddRange(HostItems.Keys);
+            return ids;
+        }
+    }
+
+    /// <summary>A readable name for an item id.</summary>
+    public string ItemLabel(string id) => id switch
+    {
+        SeparatorItem => "── Separator ──",
+        "bold" => Loc("Bold"),
+        "italic" => Loc("Italic"),
+        "underline" => Loc("Underline"),
+        "strike" => Loc("Strikethrough"),
+        "color" => Loc("TextColor"),
+        "highlight" => Loc("Highlight"),
+        "font" => Loc("FontFamily"),
+        "size" => Loc("FontSize"),
+        "wrap" => Loc("WordWrap"),
+        "bullets" => Loc("BulletList"),
+        "numbers" => Loc("NumberedList"),
+        "table" => Loc("InsertTable"),
+        "image" => Loc("InsertImage"),
+        "attach" => "Attach file",
+        "divider" => Loc("InsertDivider"),
+        "link" => Loc("InsertLink").TrimEnd('.'),
+        "clear" => Loc("ClearFormatting"),
+        "fontlarger" => Loc("FontSizeIncrease"),
+        "fontsmaller" => Loc("FontSizeDecrease"),
+        "heading" => Loc("Heading"),
+        "align" => Loc("Alignment"),
+        "indent" => Loc("IndentIncrease"),
+        "outdent" => Loc("IndentDecrease"),
+        "spacing" => Loc("LineSpacing"),
+        "undo" => Loc("Undo"),
+        "redo" => Loc("Redo"),
+        "painter" => Loc("FormatPainter"),
+        _ => HostItems.TryGetValue(id, out var host) ? host.Label : id,
+    };
+
     private Button BuildAttachmentButton()
     {
         var paperclip = new Avalonia.Controls.Shapes.Path
@@ -87,7 +171,7 @@ public partial class RichEditorToolbar : UserControl
     // Shared brushes must be immutable so toolbars on different UI threads can use them.
     private static readonly IBrush ActiveBrush = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.Parse("#506780"));
 
-    private Button? _boldBtn, _italicBtn, _underlineBtn, _strikeBtn, _bulletBtn, _numberBtn, _undoBtn, _redoBtn, _wrapBtn;
+    private Button? _boldBtn, _italicBtn, _underlineBtn, _strikeBtn, _bulletBtn, _numberBtn, _undoBtn, _redoBtn, _wrapBtn, _painterBtn;
     private ComboBox? _fontCombo, _sizeCombo, _headingCombo, _alignCombo;
     private TextBox? _spacingBox;
     private TextBlock? _bulletPreview, _numberPreview;
@@ -250,7 +334,7 @@ public partial class RichEditorToolbar : UserControl
     private void Build()
     {
         var items = new System.Collections.Generic.List<Control>();
-        Control? colorButton = null, highlightButton = null, linkButton = null;
+        Control? colorButton = null, highlightButton = null, linkButton = null, clearButton = null;
         void Add(Control c) => items.Add(c);
 
         Button Btn(object content, string tip, Action click, RichEditorIcon? icon = null)
@@ -305,7 +389,8 @@ public partial class RichEditorToolbar : UserControl
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        _undoBtn = _redoBtn = _boldBtn = _italicBtn = _underlineBtn = _strikeBtn = _bulletBtn = _numberBtn = _wrapBtn = null;
+        _undoBtn = _redoBtn = _boldBtn = _italicBtn = _underlineBtn = _strikeBtn = _bulletBtn = _numberBtn = _wrapBtn = _painterBtn = null;
+        Control? indentButton = null, outdentButton = null, largerButton = null, smallerButton = null, spacingControl = null;
         _fontCombo = _sizeCombo = _headingCombo = _alignCombo = null;
         _spacingBox = null; _bulletPreview = _numberPreview = null;
         _tableBtn = _imageBtn = _attachmentBtn = _dividerBtn = null;
@@ -390,17 +475,67 @@ public partial class RichEditorToolbar : UserControl
             if (_attachFileRequested != null) Add(_attachmentBtn = BuildAttachmentButton());
             Add(_dividerBtn);
             Add(linkButton = Btn("Link", "Insert or edit hyperlink", () => { _ = Target?.EditLinkFromToolbarAsync(); }, RichEditorIcon.InsertLink));           
-            Add(Btn("Clear", "Clear formatting", () => Target?.ClearFormatting()));
+            Add(clearButton = Btn("Clear", "Clear formatting", () => Target?.ClearFormatting()));
 
+            // Not in the built-in layout; shown only when listed in Items.
+            _undoBtn = Btn("↶", Loc("Undo") + " (Ctrl+Z)", () => Target?.Undo(), RichEditorIcon.Undo);
+            _redoBtn = Btn("↷", Loc("Redo") + " (Ctrl+Y)", () => Target?.Redo(), RichEditorIcon.Redo);
+            indentButton = Btn("⇥", Loc("IndentIncrease") + " (Ctrl+M)", () => Target?.Indent(20), RichEditorIcon.IndentIncrease);
+            outdentButton = Btn("⇤", Loc("IndentDecrease") + " (Ctrl+Shift+M)", () => Target?.Indent(-20), RichEditorIcon.IndentDecrease);
+            largerButton = Btn("A+", Loc("FontSizeIncrease") + " (Ctrl+Shift+.)", () => Target?.IncreaseFontSize(), RichEditorIcon.FontSizeIncrease);
+            smallerButton = Btn("A-", Loc("FontSizeDecrease") + " (Ctrl+Shift+,)", () => Target?.DecreaseFontSize(), RichEditorIcon.FontSizeDecrease);
+            _painterBtn = Btn("🖌", Loc("FormatPainter"), () => Target?.StartFormatPainter(), RichEditorIcon.FormatPainter);
+            spacingControl = BuildLineSpacingControl();
+
+            var heading = _headingCombo = Combo(Loc("Heading"), 100);
+            heading.Items.Add(new ComboBoxItem { Content = Loc("BodyText") });
+            for (int h = 1; h <= 6; h++) heading.Items.Add(new ComboBoxItem { Content = Loc("Heading" + h) });
+            heading.SelectionChanged += (_, _) =>
+            {
+                if (_suppress || heading.SelectedIndex < 0) return;
+                Target?.SetHeading(heading.SelectedIndex);
+                Sync();
+            };
+
+            var align = _alignCombo = Combo(Loc("Alignment"), 90);
+            foreach (var key in new[] { "AlignLeft", "AlignCenter", "AlignRight", "AlignJustify" })
+                align.Items.Add(new ComboBoxItem { Content = Loc(key) });
+            align.SelectionChanged += (_, _) =>
+            {
+                if (_suppress || align.SelectedIndex < 0) return;
+                Target?.SetTextAlignment(align.SelectedIndex switch
+                {
+                    1 => TextAlignment.Center,
+                    2 => TextAlignment.Right,
+                    3 => TextAlignment.Justify,
+                    _ => TextAlignment.Left,
+                });
+                Sync();
+            };
         }
 
-        if (Compact && !ro)
+        var order = _items ?? (Compact ? DefaultItems : null);
+        if (order != null && !ro)
         {
-            var primary = new System.Collections.Generic.List<Control>();
-            foreach (var control in new Control?[] { _boldBtn, _italicBtn, _underlineBtn, _strikeBtn,
-                colorButton, highlightButton, _fontCombo, _sizeCombo, _wrapBtn, linkButton, _imageBtn, _attachmentBtn, bulletBox, numberBox, _tableBtn })
-                if (control != null) primary.Add(control);
-            items = primary;
+            var byId = new System.Collections.Generic.Dictionary<string, Control?>
+            {
+                ["bold"] = _boldBtn, ["italic"] = _italicBtn, ["underline"] = _underlineBtn, ["strike"] = _strikeBtn,
+                ["color"] = colorButton, ["highlight"] = highlightButton, ["font"] = _fontCombo, ["size"] = _sizeCombo,
+                ["wrap"] = _wrapBtn, ["bullets"] = bulletBox, ["numbers"] = numberBox, ["table"] = _tableBtn,
+                ["image"] = _imageBtn, ["attach"] = _attachmentBtn, ["divider"] = _dividerBtn, ["link"] = linkButton,
+                ["clear"] = clearButton, ["fontlarger"] = largerButton, ["fontsmaller"] = smallerButton,
+                ["heading"] = _headingCombo, ["align"] = _alignCombo, ["indent"] = indentButton, ["outdent"] = outdentButton,
+                ["spacing"] = spacingControl, ["undo"] = _undoBtn, ["redo"] = _redoBtn, ["painter"] = _painterBtn,
+            };
+            foreach (var (id, host) in HostItems)
+                if (System.Linq.Enumerable.Contains(order, id)) byId[id] = host.Create();
+            var picked = new System.Collections.Generic.List<Control>();
+            foreach (var id in order)
+            {
+                if (id == SeparatorItem) picked.Add(Div());
+                else if (byId.TryGetValue(id, out var control) && control != null && !picked.Contains(control)) picked.Add(control);
+            }
+            items = picked;
         }
 
         // WrapPanel avoids changing the visual tree during layout, which can cause resize re-entrancy.
@@ -415,12 +550,20 @@ public partial class RichEditorToolbar : UserControl
         if (TrailingItems.Count > 0) wrap.Children.Add(Div());
         foreach (var c in TrailingItems) AddHost(c);
 
-        Content = new Border
+        var strip = new Border
         {
             Background = Brushes.Transparent,
             Padding = new Thickness(8, 4),
             Child = wrap,
         };
+        if (_customizeRequested != null && !ro)
+        {
+            var customize = new MenuItem { Header = "Customize toolbar…" };
+            customize.Click += (_, _) => _customizeRequested?.Invoke(this, EventArgs.Empty);
+            strip.ContextMenu = new ContextMenu { Items = { customize } };
+        }
+        Content = strip;
+        _hasItems = wrap.Children.Count > 0;
         ApplyFlags();
     }
 
@@ -838,9 +981,11 @@ public partial class RichEditorToolbar : UserControl
     }
 
 
+    private bool _hasItems = true; // false when the host chose an empty strip
+
     private void ApplyFlags()
     {
-        IsVisible = Target != null;
+        IsVisible = Target != null && _hasItems;
         if (Target == null) return;
         if (_tableBtn != null) _tableBtn.IsVisible = Target.AllowTables;
         if (_imageBtn != null) _imageBtn.IsVisible = Target.AllowImages;
@@ -867,6 +1012,7 @@ public partial class RichEditorToolbar : UserControl
         SetActive(_bulletBtn, f.List == ListKind.Bullet);
         SetActive(_numberBtn, f.List == ListKind.Ordered);
         SetActive(_wrapBtn, rt.WordWrap);
+        SetActive(_painterBtn, rt.IsFormatPainterActive);
         if (_wrapBtn != null) _wrapBtn.IsVisible = !rt.IsPaged; // page view always wraps
         if (_bulletPreview != null)
         {

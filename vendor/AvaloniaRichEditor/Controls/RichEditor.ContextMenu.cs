@@ -17,8 +17,8 @@ public partial class RichEditor
 {
 
     /// <summary>When <see langword="true"/>, the right-click menu includes the full character/paragraph/
-    /// list/heading formatting groups. Default <see langword="false"/> (slim): the menu shows only clipboard,
-    /// quick bold/italic/underline toggles, hyperlink and inserts — the rich formatting lives on the toolbar.
+    /// list/heading formatting groups. Default <see langword="false"/> (slim): clipboard, select all, word wrap
+    /// and clear formatting — the rich formatting lives on the toolbar.
     /// A standalone host without a toolbar can opt in.</summary>
     public static readonly StyledProperty<bool> ShowFormattingMenuProperty =
         AvaloniaProperty.Register<RichEditor, bool>(nameof(ShowFormattingMenu));
@@ -310,21 +310,76 @@ public partial class RichEditor
 
     private void AddClipboardItems(List<Control> items, bool hasSelection)
     {
-        items.Add(Mi(Loc("Cut"), () =>
+        items.Add(CutItem(hasSelection));
+        items.Add(CopyItem(hasSelection));
+        items.Add(PasteItem());
+        items.Add(DeleteItem(hasSelection));
+    }
+
+    private MenuItem CutItem(bool hasSelection) => Mi(Loc("Cut"), () =>
+    {
+        if (Document != null) PushUndo();
+        CopySelectionToClipboard();
+        DeleteSelection();
+        InvalidateVisual();
+    }, hasSelection, RichEditorIcon.Cut, RichEditorShortcuts.Gesture(ShortcutId.Cut));
+
+    private MenuItem CopyItem(bool hasSelection) =>
+        Mi(Loc("Copy"), CopySelectionToClipboard, hasSelection, RichEditorIcon.Copy, RichEditorShortcuts.Gesture(ShortcutId.Copy));
+
+    private MenuItem PasteItem() =>
+        Mi(Loc("Paste"), () => { _ = PasteFromClipboardAsync(); }, icon: RichEditorIcon.Paste, gesture: RichEditorShortcuts.Gesture(ShortcutId.Paste));
+
+    private MenuItem DeleteItem(bool hasSelection) => Mi(Loc("Delete"), () =>
+    {
+        if (Document != null) PushUndo();
+        DeleteSelection();
+        InvalidateVisual();
+    }, hasSelection, RichEditorIcon.Delete);
+
+    private MenuItem AlignSub(CaretFormat fmt) => Sub(Loc("Alignment"),
+        RadioItem(Loc("AlignLeft"), "ctxAlign", fmt.Align == TextAlignment.Left, () => SetTextAlignment(TextAlignment.Left), RichEditorShortcuts.Gesture(ShortcutId.AlignLeft)),
+        RadioItem(Loc("AlignCenter"), "ctxAlign", fmt.Align == TextAlignment.Center, () => SetTextAlignment(TextAlignment.Center), RichEditorShortcuts.Gesture(ShortcutId.AlignCenter)),
+        RadioItem(Loc("AlignRight"), "ctxAlign", fmt.Align == TextAlignment.Right, () => SetTextAlignment(TextAlignment.Right), RichEditorShortcuts.Gesture(ShortcutId.AlignRight)),
+        RadioItem(Loc("AlignJustify"), "ctxAlign", fmt.Align == TextAlignment.Justify, () => SetTextAlignment(TextAlignment.Justify), RichEditorShortcuts.Gesture(ShortcutId.AlignJustify)));
+
+    // The three spacings that have shortcuts; unset spacing counts as single.
+    private MenuItem SpacingSub(CaretFormat fmt)
+    {
+        var current = double.IsNaN(fmt.LineSpacing) || fmt.LineSpacing <= 1 ? 1.0 : fmt.LineSpacing;
+        MenuItem Item(double spacing, ShortcutId shortcut) => RadioItem(spacing.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture),
+            "ctxSpacing", Math.Abs(current - spacing) < 0.01, () => SetLineSpacing(spacing), RichEditorShortcuts.Gesture(shortcut));
+        var mi = Sub(Loc("LineSpacing"), Item(1.0, ShortcutId.LineSpacingSingle), Item(1.5, ShortcutId.LineSpacingOneHalf), Item(2.0, ShortcutId.LineSpacingDouble));
+        if (RichEditorIcons.TryCreate(RichEditorIcon.LineSpacing) is { } ic) mi.Icon = ic;
+        return mi;
+    }
+
+    // Same palette as the toolbar's pickers.
+    private MenuItem ColorSub(bool highlight)
+    {
+        var grid = new Avalonia.Controls.Primitives.UniformGrid { Columns = 8 };
+        foreach (var hex in RichEditorToolbar.Palette)
         {
-            if (Document != null) PushUndo();
-            CopySelectionToClipboard();
-            DeleteSelection();
-            InvalidateVisual();
-        }, hasSelection, RichEditorIcon.Cut, RichEditorShortcuts.Gesture(ShortcutId.Cut)));
-        items.Add(Mi(Loc("Copy"), CopySelectionToClipboard, hasSelection, RichEditorIcon.Copy, RichEditorShortcuts.Gesture(ShortcutId.Copy)));
-        items.Add(Mi(Loc("Paste"), () => { _ = PasteFromClipboardAsync(); }, icon: RichEditorIcon.Paste, gesture: RichEditorShortcuts.Gesture(ShortcutId.Paste)));
-        items.Add(Mi(Loc("Delete"), () =>
-        {
-            if (Document != null) PushUndo();
-            DeleteSelection();
-            InvalidateVisual();
-        }, hasSelection, RichEditorIcon.Delete));
+            if (!Color.TryParse(hex, out var color)) continue;
+            var swatch = new Border
+            {
+                Width = 18, Height = 18, Margin = new Thickness(1), Background = new SolidColorBrush(color),
+                [!Border.BorderBrushProperty] = new DynamicResourceExtension("SystemControlForegroundBaseLowBrush"), BorderThickness = new Thickness(1),
+            };
+            ToolTip.SetTip(swatch, hex);
+            swatch.PointerPressed += (_, _) =>
+            {
+                if (highlight) SetHighlight(new SolidColorBrush(color));
+                else SetForeground(new SolidColorBrush(color));
+                _openContextMenu?.Close();
+            };
+            grid.Children.Add(swatch);
+        }
+        var children = new List<Control> { new Border { Padding = new Thickness(8, 6), Child = grid } };
+        if (highlight) children.Add(Mi(Loc("NoHighlight"), () => SetHighlight(null)));
+        var mi = Sub(Loc(highlight ? "Highlight" : "TextColor"), children.ToArray());
+        if (RichEditorIcons.TryCreate(highlight ? RichEditorIcon.Highlight : RichEditorIcon.TextColor) is { } ic) mi.Icon = ic;
+        return mi;
     }
 
     private MenuItem CharacterFormatSub(CaretFormat fmt, bool hasSelection) => Sub(Loc("CharacterFormat"),
@@ -372,9 +427,7 @@ public partial class RichEditor
             Mi("1)", () => SetListStyle(ListMarkerStyle.DecimalParen)),
             Mi("a)", () => SetListStyle(ListMarkerStyle.LowerAlpha)),
             Mi("A)", () => SetListStyle(ListMarkerStyle.UpperAlpha)),
-            Mi("i)", () => SetListStyle(ListMarkerStyle.LowerRoman))),
-        new Separator(),
-        CheckItem(Loc("Quote"), fmt.Quote, ToggleQuote));
+            Mi("i)", () => SetListStyle(ListMarkerStyle.LowerRoman))));
 
     private MenuItem HeadingSub(CaretFormat fmt) => Sub(Loc("Heading"),
         HeadingRadio(Loc("Heading1"), 1, fmt.Heading), HeadingRadio(Loc("Heading2"), 2, fmt.Heading),
@@ -402,59 +455,151 @@ public partial class RichEditor
     private void BuildTextMenu(List<Control> items, bool hasSelection, Run? link, TableBlock? cellTable = null)
     {
         var fmt = GetCaretFormat();
-        AddClipboardItems(items, hasSelection);
-        items.Add(new Separator());
-
-        if (ShowFormattingMenu)
+        var seen = new HashSet<string>();
+        foreach (var id in TextMenuItems ?? DefaultTextMenuItems)
         {
-            items.Add(CharacterFormatSub(fmt, hasSelection));
-            items.Add(BuildParagraphFormatSub(fmt));
-            items.Add(ListSub(fmt));
-            items.Add(HeadingSub(fmt));
+            if (id == MenuSeparatorItem) { items.Add(new Separator()); continue; }
+            if (!seen.Add(id)) continue;
+            switch (id)
+            {
+                case "cut": items.Add(CutItem(hasSelection)); break;
+                case "copy": items.Add(CopyItem(hasSelection)); break;
+                case "paste": items.Add(PasteItem()); break;
+                case "delete": items.Add(DeleteItem(hasSelection)); break;
+                case "bold": items.Add(CheckItem(Loc("Bold"), fmt.Bold, ToggleBold, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Bold))); break;
+                case "italic": items.Add(CheckItem(Loc("Italic"), fmt.Italic, ToggleItalic, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Italic))); break;
+                case "underline": items.Add(CheckItem(Loc("Underline"), fmt.Underline, ToggleUnderline, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Underline))); break;
+                case "strike": items.Add(CheckItem(Loc("Strikethrough"), fmt.Strike, ToggleStrikethrough, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Strikethrough))); break;
+                case "clear": items.Add(Mi(Loc("ClearFormatting"), ClearFormatting, hasSelection, RichEditorIcon.ClearFormatting)); break;
+                case "color": items.Add(ColorSub(highlight: false)); break;
+                case "highlight": items.Add(ColorSub(highlight: true)); break;
+                case "charformat": items.Add(CharacterFormatSub(fmt, hasSelection)); break;
+                case "paraformat": items.Add(BuildParagraphFormatSub(fmt)); break;
+                case "list": items.Add(ListSub(fmt)); break;
+                case "heading": items.Add(HeadingSub(fmt)); break;
+                case "bullets": items.Add(CheckItem(Loc("BulletList"), fmt.List == ListKind.Bullet, ToggleBullet, gesture: RichEditorShortcuts.Gesture(ShortcutId.BulletList))); break;
+                case "numbers": items.Add(CheckItem(Loc("NumberedList"), fmt.List == ListKind.Ordered, ToggleNumbering)); break;
+                case "align": items.Add(AlignSub(fmt)); break;
+                case "indent": items.Add(Mi(Loc("IndentIncrease"), () => Indent(20), true, RichEditorIcon.IndentIncrease, RichEditorShortcuts.Gesture(ShortcutId.IndentIncrease))); break;
+                case "outdent": items.Add(Mi(Loc("IndentDecrease"), () => Indent(-20), true, RichEditorIcon.IndentDecrease, RichEditorShortcuts.Gesture(ShortcutId.IndentDecrease))); break;
+                case "spacing": items.Add(SpacingSub(fmt)); break;
+                case "link":
+                    if (link != null && !string.IsNullOrEmpty(link.NavigateUri))
+                    {
+                        items.Add(Mi(Loc("OpenLink"), () => OpenUrl(link.NavigateUri!), icon: RichEditorIcon.OpenLink));
+                        items.Add(Mi(Loc("EditLink"), () => { _ = EditHyperlinkAsync(link.NavigateUri, link); }, icon: RichEditorIcon.EditLink));
+                        items.Add(Mi(Loc("RemoveLink"), () => SetHyperlink(null, link), icon: RichEditorIcon.RemoveLink));
+                    }
+                    else
+                        items.Add(Mi(Loc("InsertLink"), () => { _ = EditHyperlinkAsync(null, null); }, _caretPosition.Paragraph != null, RichEditorIcon.InsertLink));
+                    break;
+                // Page view always wraps, so the toggle would do nothing there.
+                case "wrap": if (!IsPaged) items.Add(CheckItem(Loc("WordWrap"), WordWrap, () => WordWrap = !WordWrap)); break;
+                case "selectall": items.Add(Mi(Loc("SelectAll"), SelectAll, icon: RichEditorIcon.SelectAll, gesture: RichEditorShortcuts.Gesture(ShortcutId.SelectAll))); break;
+                case "undo": items.Add(Mi(Loc("Undo"), DoUndo, CanUndo, RichEditorIcon.Undo, RichEditorShortcuts.Gesture(ShortcutId.Undo))); break;
+                case "redo": items.Add(Mi(Loc("Redo"), DoRedo, CanRedo, RichEditorIcon.Redo, RichEditorShortcuts.Gesture(ShortcutId.Redo))); break;
+                case "table": if (AllowTables) items.Add(BuildInsertTableMenu()); break;
+                case "image": if (AllowImages) items.Add(Mi(Loc("InsertImage"), () => { _ = InsertImageFromFileAsync(); }, icon: RichEditorIcon.InsertImage)); break;
+                case "divider": if (AllowTables || AllowImages) items.Add(Mi(Loc("InsertDivider"), InsertDivider, icon: RichEditorIcon.InsertDivider)); break;
+                // Only inside a table cell.
+                case "tableops":
+                    if (cellTable != null)
+                    {
+                        var tableItems = new List<Control>();
+                        AddTableStructureItems(tableItems, cellTable, _caretPosition.Paragraph, hasSelection);
+                        items.Add(Sub(Loc("TableOps"), tableItems.ToArray()));
+                    }
+                    break;
+                default:
+                    if (HostTextMenuItems.TryGetValue(id, out var host)) items.Add(Mi(host.Label, host.Action));
+                    break;
+            }
         }
-        else
-        {
-            // Slim (default): just the quick character toggles, checked to reflect the caret. The rich
-            // formatting groups live on the toolbar; opt in with ShowFormattingMenu for a toolbar-less host.
-            items.Add(CheckItem(Loc("Bold"), fmt.Bold, ToggleBold, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Bold)));
-            items.Add(CheckItem(Loc("Italic"), fmt.Italic, ToggleItalic, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Italic)));
-            items.Add(CheckItem(Loc("Underline"), fmt.Underline, ToggleUnderline, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Underline)));
-            items.Add(Mi(Loc("ClearFormatting"), ClearFormatting, hasSelection, RichEditorIcon.ClearFormatting));
-        }
-
-        items.Add(new Separator());
-        if (link != null && !string.IsNullOrEmpty(link.NavigateUri))
-        {
-            items.Add(Mi(Loc("OpenLink"), () => OpenUrl(link.NavigateUri!), icon: RichEditorIcon.OpenLink));
-            items.Add(Mi(Loc("EditLink"), () => { _ = EditHyperlinkAsync(link.NavigateUri, link); }, icon: RichEditorIcon.EditLink));
-            items.Add(Mi(Loc("RemoveLink"), () => SetHyperlink(null, link), icon: RichEditorIcon.RemoveLink));
-        }
-        else
-        {
-            items.Add(Mi(Loc("InsertLink"), () => { _ = EditHyperlinkAsync(null, null); }, _caretPosition.Paragraph != null, RichEditorIcon.InsertLink));
-        }
-        // Page view always wraps, so the toggle would do nothing there.
-        if (!IsPaged)
+        if (TextMenuPinnedItems?.Invoke() is { } pinned)
         {
             items.Add(new Separator());
-            items.Add(CheckItem(Loc("WordWrap"), WordWrap, () => WordWrap = !WordWrap));
+            items.AddRange(pinned);
         }
-        items.Add(new Separator());
-        items.Add(Mi(Loc("SelectAll"), SelectAll, icon: RichEditorIcon.SelectAll, gesture: RichEditorShortcuts.Gesture(ShortcutId.SelectAll)));
-        items.Add(Mi(Loc("Undo"), DoUndo, CanUndo, RichEditorIcon.Undo, RichEditorShortcuts.Gesture(ShortcutId.Undo)));
-        items.Add(Mi(Loc("Redo"), DoRedo, CanRedo, RichEditorIcon.Redo, RichEditorShortcuts.Gesture(ShortcutId.Redo)));
-        if (AllowTables || AllowImages) items.Add(new Separator());
-        if (AllowTables) items.Add(BuildInsertTableMenu());
-        if (AllowImages) items.Add(Mi(Loc("InsertImage"), () => { _ = InsertImageFromFileAsync(); }, icon: RichEditorIcon.InsertImage));
-        if (AllowTables || AllowImages) items.Add(Mi(Loc("InsertDivider"), InsertDivider, icon: RichEditorIcon.InsertDivider));
-        if (cellTable != null)
+        // Items that didn't apply here can leave separators doubled up or at either end.
+        for (int i = items.Count - 1; i >= 0; i--)
+            if (items[i] is Separator && (i == 0 || i == items.Count - 1 || items[i - 1] is Separator))
+                items.RemoveAt(i);
+    }
+
+    /// <summary>The separator id in <see cref="TextMenuItems"/>.</summary>
+    public const string MenuSeparatorItem = "|";
+
+    /// <summary>Item ids for the text right-click menu, in order, with <see cref="MenuSeparatorItem"/> for a
+    /// divider. Unknown ids are skipped. Null uses <see cref="DefaultTextMenuItems"/>. Image, link and
+    /// table-structure menus are not affected.</summary>
+    public IReadOnlyList<string>? TextMenuItems { get; set; }
+
+    /// <summary>The built-in text menu, slim or full depending on <see cref="ShowFormattingMenu"/>.</summary>
+    public IReadOnlyList<string> DefaultTextMenuItems => ShowFormattingMenu
+        ? ["cut", "copy", "paste", "delete", "|", "charformat", "paraformat", "list", "heading", "|", "link", "|", "wrap",
+           "|", "selectall", "undo", "redo", "|", "table", "image", "divider", "|", "tableops"]
+        : ["cut", "copy", "paste", "selectall", "|", "wrap", "clear"];
+
+    /// <summary>Every item id the text menu can show, separator excluded.</summary>
+    public IReadOnlyList<string> AvailableTextMenuItems
+    {
+        get
         {
-            var tableItems = new List<Control>();
-            AddTableStructureItems(tableItems, cellTable, _caretPosition.Paragraph, hasSelection);
-            items.Add(new Separator());
-            items.Add(Sub(Loc("TableOps"), tableItems.ToArray()));
+            var ids = new List<string> { "cut", "copy", "paste", "delete", "bold", "italic", "underline", "strike", "clear",
+                "color", "highlight", "list", "heading",
+                "bullets", "numbers", "align", "indent", "outdent", "spacing",
+                "link", "wrap", "selectall", "undo", "redo" };
+            if (AllowTables) ids.Add("table");
+            if (AllowImages) ids.Add("image");
+            if (AllowTables || AllowImages) ids.Add("divider");
+            ids.Add("tableops");
+            ids.AddRange(HostTextMenuItems.Keys);
+            return ids;
         }
     }
+
+    /// <summary>A readable name for a text menu item id.</summary>
+    public string TextMenuItemLabel(string id) => id switch
+    {
+        MenuSeparatorItem => "── Separator ──",
+        "cut" => Loc("Cut"),
+        "copy" => Loc("Copy"),
+        "paste" => Loc("Paste"),
+        "delete" => Loc("Delete"),
+        "bold" => Loc("Bold"),
+        "italic" => Loc("Italic"),
+        "underline" => Loc("Underline"),
+        "strike" => Loc("Strikethrough"),
+        "clear" => Loc("ClearFormatting"),
+        "color" => Loc("TextColor") + " ▸",
+        "highlight" => Loc("Highlight") + " ▸",
+        "charformat" => Loc("CharacterFormat") + " ▸",
+        "paraformat" => Loc("ParagraphFormat") + " ▸",
+        "list" => Loc("List") + " ▸",
+        "heading" => Loc("Heading") + " ▸",
+        "bullets" => Loc("BulletList"),
+        "numbers" => Loc("NumberedList"),
+        "align" => Loc("Alignment") + " ▸",
+        "indent" => Loc("IndentIncrease"),
+        "outdent" => Loc("IndentDecrease"),
+        "spacing" => Loc("LineSpacing") + " ▸",
+        "link" => Loc("InsertLink").TrimEnd('.'),
+        "wrap" => Loc("WordWrap"),
+        "selectall" => Loc("SelectAll"),
+        "undo" => Loc("Undo"),
+        "redo" => Loc("Redo"),
+        "table" => Loc("InsertTable") + " ▸",
+        "image" => Loc("InsertImage"),
+        "divider" => Loc("InsertDivider"),
+        "tableops" => Loc("TableOps") + " ▸ (in tables)",
+        _ => HostTextMenuItems.TryGetValue(id, out var host) ? host.Label : id,
+    };
+
+    /// <summary>Host items the text menu can show by id; list an id in <see cref="TextMenuItems"/> to show it.</summary>
+    public Dictionary<string, (string Label, Action Action)> HostTextMenuItems { get; } = new();
+
+    /// <summary>Host items always shown at the end of the text right-click menu.</summary>
+    public Func<IEnumerable<Control>?>? TextMenuPinnedItems { get; set; }
 
     private void BuildImageMenu(List<Control> items, ImageBlock img)
     {

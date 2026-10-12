@@ -13,6 +13,7 @@ internal enum ShortcutId
     AlignLeft, AlignCenter, AlignRight, AlignJustify,
     Heading1, Heading2, Heading3, Heading4, Heading5, Heading6, BodyText,
     BulletList, LineSpacingSingle, LineSpacingOneHalf, LineSpacingDouble,
+    CodeBlock, PasteCode,
 }
 
 internal readonly record struct ShortcutSpec(ShortcutId Id, bool Ctrl, bool Shift, bool Alt, Key Key, string Display);
@@ -55,6 +56,8 @@ internal static class RichEditorShortcuts
         new(ShortcutId.LineSpacingSingle,  true, false, false, Key.D1, "Ctrl+1"),
         new(ShortcutId.LineSpacingOneHalf, true, false, false, Key.D5, "Ctrl+5"),
         new(ShortcutId.LineSpacingDouble,  true, false, false, Key.D2, "Ctrl+2"),
+        new(ShortcutId.CodeBlock,     true, false, true,  Key.C, "Ctrl+Alt+C"),
+        new(ShortcutId.PasteCode,     true, false, true,  Key.V, "Ctrl+Alt+V"),
     };
 
     private static readonly Dictionary<ShortcutId, string> DisplayMap = BuildDisplayMap();

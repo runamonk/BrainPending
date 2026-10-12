@@ -60,3 +60,11 @@ NuGet package without passing the persistence tests.
 - `RemoveLinkedText(uri)` removes an attachment link (and its emptied paragraph) as one undo step.
 - Regex find highlight (`SetFindHighlight(Regex?)`), `SelectFindMatch` and static
   `ParagraphTexts` support searching inside thoughts with whole-word and regex options.
+- Code blocks: `Paragraph.IsCode` marks a paragraph as code (monospace, shaded, lines split by
+  soft `\n`). Enter keeps the line's indent, Tab/Shift+Tab indent lines with spaces, and leading
+  whitespace is never converted to paragraph indent. `CodeWrap` (default off) chooses wrapping
+  with a continuation mark; otherwise long lines scroll inside the block (Shift+wheel, a
+  draggable bar, and the caret pulls the scroll along). RTF writes the private `{\*\arcode}`
+  marker, HTML writes and reads `<pre>`, JSON stores `IsCode`. `ToggleCodeBlock`,
+  `InsertCodeBlock` and `PasteAsCodeAsync` (Ctrl+Alt+C / Ctrl+Alt+V) are public. `CodeLineNumbers`
+  (default on) adds a fixed line-number gutter; Ctrl+A in a code block selects the block first.

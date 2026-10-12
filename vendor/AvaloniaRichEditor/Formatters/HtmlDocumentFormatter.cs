@@ -243,6 +243,18 @@ namespace AvaloniaRichEditor.Formatters
                         }
                     }
                 }
+                else if (name == "pre")
+                {
+                    // Preformatted text becomes a code block, whitespace and all.
+                    Flush();
+                    string code = PreText(child).Replace("\r\n", "\n").Replace('\r', '\n').TrimEnd('\n');
+                    if (code.Length > 0)
+                    {
+                        var cp = new Paragraph { IsCode = true, MarginTop = 6, MarginBottom = 6 };
+                        cp.Inlines.Add(new Run { Text = code });
+                        flow.Blocks.Add(cp);
+                    }
+                }
                 else if (name == "ul" || name == "ol")
                 {
                     Flush();
@@ -452,6 +464,18 @@ namespace AvaloniaRichEditor.Formatters
             if (double.TryParse(parts[0], System.Globalization.NumberStyles.Float, inv, out double t)) p.MarginTop = t;
             if (double.TryParse(parts[1], System.Globalization.NumberStyles.Float, inv, out double b)) p.MarginBottom = b;
             if (double.TryParse(parts[2], System.Globalization.NumberStyles.Float, inv, out double r)) p.MarginRight = r;
+        }
+
+        // The text of a <pre>, with <br> as a line break.
+        private static string PreText(HtmlNode node)
+        {
+            var sb = new StringBuilder();
+            foreach (var n in node.DescendantsAndSelf())
+            {
+                if (n.NodeType == HtmlNodeType.Text) sb.Append(HtmlEntity.DeEntitize(n.InnerText));
+                else if (n.Name.Equals("br", StringComparison.OrdinalIgnoreCase)) sb.Append('\n');
+            }
+            return sb.ToString();
         }
 
         // Collapse HTML whitespace before converting nbsp to spaces. Regex \s would collapse nbsp and lose authored spacing.
@@ -958,6 +982,15 @@ namespace AvaloniaRichEditor.Formatters
         // Share paragraph-element output between document and cells so paragraph formatting survives clipboard/export.
         private static void EmitParagraphElement(StringBuilder sb, Paragraph p, bool newlineAfter)
         {
+            if (p.IsCode)
+            {
+                sb.Append("<pre>");
+                foreach (var inline in p.Inlines)
+                    if (inline is Run { Text: { } code }) sb.Append(System.Net.WebUtility.HtmlEncode(code));
+                sb.Append("</pre>");
+                if (newlineAfter) sb.Append('\n');
+                return;
+            }
             string tag = p.IsListItem ? "li"
                 : p.IsQuote ? "blockquote"
                 : (p.HeadingLevel >= 1 && p.HeadingLevel <= 6 ? $"h{p.HeadingLevel}" : "p");

@@ -466,6 +466,8 @@ public partial class RichEditor
                 case "copy": items.Add(CopyItem(hasSelection)); break;
                 case "paste": items.Add(PasteItem()); break;
                 case "pastetext": items.Add(Mi(Loc("PasteAsText"), () => { _ = PastePlainTextAsync(); }, icon: RichEditorIcon.Paste, gesture: RichEditorShortcuts.Gesture(ShortcutId.PastePlain))); break;
+                case "pastecode": items.Add(Mi(Loc("PasteAsCode"), () => { _ = PasteAsCodeAsync(); }, icon: RichEditorIcon.CodeBlock, gesture: RichEditorShortcuts.Gesture(ShortcutId.PasteCode))); break;
+                case "code": if (_caretPosition.Paragraph?.Parent is FlowDocument) items.Add(CheckItem(Loc("CodeBlock"), fmt.Code, ToggleCodeBlock, gesture: RichEditorShortcuts.Gesture(ShortcutId.CodeBlock))); break;
                 case "delete": items.Add(DeleteItem(hasSelection)); break;
                 case "bold": items.Add(CheckItem(Loc("Bold"), fmt.Bold, ToggleBold, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Bold))); break;
                 case "italic": items.Add(CheckItem(Loc("Italic"), fmt.Italic, ToggleItalic, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Italic))); break;
@@ -546,10 +548,10 @@ public partial class RichEditor
     {
         get
         {
-            var ids = new List<string> { "cut", "copy", "paste", "pastetext", "delete", "bold", "italic", "underline", "strike", "clear",
+            var ids = new List<string> { "cut", "copy", "paste", "pastetext", "pastecode", "delete", "bold", "italic", "underline", "strike", "clear",
                 "color", "highlight", "list", "heading",
                 "bullets", "numbers", "align", "indent", "outdent", "spacing",
-                "link", "wrap", "selectall", "undo", "redo" };
+                "link", "wrap", "code", "selectall", "undo", "redo" };
             if (AllowTables) ids.Add("table");
             if (AllowImages) ids.Add("image");
             if (AllowTables || AllowImages) ids.Add("divider");
@@ -567,6 +569,8 @@ public partial class RichEditor
         "copy" => Loc("Copy"),
         "paste" => Loc("Paste"),
         "pastetext" => Loc("PasteAsText"),
+        "pastecode" => Loc("PasteAsCode"),
+        "code" => Loc("CodeBlock"),
         "delete" => Loc("Delete"),
         "bold" => Loc("Bold"),
         "italic" => Loc("Italic"),

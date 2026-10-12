@@ -58,6 +58,7 @@ public enum RichEditorIcon
     FontSizeIncrease,
     FontSizeDecrease,
     WordWrap,
+    CodeBlock,
 }
 
 /// <summary>

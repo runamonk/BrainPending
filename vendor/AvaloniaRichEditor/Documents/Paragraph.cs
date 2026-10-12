@@ -66,6 +66,8 @@ public class Paragraph : Block
     public int HeadingLevel { get; set; } = 0;
     public IBrush? Background { get; set; }
     public bool IsQuote { get; set; } = false;
+    /// <summary>A code block: monospace, shaded, whitespace kept as typed. Lines are soft '\n' breaks.</summary>
+    public bool IsCode { get; set; } = false;
     /// <summary>Nested list depth (0 = top level).</summary>
     public int ListLevel { get; set; } = 0;
     public int? ListStart { get; set; }
@@ -88,6 +90,7 @@ public class Paragraph : Block
         Background = source.Background;
         Indent = source.Indent;
         IsQuote = source.IsQuote;
+        IsCode = source.IsCode;
         ListLevel = source.ListLevel;
         ListStart = source.ListStart;
     }

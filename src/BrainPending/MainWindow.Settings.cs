@@ -13,6 +13,8 @@ public partial class MainWindow
         EditorView.Editor.DefaultFontFamily = new FontFamily(editor.FontFamily);
         EditorView.Editor.DefaultFontSize = editor.FontSize;
         EditorView.Editor.WordWrap = editor.WordWrap;
+        EditorView.Editor.CodeWrap = editor.CodeWrap;
+        EditorView.Editor.CodeLineNumbers = editor.CodeLineNumbers;
         EditorView.Toolbar.Items = editor.ToolbarItems;
         EditorView.Editor.TextMenuItems = editor.MenuItems;
     }

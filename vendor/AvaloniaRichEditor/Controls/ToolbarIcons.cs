@@ -81,6 +81,10 @@ internal static class ToolbarIcons
             ("M4 12 H16.5 A3 3 0 0 1 16.5 18 H13", false),
             ("M11 18 L14 15.5 L14 20.5 Z", true)),
 
+        // Angle brackets around a slash: </>.
+        RichEditorIcon.CodeBlock => Build(20,
+            ("M8 7 L3 12 L8 17 M16 7 L21 12 L16 17 M13.5 5 L10.5 19", false)),
+
         RichEditorIcon.Undo => Build(20,
             ("M5 11 H14 A4.5 4.5 0 0 1 14 20 H9", false),
             ("M5 11 L9 7.5 L9 14.5 Z", true)),

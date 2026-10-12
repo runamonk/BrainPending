@@ -302,6 +302,7 @@ public partial class RichEditor : Control
         {
             _layoutCache.Clear();
             _tableLayoutCache.Clear();
+            _codeScroll.Clear();
             ResetInteractionState(); // selections/modes point into the document being replaced
             if (Document != null) UpdateParents(Document);
             SyncPageSetupOnDocumentChanged();
@@ -318,7 +319,7 @@ public partial class RichEditor : Control
             InvalidateMeasure();
             InvalidateVisual();
         }
-        if (change.Property == WordWrapProperty)
+        if (change.Property == WordWrapProperty || change.Property == CodeWrapProperty || change.Property == CodeLineNumbersProperty)
         {
             _layoutCache.Clear(); // cached layouts were shaped with the other wrapping
             InvalidateMeasure();
@@ -572,7 +573,7 @@ public partial class RichEditor : Control
     public readonly record struct CaretFormat(bool Bold, bool Italic, bool Underline, bool Strike,
         double FontSize, string? FontFamily, TextAlignment Align, ListKind List, int Heading,
         IBrush? Foreground = null, IBrush? Background = null, bool Quote = false, double LineSpacing = 0,
-        ListMarkerStyle ListMarker = ListMarkerStyle.Default);
+        ListMarkerStyle ListMarker = ListMarkerStyle.Default, bool Code = false);
 
     private static bool HasDeco(Run? r, TextDecorationLocation loc)
     {
@@ -621,7 +622,8 @@ public partial class RichEditor : Control
             run?.Background,
             p?.IsQuote ?? false,
             p?.LineSpacing ?? double.NaN,
-            p?.ListMarker ?? ListMarkerStyle.Default);
+            p?.ListMarker ?? ListMarkerStyle.Default,
+            p?.IsCode ?? false);
     }
 
     /// <summary>Returns document statistics: total character count, word count, and the caret's
@@ -798,7 +800,7 @@ public partial class RichEditor : Control
     private bool TryAutoList()
     {
         var p = _caretPosition.Paragraph;
-        if (p == null || p.ListType != ListKind.None) return false;
+        if (p == null || p.ListType != ListKind.None || p.IsCode) return false;
         int caret = _caretPosition.Offset;
         string plain = BuildPlain(p);
         if (caret <= 0 || caret > plain.Length) return false;
@@ -838,6 +840,7 @@ public partial class RichEditor : Control
     // result as an absolute http(s) URI with a dotted host. `www.` is prefixed with https://.
     private void TryAutoLink(Paragraph p, int boundary)
     {
+        if (p.IsCode) return;
         string plain = BuildPlain(p);
         int end = Math.Clamp(boundary, 0, plain.Length);
         int start = end;
@@ -1115,8 +1118,11 @@ public partial class RichEditor : Control
 
     // Left x where a paragraph's text starts: base indent + manual indent + nesting + (list marker gap).
     // Single source so render and all hit-tests agree on where text begins.
-    private static double ParaLeft(Paragraph p)
-        => 10 + p.Indent + p.ListLevel * 20 + (p.ListType != ListKind.None ? ListMarkerWidth : 0);
+    private double ParaLeft(Paragraph p)
+        => 10 + p.Indent + p.ListLevel * 20 + (p.ListType != ListKind.None ? ListMarkerWidth : 0) + (p.IsCode ? CodePad + CodeGutter(p) : 0);
+
+    // Inner padding of a code block's shading, left and right of its text.
+    private const double CodePad = 12;
 
     // Measure, render, and hit testing must use the same wrap width or line boundaries diverge.
     /// <summary>When <see langword="false"/>, top-level paragraphs run on as single lines and the editor
@@ -1133,11 +1139,48 @@ public partial class RichEditor : Control
 
     private bool Unwrapped(Paragraph p) => !WordWrap && !IsPaged && p.Parent is FlowDocument;
 
-    private static double ParagraphWrapWidth(Paragraph p, double maxWidth)
-        => Math.Max(10, maxWidth - 20 - ParaLeft(p) - p.MarginRight);
+    /// <summary>When <see langword="false"/> (default), long lines in a code block scroll sideways inside
+    /// the block instead of wrapping. Page view and table cells always wrap.</summary>
+    public static readonly StyledProperty<bool> CodeWrapProperty =
+        AvaloniaProperty.Register<RichEditor, bool>(nameof(CodeWrap), false);
+
+    public bool CodeWrap
+    {
+        get => GetValue(CodeWrapProperty);
+        set => SetValue(CodeWrapProperty, value);
+    }
+
+    /// <summary>When <see langword="true"/> (default), code blocks show line numbers in a gutter.</summary>
+    public static readonly StyledProperty<bool> CodeLineNumbersProperty =
+        AvaloniaProperty.Register<RichEditor, bool>(nameof(CodeLineNumbers), true);
+
+    public bool CodeLineNumbers
+    {
+        get => GetValue(CodeLineNumbersProperty);
+        set => SetValue(CodeLineNumbersProperty, value);
+    }
+
+    // A code block that lays out on single lines and scrolls inside its own box. With word wrap off
+    // the whole editor already scrolls, so the block doesn't need to.
+    private bool CodeScrolls(Paragraph p) => p.IsCode && !CodeWrap && WordWrap && !IsPaged && p.Parent is FlowDocument;
+
+    private double ParagraphWrapWidth(Paragraph p, double maxWidth)
+        => Math.Max(10, maxWidth - 20 - ParaLeft(p) - p.MarginRight - (p.IsCode ? CodePad : 0));
+
+    /// <summary>The font code blocks use, with fallbacks for other platforms.</summary>
+    public static FontFamily CodeFontFamily { get; set; } = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Courier New");
+
+    // Each code block's sideways scroll, and the caret position it was last scrolled to show.
+    private readonly Dictionary<Paragraph, double> _codeScroll = new();
+    private (Paragraph? p, int offset) _codeScrollCaret;
+
+    private double CodeScrollX(Paragraph p) => CodeScrolls(p) && _codeScroll.TryGetValue(p, out var x) ? x : 0;
+
+    // Where a top-level paragraph's text starts on screen, after any code block scroll.
+    private double TextLeft(Paragraph p) => ParaLeft(p) - CodeScrollX(p);
 
     // Cells supply their own padding, so omit the document gutter. All cell geometry walks must agree.
-    private static double CellParaLeft(Paragraph p) => ParaLeft(p) - 10;
+    private double CellParaLeft(Paragraph p) => ParaLeft(p) - 10;
 
     internal static string ListMarkerText(ListKind kind, ListMarkerStyle style, int num)
     {
@@ -1241,6 +1284,7 @@ public partial class RichEditor : Control
             Mix((long)p.ListMarker);
             Mix(p.ListLevel);
             Mix(p.HeadingLevel);
+            Mix(p.IsCode ? 1 : 0);
             foreach (var inl in p.Inlines)
             {
                 if (inl is Run r)
@@ -1346,7 +1390,7 @@ public partial class RichEditor : Control
         {
             if (inline is Run r && !string.IsNullOrEmpty(r.Text))
             {
-                var family = string.IsNullOrEmpty(r.FontFamily) ? defaultFamily : new FontFamily(r.FontFamily);
+                var family = p.IsCode ? CodeFontFamily : string.IsNullOrEmpty(r.FontFamily) ? defaultFamily : new FontFamily(r.FontFamily);
                 var weight = heading ? FontWeight.Bold : r.FontWeight;
                 var typeface = new Typeface(family, r.FontStyle, weight);
                 TextDecorationCollection? decos = r.TextDecorations;
@@ -1422,7 +1466,7 @@ public partial class RichEditor : Control
             true,
             false,
             defaultProps,
-            Unwrapped(p) ? TextWrapping.NoWrap : TextWrapping.Wrap,
+            Unwrapped(p) || CodeScrolls(p) ? TextWrapping.NoWrap : TextWrapping.Wrap,
             lh,
             0,
             0);
@@ -1848,6 +1892,18 @@ public partial class RichEditor : Control
     private void SelectAll()
     {
         if (TrySelectAllStage()) return;
+        // In a code block the first Ctrl+A selects the block; the next selects everything.
+        if (_caretPosition.Paragraph is { IsCode: true } code
+            && ReferenceEquals(_selectionStart.Paragraph, code) && ReferenceEquals(_selectionEnd.Paragraph, code)
+            && !(Math.Min(_selectionStart.Offset, _selectionEnd.Offset) == 0
+                 && Math.Max(_selectionStart.Offset, _selectionEnd.Offset) == GetParagraphLength(code)))
+        {
+            _selectionStart = new TextPointer(code, 0);
+            _selectionEnd = new TextPointer(code, GetParagraphLength(code));
+            _caretPosition = new TextPointer(code, _selectionEnd.Offset);
+            InvalidateVisual();
+            return;
+        }
         var allParas = GetAllParagraphsInOrder();
         if (allParas.Count == 0) return;
         _cellSelMode = false; _cellSelTable = null;

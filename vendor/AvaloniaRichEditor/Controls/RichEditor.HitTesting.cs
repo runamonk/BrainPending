@@ -66,7 +66,7 @@ public partial class RichEditor
             }
             else if (block is Paragraph paragraph && ft != null && p.Y >= top && p.Y <= top + h)
             {
-                double plink = ParaLeft(paragraph);
+                double plink = TextLeft(paragraph);
                 // Mirrors the caret walk's inline-table descent, so a link inside an inline table is
                 // hoverable and clickable rather than reading as plain text.
                 if (InlineTableLinkDescent(paragraph, ft, plink, top, p) is { } inlineLink) return inlineLink;
@@ -567,7 +567,7 @@ public partial class RichEditor
                 }
                 else
                 {
-                    double ppos = ParaLeft(paragraph);
+                    double ppos = TextLeft(paragraph);
                     if (p.Y >= top && p.Y <= top + h &&
                         InlineTableHitDescent(paragraph, ft, ppos, top, p) is { } descended)
                         return descended;
@@ -576,8 +576,11 @@ public partial class RichEditor
                     {
                         bestDistY = distY2;
                         bestPara = paragraph;
+                        // A click in a code block's gutter means the first visible character, not
+                        // text scrolled away underneath it.
+                        double hx = paragraph.IsCode ? Math.Max(p.X, ParaLeft(paragraph)) : p.X;
                         bestLocalIndex = HitTestLogicalIndex(paragraph, ParagraphWrapWidth(paragraph, maxWidth),
-                            ft, new Point(p.X - ppos, p.Y - top));
+                            ft, new Point(hx - ppos, p.Y - top));
                     }
                 }
             }

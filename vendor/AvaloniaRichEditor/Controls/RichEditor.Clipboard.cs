@@ -19,6 +19,8 @@ public partial class RichEditor
     public async Task PasteFromClipboardAsync()
     {
         if (Document == null || IsReadOnly) return;
+        // A code block takes text only.
+        if (_caretPosition.Paragraph?.IsCode == true) { await PastePlainTextAsync(); return; }
         var document = Document;
         var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
         if (clipboard == null) return;

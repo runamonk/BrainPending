@@ -93,7 +93,7 @@ public partial class RichEditorToolbar : UserControl
         {
             var ids = new System.Collections.Generic.List<string> { "bold", "italic", "underline", "strike",
                 "color", "highlight", "font", "size", "fontlarger", "fontsmaller", "wrap", "bullets", "numbers",
-                "heading", "align", "indent", "outdent", "spacing", "undo", "redo", "painter" };
+                "heading", "align", "indent", "outdent", "spacing", "code", "undo", "redo", "painter" };
             if (Target?.AllowTables != false) ids.Add("table");
             if (Target?.AllowImages != false) ids.Add("image");
             if (_attachFileRequested != null) ids.Add("attach");
@@ -118,6 +118,7 @@ public partial class RichEditorToolbar : UserControl
         "font" => Loc("FontFamily"),
         "size" => Loc("FontSize"),
         "wrap" => Loc("WordWrap"),
+        "code" => Loc("CodeBlock"),
         "bullets" => Loc("BulletList"),
         "numbers" => Loc("NumberedList"),
         "table" => Loc("InsertTable"),
@@ -171,7 +172,7 @@ public partial class RichEditorToolbar : UserControl
     // Shared brushes must be immutable so toolbars on different UI threads can use them.
     private static readonly IBrush ActiveBrush = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.Parse("#506780"));
 
-    private Button? _boldBtn, _italicBtn, _underlineBtn, _strikeBtn, _bulletBtn, _numberBtn, _undoBtn, _redoBtn, _wrapBtn, _painterBtn;
+    private Button? _boldBtn, _italicBtn, _underlineBtn, _strikeBtn, _bulletBtn, _numberBtn, _undoBtn, _redoBtn, _wrapBtn, _painterBtn, _codeBtn;
     private ComboBox? _fontCombo, _sizeCombo, _headingCombo, _alignCombo;
     private TextBox? _spacingBox;
     private TextBlock? _bulletPreview, _numberPreview;
@@ -389,7 +390,7 @@ public partial class RichEditorToolbar : UserControl
             VerticalAlignment = VerticalAlignment.Center,
         };
 
-        _undoBtn = _redoBtn = _boldBtn = _italicBtn = _underlineBtn = _strikeBtn = _bulletBtn = _numberBtn = _wrapBtn = _painterBtn = null;
+        _undoBtn = _redoBtn = _boldBtn = _italicBtn = _underlineBtn = _strikeBtn = _bulletBtn = _numberBtn = _wrapBtn = _painterBtn = _codeBtn = null;
         Control? indentButton = null, outdentButton = null, largerButton = null, smallerButton = null, spacingControl = null;
         _fontCombo = _sizeCombo = _headingCombo = _alignCombo = null;
         _spacingBox = null; _bulletPreview = _numberPreview = null;
@@ -485,6 +486,7 @@ public partial class RichEditorToolbar : UserControl
             largerButton = Btn("A+", Loc("FontSizeIncrease") + " (Ctrl+Shift+.)", () => Target?.IncreaseFontSize(), RichEditorIcon.FontSizeIncrease);
             smallerButton = Btn("A-", Loc("FontSizeDecrease") + " (Ctrl+Shift+,)", () => Target?.DecreaseFontSize(), RichEditorIcon.FontSizeDecrease);
             _painterBtn = Btn("🖌", Loc("FormatPainter"), () => Target?.StartFormatPainter(), RichEditorIcon.FormatPainter);
+            _codeBtn = Btn("</>", Loc("CodeBlock") + " (Ctrl+Alt+C)", () => Target?.ToggleCodeBlock(), RichEditorIcon.CodeBlock);
             spacingControl = BuildLineSpacingControl();
 
             var heading = _headingCombo = Combo(Loc("Heading"), 100);
@@ -525,7 +527,7 @@ public partial class RichEditorToolbar : UserControl
                 ["image"] = _imageBtn, ["attach"] = _attachmentBtn, ["divider"] = _dividerBtn, ["link"] = linkButton,
                 ["clear"] = clearButton, ["fontlarger"] = largerButton, ["fontsmaller"] = smallerButton,
                 ["heading"] = _headingCombo, ["align"] = _alignCombo, ["indent"] = indentButton, ["outdent"] = outdentButton,
-                ["spacing"] = spacingControl, ["undo"] = _undoBtn, ["redo"] = _redoBtn, ["painter"] = _painterBtn,
+                ["spacing"] = spacingControl, ["undo"] = _undoBtn, ["redo"] = _redoBtn, ["painter"] = _painterBtn, ["code"] = _codeBtn,
             };
             foreach (var (id, host) in HostItems)
                 if (System.Linq.Enumerable.Contains(order, id)) byId[id] = host.Create();
@@ -1012,6 +1014,7 @@ public partial class RichEditorToolbar : UserControl
         SetActive(_bulletBtn, f.List == ListKind.Bullet);
         SetActive(_numberBtn, f.List == ListKind.Ordered);
         SetActive(_wrapBtn, rt.WordWrap);
+        SetActive(_codeBtn, f.Code);
         SetActive(_painterBtn, rt.IsFormatPainterActive);
         if (_wrapBtn != null) _wrapBtn.IsVisible = !rt.IsPaged; // page view always wraps
         if (_bulletPreview != null)

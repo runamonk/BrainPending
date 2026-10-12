@@ -109,6 +109,13 @@ public partial class RichEditor
 
         _caretBlock = null;
 
+        if (TryStartCodeBarDrag(point))
+        {
+            e.Pointer.Capture(this);
+            e.Handled = true;
+            return;
+        }
+
         if (!IsReadOnly)
             foreach (var h in _imageHandles)
             {
@@ -540,6 +547,12 @@ public partial class RichEditor
 
         var point = MapViewToDoc(e.GetPosition(this)); // document space, same as OnPointerPressed
 
+        if (_codeBarDrag != null)
+        {
+            DragCodeBar(point);
+            return;
+        }
+
         if (_isResizingInline && _resizingInline != null)
         {
             double diff = point.X - _initialImageMouseX;
@@ -701,6 +714,12 @@ public partial class RichEditor
             }
         }
 
+        if (IsOverCodeBar(point))
+        {
+            Cursor = Avalonia.Input.Cursor.Default;
+            return;
+        }
+
         // Hover hit-testing walks the document but never mutates it (runs synchronously here), so the
         // layout cache can be trusted — skips re-hashing every paragraph on every mouse move.
         _trustLayoutCache = true;
@@ -747,6 +766,13 @@ public partial class RichEditor
             ResetCaretBlink();
             InvalidateVisual();
             e.Handled = true;
+            return;
+        }
+
+        if (_codeBarDrag != null)
+        {
+            _codeBarDrag = null;
+            e.Pointer.Capture(null);
             return;
         }
 
@@ -840,6 +866,8 @@ public partial class RichEditor
             case ShortcutId.Heading6: SetHeading(6); break;
             case ShortcutId.BodyText: SetHeading(0); break;
             case ShortcutId.BulletList: ToggleBullet(); break;
+            case ShortcutId.CodeBlock: ToggleCodeBlock(); break;
+            case ShortcutId.PasteCode: _ = PasteAsCodeAsync(); break;
             case ShortcutId.LineSpacingSingle: SetLineSpacing(1.0); break;
             case ShortcutId.LineSpacingOneHalf: SetLineSpacing(1.5); break;
             case ShortcutId.LineSpacingDouble: SetLineSpacing(2.0); break;
@@ -961,7 +989,7 @@ public partial class RichEditor
         bool hasTextSel = _selectionStart.Paragraph != null && _selectionEnd.Paragraph != null
             && _selectionStart.CompareTo(_selectionEnd) != 0;
 
-        if (e.Key == Key.C && ctrl)
+        if (e.Key == Key.C && ctrl && !alt)
         {
             if (!hasTextSel && TryCopySelectedImage()) { e.Handled = true; return; }
             CopySelectionToClipboard();
@@ -1002,7 +1030,7 @@ public partial class RichEditor
             return;
         }
 
-        if (e.Key == Key.V && ctrl)
+        if (e.Key == Key.V && ctrl && !alt)
         {
             _ = shift ? PastePlainTextAsync() : PasteFromClipboardAsync();
             e.Handled = true;
@@ -1039,6 +1067,7 @@ public partial class RichEditor
 
         if (e.Key == Key.Tab)
         {
+            if (_caretPosition.Paragraph is { IsCode: true } tcp && CodeTab(tcp, shift)) { e.Handled = true; return; }
             HandleTab(shift);
             e.Handled = true;
             return;
@@ -1230,6 +1259,14 @@ public partial class RichEditor
                 DeleteLocalText(bp, nb, _caretPosition.Offset - nb);
                 _caretPosition.Offset = nb;
             }
+            // Backspace at the start of a code block turns it back into ordinary paragraphs.
+            else if (_caretPosition.Paragraph is { IsCode: true, Parent: FlowDocument } cbp && Document != null)
+            {
+                if (DeleteAtEdgeIsNoOp(true)) PushUndo();
+                UnmakeCodeBlock(cbp);
+                MarkTextChanged();
+                InvalidateMeasure();
+            }
             else if (_caretPosition.Paragraph?.Parent is FlowDocument && Document != null)
             {
                 int idx = Document.Blocks.IndexOf(_caretPosition.Paragraph);
@@ -1355,6 +1392,7 @@ public partial class RichEditor
                     MarkTextChanged();
                     ResetCaretBlink(); InvalidateVisual(); e.Handled = true; return;
                 }
+                if (_caretPosition.Paragraph.IsCode) { CodeEnter(_caretPosition.Paragraph); e.Handled = true; return; }
                 var p = _caretPosition.Paragraph;
                 // Enter on an empty list item or indented paragraph returns to an unindented line.
                 // A table cell now hosts sibling paragraphs (P3), so a cell
@@ -1585,7 +1623,7 @@ public partial class RichEditor
             // Minus the list/indent gutter too — the cell render/hit-test walks wrap at this width.
             return BuildTextLayout(p, Math.Max(10, cellWidth - 10 - CellParaLeft(p)));
         }
-        return BuildTextLayout(p, Math.Max(10, ContentLayoutWidth - 20 - ParaLeft(p) - p.MarginRight));
+        return BuildTextLayout(p, ParagraphWrapWidth(p, ContentLayoutWidth));
     }
 
     // Home/End: move to the start/end of the caret's current VISUAL (wrapped) line, found from the

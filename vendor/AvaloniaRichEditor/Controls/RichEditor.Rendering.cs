@@ -166,6 +166,8 @@ public partial class RichEditor
         _cellImageRects.Clear();
         _inlineImageRects.Clear();
         _inlineHandles.Clear();
+        _codeScrollBars.Clear();
+        _caretScrolledAway = false;
 
         // Draw culling (N6-5): blocks fully outside the hosting ScrollViewer's viewport advance
         // yOffset without issuing draw commands, so the scene the render thread rasterizes stays
@@ -405,12 +407,18 @@ public partial class RichEditor
                 bool hasPreedit = chrome && _caretPosition != null && _caretPosition.Paragraph == paragraph && !string.IsNullOrEmpty(_preeditText);
 
                 double px = ParaLeft(paragraph);
+                double px0 = px;
 
                 // Nested lists keep their own counters.
                 numbering.Begin(paragraph);
 
                 if (fullText == "" && !hasPreedit)
                 {
+                    if (paragraph.IsCode)
+                    {
+                        DrawCodeBackground(context, paragraph, px0, yOffset, ParagraphWrapWidth(paragraph, maxWidth), beHeight);
+                        DrawCodeGutter(context, paragraph, fullText, null, px0, yOffset);
+                    }
                     if (paragraph.ListType != ListKind.None)
                         DrawListMarker(context, paragraph, numbering.Next(paragraph), px, yOffset);
                     if (chrome && _caretPosition != null && _caretPosition.Paragraph == paragraph)
@@ -468,6 +476,21 @@ public partial class RichEditor
                 if (paragraph.IsQuote)
                     context.FillRectangle(Brushes.Silver, new Rect(Math.Max(0, px - 10), yOffset, 3, layout.Height));
 
+                bool codeScroll = CodeScrolls(paragraph);
+                if (paragraph.IsCode)
+                {
+                    DrawCodeBackground(context, paragraph, px0, yOffset, pWidth, layout.Height);
+                    DrawCodeGutter(context, paragraph, fullText, layout, px0, yOffset);
+                    if (codeScroll)
+                    {
+                        double sx = UpdateCodeScroll(paragraph, layout, pWidth, hasPreedit ? _preeditText!.Length : 0);
+                        px -= sx;
+                        if (chrome) DrawCodeScrollBar(context, paragraph, layout, px0, yOffset, pWidth, sx);
+                    }
+                }
+                // Long code lines are cut off at the block's edge; the block scrolls to show them.
+                using var codeClip = codeScroll ? context.PushClip(new Rect(px0 - 2, yOffset, pWidth + 4, layout.Height)) : default;
+
                 if (selectedParagraphs?.Contains(paragraph) == true)
                 {
                     int hlStart = (paragraph == selStart!.Paragraph) ? selStart.Offset : 0;
@@ -488,6 +511,7 @@ public partial class RichEditor
                     caretPoint = new Point(px + cr.X, yOffset + cr.Y + CaretYInLine(paragraph, cr.Height, th));
                     caretHeight = th;
                     _lastCaretPoint = caretPoint.Value;
+                    _caretScrolledAway = codeScroll && (caretPoint.Value.X < px0 - 1 || caretPoint.Value.X > px0 + pWidth + 1);
                 }
 
                 layout.Draw(context, new Point(px, yOffset));
@@ -764,7 +788,7 @@ public partial class RichEditor
         {
             _lastCaretPoint = caretPoint.Value;
             _lastCaretHeight = caretHeight;
-            if (_isCaretVisible && IsFocused && !IsReadOnly)
+            if (_isCaretVisible && IsFocused && !IsReadOnly && !_caretScrolledAway)
             {
                 var cv = MapDocToView(caretPoint.Value);
                 context.DrawLine(_caretPen ??= new Pen(CaretBrush, 1.5), cv, new Point(cv.X, cv.Y + caretHeight));

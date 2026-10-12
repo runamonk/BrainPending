@@ -59,7 +59,8 @@ public partial class RichEditor
     // Older Tab presses were saved as four spaces. Preserve their width as paragraph formatting.
     private int ConvertLeadingTabsToIndent(Paragraph paragraph)
     {
-        if (paragraph.TextAlignment != Avalonia.Media.TextAlignment.Left) return 0;
+        // Code keeps its whitespace as typed.
+        if (paragraph.TextAlignment != Avalonia.Media.TextAlignment.Left || paragraph.IsCode) return 0;
         string text = BuildPlain(paragraph);
         int count = 0;
         while (count < text.Length)

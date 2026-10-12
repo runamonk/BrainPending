@@ -215,6 +215,7 @@ public static class DocumentSerializer
             Background = BrushToString(p.Background),
             Indent = p.Indent,
             IsQuote = p.IsQuote,
+            IsCode = p.IsCode,
             ListLevel = p.ListLevel,
             ListStart = p.ListStart
         };
@@ -362,6 +363,7 @@ public static class DocumentSerializer
             Background = StringToBrush(d.Background),
             Indent = d.Indent,
             IsQuote = d.IsQuote,
+            IsCode = d.IsCode,
             ListLevel = d.ListLevel,
             ListStart = d.ListStart,
             ListType = Enum.TryParse<ListKind>(d.ListType, out var lk) ? lk : (d.IsListItem ? ListKind.Bullet : ListKind.None),
@@ -530,6 +532,7 @@ internal class BlockDto
     public string? Background { get; set; }
     public double Indent { get; set; }
     public bool IsQuote { get; set; }
+    public bool IsCode { get; set; }
     public int ListLevel { get; set; }
     public int? ListStart { get; set; }
 

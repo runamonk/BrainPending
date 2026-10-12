@@ -361,6 +361,7 @@ internal sealed class RtfParser
                 _paraBottomBorder = false;
                 _para.TextAlignment = TextAlignment.Left;
                 _para.Indent = 0;
+                _para.IsCode = false;
                 _para.LineHeight = _para.LineSpacing = double.NaN;
                 _slTwips = 0; _slMult = false;
                 SetItap(1); break;         // paragraph-property reset; \itap is one of those properties
@@ -426,6 +427,8 @@ internal sealed class RtfParser
             // Our own inline-table marker (see WriteParagraph). It arrives as {\*\arinline}, so \* has
             // already switched this group to Skip — the group is empty and only the flag matters.
             case "arinline": _nextTableInline = true; break;
+            // Our own code block marker (see WriteParagraphPropsBody), ignored by other readers.
+            case "arcode": _para.IsCode = true; break;
 
             // Text boxes / shapes (HWP 글상자): the editor has no floating frame, so pull out the
             // \shptxt content as normal text and skip the shape's property name/value groups (\sp/\sn/\sv).
@@ -1181,6 +1184,8 @@ internal sealed class RtfWriter
     // Shared paragraph properties also follow pard/intbl in cells, preserving their alignment and indent.
     private void WriteParagraphPropsBody(Paragraph p)
     {
+        // Before the control words: a space after a group's brace would be text.
+        if (p.IsCode) _body.Append(@"{\*\arcode}");
         if (p.HeadingLevel is >= 1 and <= 6) _body.Append($@"\outlinelevel{p.HeadingLevel - 1}");
         if (double.IsFinite(p.LineSpacing) && p.LineSpacing > 0)
             _body.Append($@"\sl{(int)Math.Round(p.LineSpacing * 200)}\slmult1");

@@ -465,6 +465,7 @@ public partial class RichEditor
                 case "cut": items.Add(CutItem(hasSelection)); break;
                 case "copy": items.Add(CopyItem(hasSelection)); break;
                 case "paste": items.Add(PasteItem()); break;
+                case "pastetext": items.Add(Mi(Loc("PasteAsText"), () => { _ = PastePlainTextAsync(); }, icon: RichEditorIcon.Paste, gesture: RichEditorShortcuts.Gesture(ShortcutId.PastePlain))); break;
                 case "delete": items.Add(DeleteItem(hasSelection)); break;
                 case "bold": items.Add(CheckItem(Loc("Bold"), fmt.Bold, ToggleBold, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Bold))); break;
                 case "italic": items.Add(CheckItem(Loc("Italic"), fmt.Italic, ToggleItalic, hasSelection, RichEditorShortcuts.Gesture(ShortcutId.Italic))); break;
@@ -545,7 +546,7 @@ public partial class RichEditor
     {
         get
         {
-            var ids = new List<string> { "cut", "copy", "paste", "delete", "bold", "italic", "underline", "strike", "clear",
+            var ids = new List<string> { "cut", "copy", "paste", "pastetext", "delete", "bold", "italic", "underline", "strike", "clear",
                 "color", "highlight", "list", "heading",
                 "bullets", "numbers", "align", "indent", "outdent", "spacing",
                 "link", "wrap", "selectall", "undo", "redo" };
@@ -565,6 +566,7 @@ public partial class RichEditor
         "cut" => Loc("Cut"),
         "copy" => Loc("Copy"),
         "paste" => Loc("Paste"),
+        "pastetext" => Loc("PasteAsText"),
         "delete" => Loc("Delete"),
         "bold" => Loc("Bold"),
         "italic" => Loc("Italic"),

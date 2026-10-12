@@ -312,7 +312,9 @@ public partial class RichEditor : Control
             InvalidateMeasure();
             InvalidateVisual();
         }
-        if (change.Property == DefaultFontFamilyProperty || change.Property == DefaultFontSizeProperty)
+        if (change.Property == CodeFontFamilyProperty) _codeDigitWidths.Clear();
+        if (change.Property == DefaultFontFamilyProperty || change.Property == DefaultFontSizeProperty
+            || change.Property == CodeFontFamilyProperty)
         {
             _layoutCache.Clear(); // default font feeds the cached layouts
             _tableLayoutCache.Clear();
@@ -1167,8 +1169,18 @@ public partial class RichEditor : Control
     private double ParagraphWrapWidth(Paragraph p, double maxWidth)
         => Math.Max(10, maxWidth - 20 - ParaLeft(p) - p.MarginRight - (p.IsCode ? CodePad : 0));
 
-    /// <summary>The font code blocks use, with fallbacks for other platforms.</summary>
-    public static FontFamily CodeFontFamily { get; set; } = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Courier New");
+    /// <summary>The default code font, with fallbacks for other platforms.</summary>
+    public static readonly FontFamily DefaultCodeFontFamily = new("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Courier New");
+
+    /// <summary>The font code blocks use.</summary>
+    public static readonly StyledProperty<FontFamily> CodeFontFamilyProperty =
+        AvaloniaProperty.Register<RichEditor, FontFamily>(nameof(CodeFontFamily), DefaultCodeFontFamily);
+
+    public FontFamily CodeFontFamily
+    {
+        get => GetValue(CodeFontFamilyProperty);
+        set => SetValue(CodeFontFamilyProperty, value);
+    }
 
     // Each code block's sideways scroll, and the caret position it was last scrolled to show.
     private readonly Dictionary<Paragraph, double> _codeScroll = new();

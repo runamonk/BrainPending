@@ -55,10 +55,10 @@ internal sealed record SearchSettings(bool WholeBrain = false, bool MatchCase = 
 // WordWrap is toggled from the editor toolbar or right-click menu, not the settings dialog.
 // ToolbarItems and MenuItems come from the Customize dialogs; null means the default layout.
 // CodeWrap wraps long code lines; otherwise they scroll sideways inside the block.
-// CodeLineNumbers shows line numbers in code blocks.
+// CodeLineNumbers shows line numbers in code blocks. A null CodeFontFamily uses the editor's default list.
 internal sealed record EditorSettings(string FontFamily = "Segoe UI", double FontSize = 12, string? Color = null,
     bool EditAttachmentsInPlace = false, bool OpenAttachmentsOnClick = false, bool WordWrap = true,
-    string[]? ToolbarItems = null, string[]? MenuItems = null, bool CodeWrap = false, bool CodeLineNumbers = true);
+    string[]? ToolbarItems = null, string[]? MenuItems = null, bool CodeWrap = false, bool CodeLineNumbers = true, string? CodeFontFamily = null);
 
 // EveryDays = 0 checks on every startup.
 internal sealed record UpdateSettings(bool CheckOnStartup = true, int EveryDays = 0, DateTime? LastCheckUtc = null);

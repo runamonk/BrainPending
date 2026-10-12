@@ -15,6 +15,8 @@ public partial class SettingsDialog : Window
     internal sealed record Result(EditorSettings Editor, UpdateSettings Updates);
 
     private readonly UpdateSettings _updates = new();
+    // First entry of the code font list; saved as null so the editor's fallback list applies.
+    private const string DefaultCodeFont = "Default (Cascadia Mono, Consolas…)";
     // Null means the theme's text color.
     private Color? _color;
 
@@ -33,6 +35,11 @@ public partial class SettingsDialog : Window
         FontFamilies.ItemsSource = fonts;
         FontFamilies.SelectedItem = editor.FontFamily;
         FontSizeInput.Value = (decimal)editor.FontSize;
+        var codeFonts = fonts.Where(IsFixedWidth).ToList();
+        if (editor.CodeFontFamily is { } savedCode && !codeFonts.Contains(savedCode)) codeFonts.Insert(0, savedCode);
+        codeFonts.Insert(0, DefaultCodeFont);
+        CodeFonts.ItemsSource = codeFonts;
+        CodeFonts.SelectedItem = editor.CodeFontFamily ?? DefaultCodeFont;
         _color = editor.Color == null ? null : Color.Parse(editor.Color);
         ColorButton.Flyout = ColorPicker();
         EditAttachmentsInPlace.IsChecked = editor.EditAttachmentsInPlace;
@@ -45,6 +52,7 @@ public partial class SettingsDialog : Window
 
         FontFamilies.SelectionChanged += (_, _) => UpdatePreview();
         FontSizeInput.ValueChanged += (_, _) => UpdatePreview();
+        CodeFonts.SelectionChanged += (_, _) => UpdatePreview();
         CheckOnStartup.IsCheckedChanged += (_, _) => UpdateEveryDaysRow();
         AddHandler(KeyDownEvent, (_, e) =>
         {
@@ -103,11 +111,28 @@ public partial class SettingsDialog : Window
 
     private static string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
+    // A font is fixed-width when narrow and wide letters take the same room.
+    private static bool IsFixedWidth(string family)
+    {
+        try
+        {
+            var typeface = new Typeface(family);
+            double Width(string s) => new FormattedText(s, System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, typeface, 20, Brushes.Black).WidthIncludingTrailingWhitespace;
+            return Math.Abs(Width("iiiiii") - Width("WWWWWW")) < 0.5;
+        }
+        catch (Exception) { return false; }
+    }
+
+    private string? SelectedCodeFont => CodeFonts.SelectedItem is string s && s != DefaultCodeFont ? s : null;
+
     private void UpdatePreview()
     {
         Preview.FontFamily = new FontFamily(FontFamilies.SelectedItem as string ?? new EditorSettings().FontFamily);
         // Editor sizes are points.
         Preview.FontSize = (double)(FontSizeInput.Value ?? 12) * 4 / 3;
+        CodePreview.FontFamily = SelectedCodeFont is { } code ? new FontFamily(code) : RichEditor.DefaultCodeFontFamily;
+        CodePreview.FontSize = Preview.FontSize;
         ColorLabel.Text = _color is { } c ? Hex(c) : "Theme text color";
         if (_color is { } color)
         {
@@ -124,7 +149,7 @@ public partial class SettingsDialog : Window
     private void Save_Click(object? sender, RoutedEventArgs e) => Close(new Result(
         new EditorSettings(FontFamilies.SelectedItem as string ?? new EditorSettings().FontFamily, (double)(FontSizeInput.Value ?? 12),
             _color is { } c ? Hex(c) : null, EditAttachmentsInPlace.IsChecked == true,
-            OpenAttachmentsOnClick.IsChecked == true) { CodeWrap = CodeWrap.IsChecked == true, CodeLineNumbers = CodeLineNumbers.IsChecked == true },
+            OpenAttachmentsOnClick.IsChecked == true) { CodeWrap = CodeWrap.IsChecked == true, CodeLineNumbers = CodeLineNumbers.IsChecked == true, CodeFontFamily = SelectedCodeFont },
         _updates with { CheckOnStartup = CheckOnStartup.IsChecked == true, EveryDays = (int)(EveryDays.Value ?? 0) }));
 
     private void Cancel_Click(object? sender, RoutedEventArgs e) => Close();

@@ -15,6 +15,7 @@ public partial class MainWindow
         EditorView.Editor.WordWrap = editor.WordWrap;
         EditorView.Editor.CodeWrap = editor.CodeWrap;
         EditorView.Editor.CodeLineNumbers = editor.CodeLineNumbers;
+        EditorView.Editor.CodeMaxLines = editor.CodeMaxLines;
         EditorView.Editor.CodeFontFamily = editor.CodeFontFamily is { } code ? new FontFamily(code) : RichEditor.DefaultCodeFontFamily;
         EditorView.Toolbar.Items = editor.ToolbarItems;
         EditorView.Editor.TextMenuItems = editor.MenuItems;

@@ -216,6 +216,7 @@ public static class DocumentSerializer
             Indent = p.Indent,
             IsQuote = p.IsQuote,
             IsCode = p.IsCode,
+            CodeMaxLines = p.CodeMaxLines,
             ListLevel = p.ListLevel,
             ListStart = p.ListStart
         };
@@ -364,6 +365,7 @@ public static class DocumentSerializer
             Indent = d.Indent,
             IsQuote = d.IsQuote,
             IsCode = d.IsCode,
+            CodeMaxLines = d.CodeMaxLines,
             ListLevel = d.ListLevel,
             ListStart = d.ListStart,
             ListType = Enum.TryParse<ListKind>(d.ListType, out var lk) ? lk : (d.IsListItem ? ListKind.Bullet : ListKind.None),
@@ -533,6 +535,7 @@ internal class BlockDto
     public double Indent { get; set; }
     public bool IsQuote { get; set; }
     public bool IsCode { get; set; }
+    public int CodeMaxLines { get; set; }
     public int ListLevel { get; set; }
     public int? ListStart { get; set; }
 

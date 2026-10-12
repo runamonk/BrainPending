@@ -32,10 +32,46 @@ public partial class RichEditor
     private const double CodeBlockMargin = 6;
     private const double CodeIndentWidth = 4;
 
-    // Scroll bars drawn this frame, in document space, for the wheel and dragging.
-    private readonly List<(Rect block, Rect track, Paragraph p, double max, double thumbW)> _codeScrollBars = new();
-    private (Paragraph p, double startX, double startScroll, double perPx)? _codeBarDrag;
+    /// <summary>How many lines a code block shows before it scrolls; 0 shows them all. A block's own
+    /// <see cref="Paragraph.CodeMaxLines"/>, set by dragging its bottom-right grip, wins over this.</summary>
+    public static readonly StyledProperty<int> CodeMaxLinesProperty =
+        AvaloniaProperty.Register<RichEditor, int>(nameof(CodeMaxLines), 0);
+
+    public int CodeMaxLines
+    {
+        get => GetValue(CodeMaxLinesProperty);
+        set => SetValue(CodeMaxLinesProperty, value);
+    }
+
+    // A code block's scroll chrome drawn this frame, in document space: the block, its scroll
+    // ranges, the bars' tracks and thumb sizes, and the resize grip.
+    private readonly record struct CodeView(Paragraph P, Rect Block, double MaxX, double MaxY,
+        Rect HTrack, double HThumb, Rect VTrack, double VThumb, Rect Grip, double RowHeight, int Rows, double ViewHeight);
+
+    private readonly List<CodeView> _codeViews = new();
+    private readonly Dictionary<Paragraph, double> _codeScrollY = new();
+
+    // Kind: 0 = sideways bar, 1 = up/down bar, 2 = resize grip.
+    private (Paragraph p, int kind, double start, double startValue, double perPx)? _codeBarDrag;
     private bool _caretScrolledAway;
+
+    private double CodeScrollY(Paragraph p) => p.IsCode && _codeScrollY.TryGetValue(p, out var y) ? y : 0;
+
+    // The block's own line limit, else the editor's; 0 means no limit.
+    private int CodeRowLimit(Paragraph p) => p.CodeMaxLines > 0 ? p.CodeMaxLines : p.CodeMaxLines < 0 ? 0 : CodeMaxLines;
+
+    // The height a code block shows: its first CodeRowLimit rows, or all of it. Page view and
+    // printing always show every line.
+    private double CodeViewHeight(Paragraph p, TextLayout layout)
+    {
+        if (!p.IsCode || IsPaged || p.Parent is not FlowDocument) return layout.Height;
+        int limit = CodeRowLimit(p);
+        var lines = layout.TextLines;
+        if (limit <= 0 || lines.Count <= limit) return layout.Height;
+        double h = 0;
+        for (int i = 0; i < limit; i++) h += lines[i].Height;
+        return h;
+    }
 
     private void DrawCodeBackground(DrawingContext context, Paragraph p, double textLeft, double y, double width, double height)
     {
@@ -68,37 +104,83 @@ public partial class RichEditor
         return Math.Max(2, lines.ToString().Length) * digit + 10;
     }
 
-    // Keeps the caret in view when it moves, and the scroll within the block's overflow.
-    private double UpdateCodeScroll(Paragraph p, TextLayout layout, double width, int preeditLength)
+    // Keeps the caret in view when it moves, and both scrolls within the block's overflow. An
+    // infinite width means the block doesn't scroll sideways.
+    private (double x, double y) UpdateCodeScroll(Paragraph p, TextLayout layout, double width, double viewHeight, int preeditLength)
     {
-        double max = Math.Max(0, layout.WidthIncludingTrailingWhitespace + 2 - width);
+        double maxX = double.IsInfinity(width) ? 0 : Math.Max(0, layout.WidthIncludingTrailingWhitespace + 2 - width);
+        double maxY = Math.Max(0, layout.Height - viewHeight);
         _codeScroll.TryGetValue(p, out double x);
+        _codeScrollY.TryGetValue(p, out double y);
         if (ReferenceEquals(_caretPosition.Paragraph, p)
             && (!ReferenceEquals(_codeScrollCaret.p, p) || _codeScrollCaret.offset != _caretPosition.Offset))
         {
-            double cx = layout.HitTestTextPosition(_caretPosition.Offset + preeditLength).X;
+            var cr = layout.HitTestTextPosition(_caretPosition.Offset + preeditLength);
             const double margin = 24;
-            if (cx < x) x = cx - margin;
-            else if (cx > x + width - 2) x = cx - width + margin;
+            if (maxX > 0)
+            {
+                if (cr.X < x) x = cr.X - margin;
+                else if (cr.X > x + width - 2) x = cr.X - width + margin;
+            }
+            if (maxY > 0)
+            {
+                if (cr.Y < y) y = cr.Y;
+                else if (cr.Bottom > y + viewHeight) y = cr.Bottom - viewHeight;
+            }
         }
         if (ReferenceEquals(_caretPosition.Paragraph, p)) _codeScrollCaret = (p, _caretPosition.Offset);
-        x = Math.Clamp(x, 0, max);
+        x = Math.Clamp(x, 0, maxX);
+        y = Math.Clamp(y, 0, maxY);
         if (x > 0) _codeScroll[p] = x; else _codeScroll.Remove(p);
-        return x;
+        if (y > 0) _codeScrollY[p] = y; else _codeScrollY.Remove(p);
+        return (x, y);
     }
 
-    private void DrawCodeScrollBar(DrawingContext context, Paragraph p, TextLayout layout, double textLeft, double y,
-        double width, double scroll)
+    // The sideways bar under the block, the up/down bar on its right, and the resize grip in the
+    // bottom-right corner. Registers them for the wheel, dragging and the pointer cursor.
+    private void DrawCodeScrollBars(DrawingContext context, Paragraph p, TextLayout layout, double textLeft, double y,
+        double width, double viewHeight, double scrollX, double scrollY)
     {
+        double gutter = CodeGutter(p);
+        double right = textLeft + width + CodePad;
+        double below = Math.Min(4, p.MarginBottom);
+        var block = new Rect(textLeft - CodePad - gutter, y, width + 2 * CodePad + gutter, viewHeight);
+
+        double maxX = 0, thumbW = 0;
+        var hTrack = default(Rect);
         double content = layout.WidthIncludingTrailingWhitespace + 2;
-        if (content <= width) return;
-        double max = content - width;
-        double thumbW = Math.Max(24, width * width / content);
-        double barY = y + layout.Height + Math.Min(4, p.MarginBottom) - 4;
-        double thumbX = textLeft + (width - thumbW) * scroll / max;
-        context.DrawRectangle(CodeBarBrush, null, new Rect(thumbX, barY, thumbW, 3), 1.5, 1.5);
-        var block = new Rect(textLeft - CodePad - CodeGutter(p), y, width + 2 * CodePad + CodeGutter(p), layout.Height);
-        _codeScrollBars.Add((block, new Rect(textLeft, barY - 4, width, 11), p, max, thumbW));
+        if (CodeScrolls(p) && content > width)
+        {
+            maxX = content - width;
+            thumbW = Math.Max(24, width * width / content);
+            double barY = y + viewHeight + below - 4;
+            context.DrawRectangle(CodeBarBrush, null, new Rect(textLeft + (width - thumbW) * scrollX / maxX, barY, thumbW, 3), 1.5, 1.5);
+            hTrack = new Rect(textLeft, barY - 4, width, 11);
+        }
+
+        double maxY = Math.Max(0, layout.Height - viewHeight), thumbH = 0;
+        var vTrack = default(Rect);
+        if (maxY > 0.5)
+        {
+            double trackH = Math.Max(8, viewHeight - 10);
+            thumbH = Math.Max(16, trackH * viewHeight / layout.Height);
+            context.DrawRectangle(CodeBarBrush, null, new Rect(right - 6, y + (trackH - thumbH) * scrollY / maxY, 3, thumbH), 1.5, 1.5);
+            vTrack = new Rect(right - 10, y, 10, trackH);
+        }
+        else maxY = 0;
+
+        // The grip only shows on blocks with something to resize.
+        var lines = layout.TextLines;
+        var grip = default(Rect);
+        if (!IsReadOnly && lines.Count >= 2)
+        {
+            grip = new Rect(right - 12, y + viewHeight + below - 12, 12, 12);
+            var pen = new Pen(CodeBarBrush, 1.2);
+            context.DrawLine(pen, new Point(grip.Right - 3, grip.Y + 4), new Point(grip.X + 4, grip.Bottom - 3));
+            context.DrawLine(pen, new Point(grip.Right - 3, grip.Y + 8), new Point(grip.X + 8, grip.Bottom - 3));
+        }
+        _codeViews.Add(new CodeView(p, block, maxX, maxY, hTrack, thumbW, vTrack, thumbH, grip,
+            lines.Count > 0 ? lines[0].Height : 16, lines.Count, viewHeight));
     }
 
     // Line numbers on each line's first row, and a mark on rows that continue a wrapped line.
@@ -130,59 +212,136 @@ public partial class RichEditor
         }
     }
 
-    private void SetCodeScroll(Paragraph p, double x, double max)
+    private void SetCodeScroll(Dictionary<Paragraph, double> scrolls, Paragraph p, double value, double max)
     {
-        x = Math.Clamp(x, 0, max);
-        if (x > 0) _codeScroll[p] = x; else _codeScroll.Remove(p);
+        value = Math.Clamp(value, 0, max);
+        if (value > 0) scrolls[p] = value; else scrolls.Remove(p);
         InvalidateVisual();
     }
 
     /// <inheritdoc/>
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
-        // Sideways wheel, or Shift+wheel, scrolls the code block under the pointer.
-        double dx = e.Delta.X != 0 ? e.Delta.X : e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? e.Delta.Y : 0;
-        if (dx != 0)
+        var point = MapViewToDoc(e.GetPosition(this));
+        bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        double dx = e.Delta.X != 0 ? e.Delta.X : shift ? e.Delta.Y : 0;
+        double dy = shift ? 0 : e.Delta.Y;
+        foreach (var view in _codeViews)
         {
-            var point = MapViewToDoc(e.GetPosition(this));
-            foreach (var bar in _codeScrollBars)
-                if (bar.block.Contains(point) || bar.track.Contains(point))
+            if (!view.Block.Contains(point) && !view.HTrack.Contains(point)) continue;
+            // Sideways wheel, or Shift+wheel, scrolls the block sideways.
+            if (dx != 0 && view.MaxX > 0)
+            {
+                SetCodeScroll(_codeScroll, view.P, CodeScrollX(view.P) - dx * 50, view.MaxX);
+                e.Handled = true;
+                return;
+            }
+            // The wheel scrolls a cut block until it reaches an end, then the note scrolls again.
+            if (dy != 0 && view.MaxY > 0)
+            {
+                double y = CodeScrollY(view.P);
+                if (dy > 0 ? y > 0 : y < view.MaxY)
                 {
-                    SetCodeScroll(bar.p, (_codeScroll.TryGetValue(bar.p, out var x) ? x : 0) - dx * 50, bar.max);
+                    SetCodeScroll(_codeScrollY, view.P, y - dy * view.RowHeight * 3, view.MaxY);
                     e.Handled = true;
                     return;
                 }
+            }
         }
         base.OnPointerWheelChanged(e);
     }
 
-    // Starts dragging a code block's scroll bar. A press on the track jumps the thumb there first.
-    private bool TryStartCodeBarDrag(Point point)
+    // Starts dragging a code block's scroll bar or resize grip. A press on a track jumps the thumb
+    // there first; a double-click on the grip goes back to the default height.
+    private bool TryStartCodeBarDrag(Point point, int clickCount)
     {
-        foreach (var bar in _codeScrollBars)
+        foreach (var view in _codeViews)
         {
-            if (!bar.track.Contains(point)) continue;
-            double perPx = bar.max / Math.Max(1, bar.track.Width - bar.thumbW);
-            double scroll = _codeScroll.TryGetValue(bar.p, out var x) ? x : 0;
-            double thumbX = bar.track.X + scroll / perPx;
-            if (point.X < thumbX || point.X > thumbX + bar.thumbW)
+            if (view.Grip.Contains(point))
             {
-                scroll = Math.Clamp((point.X - bar.track.X - bar.thumbW / 2) * perPx, 0, bar.max);
-                SetCodeScroll(bar.p, scroll, bar.max);
+                if (clickCount >= 2)
+                {
+                    if (view.P.CodeMaxLines != 0)
+                    {
+                        PushUndo();
+                        view.P.CodeMaxLines = 0;
+                        MarkTextChanged();
+                        InvalidateMeasure();
+                        InvalidateVisual();
+                    }
+                    return true;
+                }
+                _dragUndoPending = Document != null;
+                _codeBarDrag = (view.P, 2, point.Y, view.ViewHeight, 0);
+                return true;
             }
-            _codeBarDrag = (bar.p, point.X, scroll, perPx);
+            bool vertical = view.VTrack.Contains(point);
+            if (!vertical && !view.HTrack.Contains(point)) continue;
+            var track = vertical ? view.VTrack : view.HTrack;
+            double thumb = vertical ? view.VThumb : view.HThumb, max = vertical ? view.MaxY : view.MaxX;
+            var scrolls = vertical ? _codeScrollY : _codeScroll;
+            double length = vertical ? track.Height : track.Width, at = vertical ? point.Y - track.Y : point.X - track.X;
+            double perPx = max / Math.Max(1, length - thumb);
+            double scroll = scrolls.TryGetValue(view.P, out var s) ? s : 0;
+            double thumbAt = scroll / perPx;
+            if (at < thumbAt || at > thumbAt + thumb)
+            {
+                scroll = Math.Clamp((at - thumb / 2) * perPx, 0, max);
+                SetCodeScroll(scrolls, view.P, scroll, max);
+            }
+            _codeBarDrag = (view.P, vertical ? 1 : 0, vertical ? point.Y : point.X, scroll, perPx);
             return true;
         }
         return false;
     }
 
-    private bool IsOverCodeBar(Point point) => _codeScrollBars.Any(b => b.track.Contains(point));
+    // The pointer cursor over a code block's bars or grip, or null elsewhere.
+    private Cursor? CodeChromeCursor(Point point)
+    {
+        foreach (var view in _codeViews)
+        {
+            if (view.Grip.Contains(point)) return RowResizeCursor;
+            if (view.HTrack.Contains(point) || view.VTrack.Contains(point)) return Cursor.Default;
+        }
+        return null;
+    }
 
     private void DragCodeBar(Point point)
     {
         if (_codeBarDrag is not { } d) return;
-        double max = _codeScrollBars.FirstOrDefault(b => ReferenceEquals(b.p, d.p)).max;
-        SetCodeScroll(d.p, d.startScroll + (point.X - d.startX) * d.perPx, max);
+        var view = _codeViews.FirstOrDefault(v => ReferenceEquals(v.P, d.p));
+        if (view.P == null) return;
+        if (d.kind == 2)
+        {
+            // Snap to whole lines. Dragging past the last line shows the whole block again.
+            int rows = Math.Clamp((int)Math.Round((d.startValue + point.Y - d.start) / view.RowHeight), 2, Math.Max(2, view.Rows));
+            int value = rows >= view.Rows ? (CodeMaxLines > 0 ? -1 : 0) : rows;
+            if (value == d.p.CodeMaxLines) return;
+            PushDragUndoOnce();
+            d.p.CodeMaxLines = value;
+            MarkTextChanged();
+            InvalidateMeasure();
+            InvalidateVisual();
+            return;
+        }
+        if (d.kind == 1) SetCodeScroll(_codeScrollY, d.p, d.startValue + (point.Y - d.start) * d.perPx, view.MaxY);
+        else SetCodeScroll(_codeScroll, d.p, d.startValue + (point.X - d.start) * d.perPx, view.MaxX);
+    }
+
+    // ↑ into a code block lands on its last line and ↓ on its first, even when the block is cut
+    // short and those lines are scrolled out of view.
+    private bool TryEnterCodeBlock(bool down)
+    {
+        if (Document == null || _caretPosition.Paragraph is not { Parent: FlowDocument } p) return false;
+        int i = Document.Blocks.IndexOf(p) + (down ? 1 : -1);
+        if (i < 0 || i >= Document.Blocks.Count || Document.Blocks[i] is not Paragraph { IsCode: true } code
+            || GetParagraphLength(code) == 0) return false;
+        var layout = CaretLineLayout(code);
+        var lines = layout.TextLines;
+        double y = down ? lines[0].Height / 2 : layout.Height - lines[^1].Height / 2;
+        var hit = layout.HitTestPoint(new Point(_lastCaretPoint.X - ParaLeft(code), y));
+        _caretPosition = new TextPointer(code, Math.Clamp(hit.TextPosition + (hit.IsTrailing ? 1 : 0), 0, GetParagraphLength(code)));
+        return true;
     }
 
     /// <summary>Turns the selected paragraphs into one code block, or the caret's code block back into
@@ -301,6 +460,7 @@ public partial class RichEditor
         _caretPosition = new TextPointer(lines[caretLine], Math.Clamp(caretInLine, 0, GetParagraphLength(lines[caretLine])));
         CollapseSelectionToCaret();
         _codeScroll.Remove(code);
+        _codeScrollY.Remove(code);
     }
 
     private Paragraph NewCodeParagraph() => new()

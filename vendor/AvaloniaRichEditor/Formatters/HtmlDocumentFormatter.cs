@@ -250,7 +250,8 @@ namespace AvaloniaRichEditor.Formatters
                     string code = PreText(child).Replace("\r\n", "\n").Replace('\r', '\n').TrimEnd('\n');
                     if (code.Length > 0)
                     {
-                        var cp = new Paragraph { IsCode = true, MarginTop = 6, MarginBottom = 6 };
+                        var cp = new Paragraph { IsCode = true, MarginTop = 6, MarginBottom = 6,
+                            CodeMaxLines = child.GetAttributeValue("data-are-lines", 0) };
                         cp.Inlines.Add(new Run { Text = code });
                         flow.Blocks.Add(cp);
                     }
@@ -984,7 +985,7 @@ namespace AvaloniaRichEditor.Formatters
         {
             if (p.IsCode)
             {
-                sb.Append("<pre>");
+                sb.Append(p.CodeMaxLines != 0 ? $"<pre data-are-lines=\"{p.CodeMaxLines}\">" : "<pre>");
                 foreach (var inline in p.Inlines)
                     if (inline is Run { Text: { } code }) sb.Append(System.Net.WebUtility.HtmlEncode(code));
                 sb.Append("</pre>");

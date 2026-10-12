@@ -55,6 +55,13 @@
           <TextBlock Text="Otherwise long lines scroll sideways inside the block. Use Shift+wheel or drag the bar under it."
                      TextWrapping="Wrap" Opacity="0.65" Margin="28,-8,0,0" />
           <CheckBox x:Name="CodeLineNumbers" Content="Show line numbers" />
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBlock Text="Show at most" VerticalAlignment="Center" />
+            <NumericUpDown x:Name="CodeMaxLines" Width="120" Minimum="0" Maximum="500" Increment="1" FormatString="0" AutomationProperties.Name="Most lines a code block shows" />
+            <TextBlock Text="lines (0 shows all)" VerticalAlignment="Center" Opacity="0.65" />
+          </StackPanel>
+          <TextBlock Text="Longer blocks scroll. Drag a block's corner to give it its own height; double-click the corner to go back to this."
+                     TextWrapping="Wrap" Opacity="0.65" Margin="0,-8,0,0" />
         </StackPanel>
       </TabItem>
 

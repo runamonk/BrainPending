@@ -256,6 +256,104 @@ public sealed class CodeBlockTests
         Assert.All(AppThemes.All, t => Assert.NotNull(t.Code));
     }
 
+    private static string Lines(int n) => string.Join("\n", Enumerable.Range(1, n).Select(i => $"line{i}"));
+
+    [AvaloniaFact]
+    public void CodeMaxLinesCutsTallBlocksAndTheCaretScrollsThem()
+    {
+        var (editor, window) = Open("<p></p>");
+        try
+        {
+            editor.InsertCodeBlock(Lines(10));
+            window.UpdateLayout();
+            double full = editor.DesiredSize.Height;
+            editor.CodeMaxLines = 3;
+            window.UpdateLayout();
+            double cut = editor.DesiredSize.Height;
+            Assert.InRange(full - cut, (full - 72) * 0.6, (full - 72) * 0.8);
+
+            // Caret on the last line scrolls it into view; a click on the top row then lands near the end.
+            Press(window, Key.Home, RawInputModifiers.Control);
+            Press(window, Key.End, RawInputModifiers.Control);
+            Press(window, Key.Up);
+            window.CaptureRenderedFrame();
+            window.MouseDown(new Avalonia.Point(60, 10), MouseButton.Left);
+            window.MouseUp(new Avalonia.Point(60, 10), MouseButton.Left);
+            editor.InsertText("X");
+            var code = editor.Document!.Blocks.OfType<Paragraph>().First(p => p.IsCode);
+            // Rows 8–10 are showing, so the top row is line 8.
+            Assert.Equal("line8", Text(code).Split('\n').Single(l => l.Contains('X')).Replace("X", ""));
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void WheelScrollsACutBlock()
+    {
+        var (editor, window) = Open("<p></p>");
+        try
+        {
+            editor.CodeMaxLines = 3;
+            editor.InsertCodeBlock(Lines(10));
+            Press(window, Key.Home, RawInputModifiers.Control);
+            window.CaptureRenderedFrame();
+            window.MouseWheel(new Avalonia.Point(60, 15), new Avalonia.Vector(0, -1));
+            window.CaptureRenderedFrame();
+            window.MouseDown(new Avalonia.Point(60, 10), MouseButton.Left);
+            window.MouseUp(new Avalonia.Point(60, 10), MouseButton.Left);
+            editor.InsertText("X");
+            var code = editor.Document!.Blocks.OfType<Paragraph>().First(p => p.IsCode);
+            Assert.StartsWith("line1\nline2\nline3\n", Text(code));
+            Assert.Contains("X", Text(code)[18..]);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void DraggingTheGripSetsTheBlocksOwnHeight()
+    {
+        var (editor, window) = Open("<p></p>", width: 400);
+        try
+        {
+            editor.InsertCodeBlock(Lines(10));
+            window.UpdateLayout();
+            double viewH = editor.DesiredSize.Height - 72; // margins, the empty line after, and the editor's bottom room
+            double row = viewH / 10;
+            window.CaptureRenderedFrame();
+            var grip = new Avalonia.Point(374, 6 + viewH + 4 - 6);
+            window.MouseDown(grip, MouseButton.Left);
+            window.MouseMove(new Avalonia.Point(374, grip.Y - 5 * row));
+            window.MouseUp(new Avalonia.Point(374, grip.Y - 5 * row), MouseButton.Left);
+            var code = editor.Document!.Blocks.OfType<Paragraph>().First(p => p.IsCode);
+            Assert.Equal(5, code.CodeMaxLines);
+
+            editor.Undo();
+            Assert.Equal(0, editor.Document!.Blocks.OfType<Paragraph>().First(p => p.IsCode).CodeMaxLines);
+        }
+        finally { window.Close(); }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(5)]
+    [InlineData(-1)]
+    public void ABlocksOwnHeightIsSaved(int lines)
+    {
+        var (editor, window) = Open("<p></p>");
+        try
+        {
+            editor.InsertCodeBlock(Lines(10));
+            editor.Document!.Blocks.OfType<Paragraph>().First(p => p.IsCode).CodeMaxLines = lines;
+            int Saved() => editor.Document!.Blocks.OfType<Paragraph>().First(p => p.IsCode).CodeMaxLines;
+            editor.LoadRtf(editor.ToRtf());
+            Assert.Equal(lines, Saved());
+            editor.LoadJson(editor.ToJson());
+            Assert.Equal(lines, Saved());
+            editor.LoadHtml(editor.ToHtml());
+            Assert.Equal(lines, Saved());
+        }
+        finally { window.Close(); }
+    }
+
     [AvaloniaFact]
     public void BackspaceAtStartTurnsCodeBackIntoText()
     {

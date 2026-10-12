@@ -47,7 +47,7 @@ public partial class RichEditor
             // the hit-tests and pagination the plain layout, whose indices are logical offsets.
             if (block is Paragraph composing && !string.IsNullOrEmpty(_preeditText)
                 && ReferenceEquals(_caretPosition.Paragraph, composing))
-                h = PreeditAwareLayout(composing, ParagraphWrapWidth(composing, width)).Height;
+                h = CodeViewHeight(composing, PreeditAwareLayout(composing, ParagraphWrapWidth(composing, width)));
             yOffset += h + block.MarginBottom;
         }
         return yOffset + 40; // a little breathing room at the bottom
@@ -166,7 +166,7 @@ public partial class RichEditor
         _cellImageRects.Clear();
         _inlineImageRects.Clear();
         _inlineHandles.Clear();
-        _codeScrollBars.Clear();
+        _codeViews.Clear();
         _caretScrolledAway = false;
 
         // Draw culling (N6-5): blocks fully outside the hosting ScrollViewer's viewport advance
@@ -437,9 +437,12 @@ public partial class RichEditor
                     ? BuildTextLayout(paragraph, pWidth, _caretPosition!.Offset, _preeditText)
                     : (beParaLayout ?? BuildTextLayout(paragraph, pWidth));
 
+                // A code block cut to fewer lines shows only viewH of its text.
+                double viewH = CodeViewHeight(paragraph, layout);
+
                 // Cull check: the layout above is still built (cached; its height advances yOffset),
                 // but off-screen paragraphs issue no draw commands. The caret paragraph always draws.
-                bool pVisible = (yOffset + layout.Height >= visTop && yOffset <= visBottom)
+                bool pVisible = (yOffset + viewH >= visTop && yOffset <= visBottom)
                     || (_caretPosition != null && _caretPosition.Paragraph == paragraph);
 
                 // One marker per hard line (\n): each line of a list paragraph is an item. Ordered lists
@@ -466,7 +469,7 @@ public partial class RichEditor
 
                 if (!pVisible)
                 {
-                    yOffset += layout.Height + paragraph.MarginBottom;
+                    yOffset += viewH + paragraph.MarginBottom;
                     continue;
                 }
 
@@ -477,29 +480,34 @@ public partial class RichEditor
                     context.FillRectangle(Brushes.Silver, new Rect(Math.Max(0, px - 10), yOffset, 3, layout.Height));
 
                 bool codeScroll = CodeScrolls(paragraph);
+                bool codeCrop = viewH < layout.Height - 0.5;
+                double ty = yOffset; // where the text starts, after any code block scroll
                 if (paragraph.IsCode)
                 {
-                    DrawCodeBackground(context, paragraph, px0, yOffset, pWidth, layout.Height);
-                    DrawCodeGutter(context, paragraph, fullText, layout, px0, yOffset);
-                    if (codeScroll)
-                    {
-                        double sx = UpdateCodeScroll(paragraph, layout, pWidth, hasPreedit ? _preeditText!.Length : 0);
-                        px -= sx;
-                        if (chrome) DrawCodeScrollBar(context, paragraph, layout, px0, yOffset, pWidth, sx);
-                    }
+                    DrawCodeBackground(context, paragraph, px0, yOffset, pWidth, viewH);
+                    var (sx, sy) = UpdateCodeScroll(paragraph, layout, codeScroll ? pWidth : double.PositiveInfinity, viewH,
+                        hasPreedit ? _preeditText!.Length : 0);
+                    px -= sx;
+                    ty -= sy;
+                    if (chrome) DrawCodeScrollBars(context, paragraph, layout, px0, yOffset, pWidth, viewH, sx, sy);
                 }
+                // Lines past a cut block's height are hidden, numbers included; it scrolls to show them.
+                using var codeRowClip = codeCrop
+                    ? context.PushClip(new Rect(px0 - CodePad - CodeGutter(paragraph), yOffset, pWidth + 2 * CodePad + CodeGutter(paragraph), viewH))
+                    : default;
+                if (paragraph.IsCode) DrawCodeGutter(context, paragraph, fullText, layout, px0, ty);
                 // Long code lines are cut off at the block's edge; the block scrolls to show them.
-                using var codeClip = codeScroll ? context.PushClip(new Rect(px0 - 2, yOffset, pWidth + 4, layout.Height)) : default;
+                using var codeClip = codeScroll ? context.PushClip(new Rect(px0 - 2, yOffset, pWidth + 4, viewH)) : default;
 
                 if (selectedParagraphs?.Contains(paragraph) == true)
                 {
                     int hlStart = (paragraph == selStart!.Paragraph) ? selStart.Offset : 0;
                     int hlEnd = (paragraph == selEnd!.Paragraph) ? selEnd.Offset : fullText.Length;
                     if (hlEnd > hlStart)
-                        DrawSelectionHighlight(context, layout, hlStart, hlEnd, px, yOffset);
+                        DrawSelectionHighlight(context, layout, hlStart, hlEnd, px, ty);
                 }
 
-                if (chrome) DrawFindHighlights(context, paragraph, layout, px, yOffset);
+                if (chrome) DrawFindHighlights(context, paragraph, layout, px, ty);
 
                 if (chrome && _caretPosition != null && _caretPosition.Paragraph == paragraph)
                 {
@@ -508,16 +516,17 @@ public partial class RichEditor
                     cr = FixCaretAfterTrailingImage(layout, paragraph, _caretPosition.Offset, caretDisp, cr);
                     double th = CaretTextHeight(paragraph, _caretPosition.Offset);
                     if (cr.Height > 0 && th > cr.Height) th = cr.Height;
-                    caretPoint = new Point(px + cr.X, yOffset + cr.Y + CaretYInLine(paragraph, cr.Height, th));
+                    caretPoint = new Point(px + cr.X, ty + cr.Y + CaretYInLine(paragraph, cr.Height, th));
                     caretHeight = th;
                     _lastCaretPoint = caretPoint.Value;
-                    _caretScrolledAway = codeScroll && (caretPoint.Value.X < px0 - 1 || caretPoint.Value.X > px0 + pWidth + 1);
+                    _caretScrolledAway = codeScroll && (caretPoint.Value.X < px0 - 1 || caretPoint.Value.X > px0 + pWidth + 1)
+                        || codeCrop && (caretPoint.Value.Y < yOffset - 1 || caretPoint.Value.Y + th > yOffset + viewH + 1);
                 }
 
-                layout.Draw(context, new Point(px, yOffset));
+                layout.Draw(context, new Point(px, ty));
                 FlushInlineTableDraws(context, chrome, selectedParagraphs, selStart, selEnd, ref caretPoint, ref caretHeight);
-                if (chrome) RegisterInlineImages(context, paragraph, layout, px, yOffset);
-                yOffset += layout.Height + paragraph.MarginBottom;
+                if (chrome) RegisterInlineImages(context, paragraph, layout, px, ty);
+                yOffset += viewH + paragraph.MarginBottom;
             }
             else if (block is ImageBlock img)
             {

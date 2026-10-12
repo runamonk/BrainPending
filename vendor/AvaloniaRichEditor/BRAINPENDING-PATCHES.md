@@ -68,3 +68,8 @@ NuGet package without passing the persistence tests.
   marker, HTML writes and reads `<pre>`, JSON stores `IsCode`. `ToggleCodeBlock`,
   `InsertCodeBlock` and `PasteAsCodeAsync` (Ctrl+Alt+C / Ctrl+Alt+V) are public. `CodeLineNumbers`
   (default on) adds a fixed line-number gutter; Ctrl+A in a code block selects the block first.
+  `CodeMaxLines` cuts tall blocks to that many lines (0 = all) and they scroll up/down (wheel with
+  hand-off to the page at either end, a draggable bar, caret follow; arrow keys enter at the
+  first/last line). `Paragraph.CodeMaxLines` is a block's own limit from its resize grip: >0 lines,
+  0 follows the editor, <0 always full. Saved as `{\*\arcodeN}`, JSON, and `data-are-lines`.
+  Page view always shows every line.

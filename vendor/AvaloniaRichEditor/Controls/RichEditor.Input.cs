@@ -109,7 +109,7 @@ public partial class RichEditor
 
         _caretBlock = null;
 
-        if (TryStartCodeBarDrag(point))
+        if (TryStartCodeBarDrag(point, e.ClickCount))
         {
             e.Pointer.Capture(this);
             e.Handled = true;
@@ -714,9 +714,9 @@ public partial class RichEditor
             }
         }
 
-        if (IsOverCodeBar(point))
+        if (CodeChromeCursor(point) is { } codeCursor)
         {
-            Cursor = Avalonia.Input.Cursor.Default;
+            Cursor = codeCursor;
             return;
         }
 
@@ -772,6 +772,7 @@ public partial class RichEditor
         if (_codeBarDrag != null)
         {
             _codeBarDrag = null;
+            _dragUndoPending = false;
             e.Pointer.Capture(null);
             return;
         }
@@ -1150,7 +1151,7 @@ public partial class RichEditor
         {
             // First navigate the current paragraph/cell's own visual lines; only cross out when already
             // on its top line.
-            if (TryMoveCaretByLineWithinParagraph(down: false))
+            if (TryMoveCaretByLineWithinParagraph(down: false) || TryEnterCodeBlock(down: false))
             {
                 ApplyCaretSelection(shift); e.Handled = true; return;
             }
@@ -1194,7 +1195,7 @@ public partial class RichEditor
         {
             // First navigate the current paragraph/cell's own visual lines; only cross out when already
             // on its bottom line.
-            if (TryMoveCaretByLineWithinParagraph(down: true))
+            if (TryMoveCaretByLineWithinParagraph(down: true) || TryEnterCodeBlock(down: true))
             {
                 ApplyCaretSelection(shift); e.Handled = true; return;
             }

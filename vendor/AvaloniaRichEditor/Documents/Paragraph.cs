@@ -68,6 +68,9 @@ public class Paragraph : Block
     public bool IsQuote { get; set; } = false;
     /// <summary>A code block: monospace, shaded, whitespace kept as typed. Lines are soft '\n' breaks.</summary>
     public bool IsCode { get; set; } = false;
+    /// <summary>How many lines a code block shows before it scrolls: 0 follows the editor's
+    /// <c>CodeMaxLines</c>, a negative value always shows every line.</summary>
+    public int CodeMaxLines { get; set; } = 0;
     /// <summary>Nested list depth (0 = top level).</summary>
     public int ListLevel { get; set; } = 0;
     public int? ListStart { get; set; }
@@ -91,6 +94,7 @@ public class Paragraph : Block
         Indent = source.Indent;
         IsQuote = source.IsQuote;
         IsCode = source.IsCode;
+        CodeMaxLines = source.CodeMaxLines;
         ListLevel = source.ListLevel;
         ListStart = source.ListStart;
     }

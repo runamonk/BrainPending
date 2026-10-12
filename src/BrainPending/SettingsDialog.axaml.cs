@@ -46,6 +46,7 @@ public partial class SettingsDialog : Window
         OpenAttachmentsOnClick.IsChecked = editor.OpenAttachmentsOnClick;
         CodeWrap.IsChecked = editor.CodeWrap;
         CodeLineNumbers.IsChecked = editor.CodeLineNumbers;
+        CodeMaxLines.Value = editor.CodeMaxLines;
         CheckOnStartup.IsChecked = updates.CheckOnStartup;
         EveryDays.Value = updates.EveryDays;
         UpdateEveryDaysRow();
@@ -149,7 +150,7 @@ public partial class SettingsDialog : Window
     private void Save_Click(object? sender, RoutedEventArgs e) => Close(new Result(
         new EditorSettings(FontFamilies.SelectedItem as string ?? new EditorSettings().FontFamily, (double)(FontSizeInput.Value ?? 12),
             _color is { } c ? Hex(c) : null, EditAttachmentsInPlace.IsChecked == true,
-            OpenAttachmentsOnClick.IsChecked == true) { CodeWrap = CodeWrap.IsChecked == true, CodeLineNumbers = CodeLineNumbers.IsChecked == true, CodeFontFamily = SelectedCodeFont },
+            OpenAttachmentsOnClick.IsChecked == true) { CodeWrap = CodeWrap.IsChecked == true, CodeLineNumbers = CodeLineNumbers.IsChecked == true, CodeFontFamily = SelectedCodeFont, CodeMaxLines = (int)(CodeMaxLines.Value ?? 0) },
         _updates with { CheckOnStartup = CheckOnStartup.IsChecked == true, EveryDays = (int)(EveryDays.Value ?? 0) }));
 
     private void Cancel_Click(object? sender, RoutedEventArgs e) => Close();

@@ -240,7 +240,8 @@ public partial class RichEditor : Control
 
     static RichEditor()
     {
-        AffectsRender<RichEditor>(DocumentProperty, SelectionBrushProperty, CaretBrushProperty, CodeBackgroundProperty);
+        AffectsRender<RichEditor>(DocumentProperty, SelectionBrushProperty, CaretBrushProperty, CodeBackgroundProperty, CodeMaxLinesProperty);
+        AffectsMeasure<RichEditor>(CodeMaxLinesProperty);
         IsReadOnlyProperty.Changed.AddClassHandler<RichEditor>((x, e) => x.OnReadOnlyChanged(e.GetNewValue<bool>()));
     }
 
@@ -303,6 +304,7 @@ public partial class RichEditor : Control
             _layoutCache.Clear();
             _tableLayoutCache.Clear();
             _codeScroll.Clear();
+            _codeScrollY.Clear();
             ResetInteractionState(); // selections/modes point into the document being replaced
             if (Document != null) UpdateParents(Document);
             SyncPageSetupOnDocumentChanged();

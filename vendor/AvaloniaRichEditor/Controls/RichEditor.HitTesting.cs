@@ -70,7 +70,7 @@ public partial class RichEditor
                 // Mirrors the caret walk's inline-table descent, so a link inside an inline table is
                 // hoverable and clickable rather than reading as plain text.
                 if (InlineTableLinkDescent(paragraph, ft, plink, top, p) is { } inlineLink) return inlineLink;
-                var hit = ft.HitTestPoint(new Point(p.X - plink, p.Y - top));
+                var hit = ft.HitTestPoint(new Point(p.X - plink, p.Y - top + CodeScrollY(paragraph)));
                 return hit.IsInside ? RunAtOffset(paragraph, hit.TextPosition) : null;
             }
         }
@@ -242,7 +242,7 @@ public partial class RichEditor
                 // caret and link hit-tests, whose indices must stay logical offsets, and to pagination.
                 // The measure walk applies the composition height on top (MeasureContentHeight).
                 paraLayout = BuildTextLayout(p, ParagraphWrapWidth(p, maxWidth));
-                return paraLayout.Height;
+                return CodeViewHeight(p, paraLayout);
             default:
                 return 0;
         }
@@ -580,7 +580,7 @@ public partial class RichEditor
                         // text scrolled away underneath it.
                         double hx = paragraph.IsCode ? Math.Max(p.X, ParaLeft(paragraph)) : p.X;
                         bestLocalIndex = HitTestLogicalIndex(paragraph, ParagraphWrapWidth(paragraph, maxWidth),
-                            ft, new Point(hx - ppos, p.Y - top));
+                            ft, new Point(hx - ppos, p.Y - top + CodeScrollY(paragraph)));
                     }
                 }
             }

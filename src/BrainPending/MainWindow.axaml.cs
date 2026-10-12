@@ -1235,11 +1235,11 @@ public partial class MainWindow : Window
         await AttachFiles(files.Select(f => f.TryGetLocalPath()).OfType<string>().ToArray(), false);
     });
 
-    // Dropped images still embed as pictures; anything else becomes an attachment.
-    private bool HandleFileDrop(string[] paths)
+    // Dropped images embed as pictures unless Shift is held; anything else becomes an attachment.
+    private bool HandleFileDrop(string[] paths, bool shift)
     {
         if (_workspace == null || _thought == null || _inDialog) return true;
-        _ = Run(() => AttachFiles(paths, true));
+        _ = Run(() => AttachFiles(paths, !shift));
         return true;
     }
 

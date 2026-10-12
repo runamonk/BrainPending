@@ -48,7 +48,7 @@ NuGet package without passing the persistence tests.
 - `LinkHandler` lets the app handle notebook attachment links before the editor's
   normal HTTP/HTTPS-only launcher. Other local/custom schemes remain blocked.
 - `FileDropHandler` lets the app take dropped files (as attachments) before the editor's
-  image-only drop.
+  image-only drop, and says whether Shift was held.
 - `LinkMenuItems` lets the app replace a link's right-click items (attachment open/save/delete).
 - Image right-click menus drop Size, Inline with Text, Margin and Replace Image.
 - ↑ from a top-level paragraph aims at the bottom of the block above instead of a fixed 20px step,

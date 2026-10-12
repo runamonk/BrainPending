@@ -233,8 +233,8 @@ public partial class RichEditor
     }
 
     /// <summary>Lets the host take dropped files (e.g. as attachments). Return true when handled;
-    /// otherwise each file is inserted as an image.</summary>
-    public Func<string[], bool>? FileDropHandler { get; set; }
+    /// otherwise each file is inserted as an image. The flag is true when Shift is held.</summary>
+    public Func<string[], bool, bool>? FileDropHandler { get; set; }
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
@@ -247,7 +247,7 @@ public partial class RichEditor
         var files = e.DataTransfer.TryGetFiles();
         if (files == null) return;
         var paths = files.Select(f => f.Path?.LocalPath).OfType<string>().Where(p => p.Length > 0).ToArray();
-        if (FileDropHandler?.Invoke(paths) == true) return;
+        if (FileDropHandler?.Invoke(paths, e.KeyModifiers.HasFlag(KeyModifiers.Shift)) == true) return;
         if (!AllowImages) return;
         foreach (var path in paths)
         {

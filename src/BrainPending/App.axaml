@@ -41,6 +41,12 @@
             <Setter Property="ToolTip.VerticalOffset" Value="5" />
             <Setter Property="ToolTip.HorizontalOffset" Value="5" />
         </Style>
+        <!-- Tooltips follow the theme like everything else. -->
+        <Style Selector="ToolTip">
+            <Setter Property="Background" Value="{DynamicResource AppTooltipBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AppLineBrush}" />
+        </Style>
         <Style Selector="Window">
             <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />

@@ -58,9 +58,14 @@
                 <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
                   <editor:RichEditor x:Name="PreviewEditor" IsReadOnly="True" DefaultFontSize="12" />
                 </ScrollViewer>
-                <Border x:Name="PreviewAccent" Grid.Row="3" Padding="12,8" CornerRadius="6" HorizontalAlignment="Left">
-                  <TextBlock x:Name="PreviewAccentText" Text="Write a thought" />
-                </Border>
+                <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="12">
+                  <Border x:Name="PreviewAccent" Padding="12,8" CornerRadius="6" VerticalAlignment="Center">
+                    <TextBlock x:Name="PreviewAccentText" Text="Write a thought" />
+                  </Border>
+                  <Border x:Name="PreviewTooltip" Padding="8,5" CornerRadius="4" BorderThickness="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="PreviewTooltipText" Text="A tooltip" FontSize="12" />
+                  </Border>
+                </StackPanel>
               </Grid>
             </Border>
           </Grid>

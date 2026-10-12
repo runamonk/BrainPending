@@ -134,6 +134,28 @@ public sealed class ThemeEditorTests : IDisposable
         Assert.Equal("#ABCDEF", catalog.Themes.First(t => t.Name == "Dracula").Swatch);
     }
 
+    [AvaloniaFact]
+    public void TooltipsUseTheThemeColors()
+    {
+        var dracula = AppThemes.All.First(t => t.Name == "Dracula");
+        AppThemes.Apply(dracula);
+        try
+        {
+            var button = new Button { Content = "Hover me" };
+            var tip = new ToolTip { Content = "A tooltip" };
+            ToolTip.SetTip(button, tip);
+            var window = new Window { Content = button, Width = 300, Height = 200 };
+            window.Show();
+            ToolTip.SetIsOpen(button, true);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.Equal(Avalonia.Media.Color.Parse(dracula.TooltipOrDefault), ((Avalonia.Media.ISolidColorBrush)tip.Background!).Color);
+            Assert.Equal(Avalonia.Media.Color.Parse(dracula.Text), ((Avalonia.Media.ISolidColorBrush)tip.Foreground!).Color);
+            Assert.Equal(Avalonia.Media.Color.Parse(dracula.Line), ((Avalonia.Media.ISolidColorBrush)tip.BorderBrush!).Color);
+            window.Close();
+        }
+        finally { AppThemes.Apply(AppThemes.All.First(t => t.Name == "Light")); }
+    }
+
     [Fact]
     public void ContrastMatchesTheUsualFormula()
     {

@@ -26,6 +26,7 @@ public partial class ThemeEditorDialog : Window
         new("Line", "Borders and dividers", "Outlines, separators and control borders."),
         new("Link", "Links", "Links in thoughts."),
         new("Code", "Code blocks", "Shading behind code blocks. Auto blends the background toward the text.", true),
+        new("Tooltip", "Tooltips", "Background of the hints that show when you hover. Auto blends the background toward the text.", true),
         new("Swatch", "Menu dot", "The dot beside the theme in the themes menu. Auto uses the accent.", true),
     ];
 
@@ -84,7 +85,7 @@ public partial class ThemeEditorDialog : Window
     private static string? Get(AppColorTheme t, string key) => key switch
     {
         "Surface" => t.Surface, "Text" => t.Text, "Accent" => t.Accent, "Selection" => t.Selection,
-        "Icon" => t.Icon, "Line" => t.Line, "Link" => t.Link, "Code" => t.Code, "Swatch" => t.Swatch,
+        "Icon" => t.Icon, "Line" => t.Line, "Link" => t.Link, "Code" => t.Code, "Tooltip" => t.Tooltip, "Swatch" => t.Swatch,
         _ => null,
     };
 
@@ -92,13 +93,13 @@ public partial class ThemeEditorDialog : Window
     {
         "Surface" => t with { Surface = value! }, "Text" => t with { Text = value! }, "Accent" => t with { Accent = value! },
         "Selection" => t with { Selection = value! }, "Icon" => t with { Icon = value! }, "Line" => t with { Line = value! },
-        "Link" => t with { Link = value! }, "Code" => t with { Code = value }, "Swatch" => t with { Swatch = value },
+        "Link" => t with { Link = value! }, "Code" => t with { Code = value }, "Tooltip" => t with { Tooltip = value }, "Swatch" => t with { Swatch = value },
         _ => t,
     };
 
     // What an empty optional color shows as.
     private static string Shown(AppColorTheme t, string key) =>
-        Get(t, key) ?? (key == "Code" ? t.CodeOrDefault : t.Accent);
+        Get(t, key) ?? key switch { "Code" => t.CodeOrDefault, "Tooltip" => t.TooltipOrDefault, _ => t.Accent };
 
     private static string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
@@ -244,6 +245,9 @@ public partial class ThemeEditorDialog : Window
         PreviewIcon.Foreground = Brush(theme.Icon);
         PreviewSelection.Background = Brush(theme.Selection);
         PreviewAccent.Background = Brush(theme.Accent);
+        PreviewTooltip.Background = Brush(theme.TooltipOrDefault);
+        PreviewTooltip.BorderBrush = Brush(theme.Line);
+        PreviewTooltipText.Foreground = Brush(theme.Text);
         PreviewAccentText.Foreground = Brush(theme.Dark ? theme.Surface : "#FFFFFF");
         PreviewEditor.LinkForeground = Brush(theme.Link);
         PreviewEditor.CodeBackground = Brush(theme.CodeOrDefault);
@@ -283,6 +287,7 @@ public partial class ThemeEditorDialog : Window
             ("Text on the background", t.Text, t.Surface),
             ("Links on the background", t.Link, t.Surface),
             ("Text on the selected item", t.Text, t.Selection),
+            ("Tooltip text", t.Text, t.TooltipOrDefault),
             ("Button text on the accent", t.Dark ? t.Surface : "#FFFFFF", t.Accent),
         };
         var problems = pairs.Select(p => (p.what, ratio: Contrast(p.fore, p.back))).Where(p => p.ratio < 4.5)

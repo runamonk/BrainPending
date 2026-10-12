@@ -9,9 +9,11 @@ namespace BrainPending;
 
 // Swatch is the menu circle's color; without one the menu shows Accent.
 // Code shades code blocks; without one it is Surface moved slightly toward Text.
-internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon, string Line, string Link, string? Swatch = null, string? Code = null)
+// Tooltip is the tooltip background; without one it is Surface moved a little further toward Text.
+internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon, string Line, string Link, string? Swatch = null, string? Code = null, string? Tooltip = null)
 {
     public string CodeOrDefault => Code ?? AppThemes.Mix(Surface, Text, 0.08);
+    public string TooltipOrDefault => Tooltip ?? AppThemes.Mix(Surface, Text, 0.12);
 }
 
 internal static class AppThemes
@@ -110,6 +112,7 @@ internal static class AppThemes
         Brush("AppIconBrush", theme.Icon);
         Brush("AppLinkBrush", theme.Link);
         Brush("AppCodeBrush", theme.CodeOrDefault);
+        Brush("AppTooltipBrush", theme.TooltipOrDefault);
         Brush("AppSelectionBrush", theme.Selection);
         Brush("AppNoticeBrush", theme.Dark ? theme.Selection : "#FFF0CA");
         Brush("AppNoticeTextBrush", theme.Dark ? theme.Text : "#594718");

@@ -27,6 +27,15 @@ public partial class RichEditorToolbar : UserControl
         set => SetValue(CompactProperty, value);
     }
 
+    /// <summary>The background of a toggle button that is on, such as Bold or Word Wrap.</summary>
+    public static readonly StyledProperty<IBrush> ActiveBackgroundProperty =
+        AvaloniaProperty.Register<RichEditorToolbar, IBrush>(nameof(ActiveBackground), ActiveBrush);
+    public IBrush ActiveBackground
+    {
+        get => GetValue(ActiveBackgroundProperty);
+        set => SetValue(ActiveBackgroundProperty, value);
+    }
+
     /// <inheritdoc cref="Target"/>
     public static readonly StyledProperty<RichEditor?> TargetProperty =
         AvaloniaProperty.Register<RichEditorToolbar, RichEditor?>(nameof(Target));
@@ -282,6 +291,7 @@ public partial class RichEditorToolbar : UserControl
     {
         base.OnPropertyChanged(change);
         if (change.Property == CompactProperty) { Build(); Sync(); }
+        if (change.Property == ActiveBackgroundProperty) Sync();
         if (change.Property == TargetProperty)
         {
             if (change.OldValue is RichEditor old)
@@ -1001,10 +1011,10 @@ public partial class RichEditorToolbar : UserControl
         var f = rt.GetCaretFormat();
         var selectionFont = rt.GetSelectionFont(f);
 
-        static void SetActive(Button? b, bool active)
+        void SetActive(Button? b, bool active)
         {
             if (b == null) return;
-            if (active) b.Background = ActiveBrush;
+            if (active) b.Background = ActiveBackground;
             else b.Background = Brushes.Transparent;
         }
         SetActive(_boldBtn, f.Bold);

@@ -70,6 +70,7 @@ public partial class MainWindow : Window
         RichEditorLocalization.Language = "en";
         EditorView.Toolbar.ToolbarLevel = ToolbarLevel.Normal;
         EditorView.Toolbar.Compact = true;
+        EditorView.Toolbar.Bind(RichEditorToolbar.ActiveBackgroundProperty, new DynamicResourceExtension("AppSelectionBrush"));
         EditorView.Toolbar.AttachFileRequested += AttachFile_Click;
         EditorView.Toolbar.CustomizeRequested += CustomizeToolbar_Click;
         EditorView.Editor.TextMenuPinnedItems = EditorMenuItems;

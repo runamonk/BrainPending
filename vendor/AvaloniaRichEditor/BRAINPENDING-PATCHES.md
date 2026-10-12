@@ -73,3 +73,5 @@ NuGet package without passing the persistence tests.
   first/last line). `Paragraph.CodeMaxLines` is a block's own limit from its resize grip: >0 lines,
   0 follows the editor, <0 always full. Saved as `{\*\arcodeN}`, JSON, and `data-are-lines`.
   Page view always shows every line.
+- Toolbar `ActiveBackground` sets the background of toggle buttons that are on (Bold, Word Wrap, …);
+  the default is the original slate blue, and Brain Pending binds it to the theme's selection color.

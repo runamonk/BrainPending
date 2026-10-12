@@ -156,6 +156,33 @@ public sealed class ThemeEditorTests : IDisposable
         finally { AppThemes.Apply(AppThemes.All.First(t => t.Name == "Light")); }
     }
 
+    [AvaloniaFact]
+    public void ToolbarOnButtonsUseTheSelectionColor()
+    {
+        var dracula = AppThemes.All.First(t => t.Name == "Dracula");
+        AppThemes.Apply(dracula);
+        try
+        {
+            var editor = new AvaloniaRichEditor.Controls.RichEditor { WordWrap = true };
+            var toolbar = new AvaloniaRichEditor.Controls.RichEditorToolbar { Compact = true, Target = editor };
+            toolbar.Bind(AvaloniaRichEditor.Controls.RichEditorToolbar.ActiveBackgroundProperty,
+                new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppSelectionBrush"));
+            var window = new Window { Content = new StackPanel { Children = { toolbar, editor } }, Width = 900, Height = 300 };
+            window.Show();
+            editor.LoadHtml("<p>text</p>");
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            var wrap = toolbar.GetVisualDescendants().OfType<Button>().First(b => ToolTip.GetTip(b) as string == "Word Wrap");
+            Assert.Equal(Avalonia.Media.Color.Parse(dracula.Selection), ((Avalonia.Media.ISolidColorBrush)wrap.Background!).Color);
+
+            var light = AppThemes.All.First(t => t.Name == "Light");
+            AppThemes.Apply(light);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Assert.Equal(Avalonia.Media.Color.Parse(light.Selection), ((Avalonia.Media.ISolidColorBrush)wrap.Background!).Color);
+            window.Close();
+        }
+        finally { AppThemes.Apply(AppThemes.All.First(t => t.Name == "Light")); }
+    }
+
     [Fact]
     public void ContrastMatchesTheUsualFormula()
     {

@@ -106,6 +106,7 @@ public sealed class CodeBlockTests
         try
         {
             editor.InsertCodeBlock("if (x)\n    a();");
+            Press(window, Key.End);
             Press(window, Key.Enter);
             editor.InsertText("b();");
             var code = editor.Document!.Blocks.OfType<Paragraph>().First(p => p.IsCode);
@@ -225,6 +226,34 @@ public sealed class CodeBlockTests
             Assert.InRange(at, line.Length / 2, line.Length - 10);
         }
         finally { window.Close(); }
+    }
+
+    [AvaloniaFact]
+    public void PastedBlockOpensAtColumnOne()
+    {
+        string line = string.Join(" ", Enumerable.Repeat("someIdentifier", 40));
+        var (editor, window) = Open("<p></p>", width: 300);
+        try
+        {
+            editor.InsertCodeBlock("short\n" + line);
+            window.CaptureRenderedFrame();
+            editor.InsertText("X");
+            var code = editor.Document!.Blocks.OfType<Paragraph>().First(p => p.IsCode);
+            Assert.Equal("short\nX" + line, Text(code));
+        }
+        finally { window.Close(); }
+    }
+
+    [Fact]
+    public void ThemesWithoutACodeColorStillLoadAndBlendOne()
+    {
+        var theme = Assert.Single(ThemeCatalog.Parse("""
+            [{ "Name": "Old", "Dark": true, "Surface": "#000000", "Text": "#FFFFFF", "Accent": "#111111",
+               "Selection": "#222222", "Icon": "#333333", "Line": "#444444", "Link": "#555555" }]
+            """));
+        Assert.Null(theme.Code);
+        Assert.Equal("#141414", theme.CodeOrDefault);
+        Assert.All(AppThemes.All, t => Assert.NotNull(t.Code));
     }
 
     [AvaloniaFact]

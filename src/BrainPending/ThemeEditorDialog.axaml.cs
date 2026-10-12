@@ -80,11 +80,15 @@ public partial class ThemeEditorDialog : Window
         PreviewAccent.Background = Brush(theme.Accent);
         PreviewAccentText.Foreground = Brush(theme.Dark ? theme.Surface : "#FFFFFF");
         PreviewEditor.LinkForeground = Brush(theme.Link);
+        PreviewEditor.CodeBackground = Brush(theme.CodeOrDefault);
         var document = new FlowDocument();
         var paragraph = new Paragraph();
         paragraph.Inlines.Add(new Run { Text = "Capture an idea, plan your day, or keep something worth remembering.\n\n", Foreground = Brush(theme.Text), FontSize = 12 });
         paragraph.Inlines.Add(new Run { Text = "A link in your thought", NavigateUri = "https://example.com", FontSize = 12 });
         document.Blocks.Add(paragraph);
+        var code = new Paragraph { IsCode = true, MarginTop = 6, MarginBottom = 6 };
+        code.Inlines.Add(new Run { Text = "remember(idea);", Foreground = Brush(theme.Text), FontSize = 12 });
+        document.Blocks.Add(code);
         PreviewEditor.Document = document;
         // Preview brushes stay local: typing must never change the application's palette.
     }

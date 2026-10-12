@@ -240,7 +240,7 @@ public partial class RichEditor : Control
 
     static RichEditor()
     {
-        AffectsRender<RichEditor>(DocumentProperty, SelectionBrushProperty, CaretBrushProperty);
+        AffectsRender<RichEditor>(DocumentProperty, SelectionBrushProperty, CaretBrushProperty, CodeBackgroundProperty);
         IsReadOnlyProperty.Changed.AddClassHandler<RichEditor>((x, e) => x.OnReadOnlyChanged(e.GetNewValue<bool>()));
     }
 

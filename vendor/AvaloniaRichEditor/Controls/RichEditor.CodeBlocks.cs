@@ -16,7 +16,15 @@ namespace AvaloniaRichEditor.Controls;
 // Code blocks: one paragraph with IsCode set, its lines split by soft '\n' breaks.
 public partial class RichEditor
 {
-    private static readonly ImmutableSolidColorBrush CodeShade = new(Color.FromArgb(34, 128, 128, 128));
+    /// <summary>The shading behind code blocks. The default is a light gray that works on any background.</summary>
+    public static readonly StyledProperty<IBrush> CodeBackgroundProperty =
+        AvaloniaProperty.Register<RichEditor, IBrush>(nameof(CodeBackground), new ImmutableSolidColorBrush(Color.FromArgb(34, 128, 128, 128)));
+
+    public IBrush CodeBackground
+    {
+        get => GetValue(CodeBackgroundProperty);
+        set => SetValue(CodeBackgroundProperty, value);
+    }
     private static readonly ImmutableSolidColorBrush CodeBarBrush = new(Color.FromArgb(110, 128, 128, 128));
     private static readonly ImmutableSolidColorBrush CodeMarkBrush = new(Color.FromArgb(150, 128, 128, 128));
 
@@ -33,7 +41,7 @@ public partial class RichEditor
     {
         double above = Math.Min(4, p.MarginTop), below = Math.Min(4, p.MarginBottom);
         double gutter = CodeGutter(p);
-        context.DrawRectangle(CodeShade, null,
+        context.DrawRectangle(CodeBackground, null,
             new Rect(textLeft - CodePad - gutter, y - above, width + 2 * CodePad + gutter, height + above + below), 4, 4);
     }
 
@@ -368,7 +376,8 @@ public partial class RichEditor
             blocks.Insert(at + 1, code);
         }
         EnsureParagraphAfter(code);
-        _caretPosition = new TextPointer(code, text.Length);
+        // Start of the last line: the block opens at column 1 instead of scrolled to the end.
+        _caretPosition = new TextPointer(code, text.LastIndexOf('\n') + 1);
         CollapseSelectionToCaret();
         MarkTextChanged();
         ResetCaretBlink();

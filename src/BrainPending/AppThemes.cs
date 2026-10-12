@@ -8,7 +8,11 @@ using Avalonia.Themes.Fluent;
 namespace BrainPending;
 
 // Swatch is the menu circle's color; without one the menu shows Accent.
-internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon, string Line, string Link, string? Swatch = null);
+// Code shades code blocks; without one it is Surface moved slightly toward Text.
+internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon, string Line, string Link, string? Swatch = null, string? Code = null)
+{
+    public string CodeOrDefault => Code ?? AppThemes.Mix(Surface, Text, 0.08);
+}
 
 internal static class AppThemes
 {
@@ -34,6 +38,15 @@ internal static class AppThemes
     }
 
     public static readonly AppColorTheme[] All = LoadDefaults();
+
+    // Moves color `from` toward `to` by `amount` (0-1).
+    public static string Mix(string from, string to, double amount)
+    {
+        var a = Color.Parse(from);
+        var b = Color.Parse(to);
+        byte Lerp(byte x, byte y) => (byte)Math.Round(x + (y - x) * amount);
+        return $"#{Lerp(a.R, b.R):X2}{Lerp(a.G, b.G):X2}{Lerp(a.B, b.B):X2}";
+    }
 
     private static AppColorTheme[] LoadDefaults()
     {
@@ -96,6 +109,7 @@ internal static class AppThemes
         Brush("AppAccentTextBrush", theme.Dark ? theme.Surface : "#FFFFFF");
         Brush("AppIconBrush", theme.Icon);
         Brush("AppLinkBrush", theme.Link);
+        Brush("AppCodeBrush", theme.CodeOrDefault);
         Brush("AppSelectionBrush", theme.Selection);
         Brush("AppNoticeBrush", theme.Dark ? theme.Selection : "#FFF0CA");
         Brush("AppNoticeTextBrush", theme.Dark ? theme.Text : "#594718");

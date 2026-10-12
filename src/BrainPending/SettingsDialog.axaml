@@ -48,7 +48,7 @@
             <ComboBox x:Name="CodeFonts" Grid.Column="1" HorizontalAlignment="Stretch" MaxDropDownHeight="320" AutomationProperties.Name="Code block font" />
           </Grid>
           <TextBlock Text="Only fixed-width fonts are listed, so code lines up." TextWrapping="Wrap" Opacity="0.65" Margin="70,-8,0,0" />
-          <Border Background="#22808080" CornerRadius="4" Padding="12,10">
+          <Border Background="{DynamicResource AppCodeBrush}" CornerRadius="4" Padding="12,10">
             <TextBlock x:Name="CodePreview" Text="if (thoughts.Pending)&#10;    return Save(notes);" />
           </Border>
           <CheckBox x:Name="CodeWrap" Content="Wrap long lines" />

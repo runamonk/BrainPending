@@ -35,6 +35,7 @@
     </Application.Resources>
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
          <Style Selector=":is(Control)">
             <Setter Property="ToolTip.Placement" Value="Top" />
             <Setter Property="ToolTip.VerticalOffset" Value="5" />

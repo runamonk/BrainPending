@@ -2,46 +2,84 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:editor="using:AvaloniaRichEditor.Controls"
         x:Class="BrainPending.ThemeEditorDialog"
-        Title="Edit themes" Width="1040" Height="720" MinWidth="720" MinHeight="460"
+        Title="Edit themes" Width="1040" Height="720" MinWidth="760" MinHeight="520"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+  <Window.Styles>
+    <!-- Fluent's tab headers are sized for page titles. -->
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="MinHeight" Value="34" />
+      <Setter Property="Padding" Value="10,4" />
+    </Style>
+  </Window.Styles>
   <Grid Margin="20" RowDefinitions="Auto,*,Auto,Auto">
-    <StackPanel Spacing="5" Margin="0,0,0,16">
+    <StackPanel Spacing="5" Margin="0,0,0,8">
       <TextBlock Text="Edit themes" FontSize="23" />
-      <TextBlock Text="Edit colors or duplicate a theme with a new name. Preview changes before saving." TextWrapping="Wrap" Opacity="0.7" />
+      <TextBlock Text="Pick a theme, or start a new one, and click a color to change it. Nothing changes until you save." TextWrapping="Wrap" Opacity="0.7" />
     </StackPanel>
-    <Grid Grid.Row="1" ColumnDefinitions="3*,10,2*">
-      <Grid RowDefinitions="Auto,*">
-        <TextBlock Text="themes.json" Margin="0,0,0,8" />
-        <TextBox x:Name="JsonEditor" Grid.Row="1" AcceptsReturn="True" AcceptsTab="True"
-                 FontFamily="Consolas" FontSize="13" TextWrapping="NoWrap"
-                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                 ScrollViewer.VerticalScrollBarVisibility="Auto"
-                 AutomationProperties.Name="Theme JSON" TextChanged="Json_Changed" />
-      </Grid>
-      <GridSplitter Grid.Column="1" Width="2" HorizontalAlignment="Center" ResizeDirection="Columns" />
-      <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*">
-        <TextBlock Text="Preview" Margin="0,0,0,8" />
-        <ComboBox x:Name="ThemeChoice" Grid.Row="1" HorizontalAlignment="Stretch"
-                  AutomationProperties.Name="Preview theme" SelectionChanged="Theme_Changed" Margin="0,0,0,12" />
-        <Border x:Name="PreviewSurface" Grid.Row="2" BorderThickness="1" CornerRadius="8" Padding="16">
-          <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
-            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
-              <TextBlock x:Name="PreviewIcon" Text="✎" FontSize="24" />
-              <TextBlock x:Name="PreviewTitle" Grid.Column="1" Text="A thought of your own" FontSize="20" TextWrapping="Wrap" />
+
+    <TabControl x:Name="Tabs" Grid.Row="1" Padding="0,12,0,0" SelectionChanged="Tabs_Changed">
+      <TabItem Header="Colors">
+        <Grid ColumnDefinitions="3*,20,2*">
+          <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+              <ComboBox x:Name="ThemeChoice" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" MaxDropDownHeight="400"
+                        AutomationProperties.Name="Theme" SelectionChanged="Theme_Changed" />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                <Button x:Name="NewButton" Content="New ▾" Classes="action quiet" ToolTip.Tip="Start a new theme from Light or Dark" />
+                <Button x:Name="CopyButton" Content="Copy" Classes="action quiet" ToolTip.Tip="Copy this theme" Click="Copy_Click" />
+                <Button x:Name="DeleteButton" Content="Delete" Classes="action quiet" ToolTip.Tip="Delete this theme" Click="Delete_Click" />
+                <Button x:Name="ResetButton" Content="Reset" Classes="action quiet" ToolTip.Tip="Put this built-in theme back to its original colors" Click="Reset_Click" />
+              </StackPanel>
             </Grid>
-            <Border x:Name="PreviewSelection" Grid.Row="1" Padding="10" CornerRadius="4">
-              <TextBlock x:Name="PreviewSelectedText" Text="Selected thought" />
-            </Border>
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+              <TextBlock Text="Name" VerticalAlignment="Center" />
+              <TextBox x:Name="ThemeName" Grid.Column="1" AutomationProperties.Name="Theme name" TextChanged="Name_Changed" />
+              <CheckBox x:Name="DarkCheck" Grid.Column="2" Content="Dark theme" ToolTip.Tip="Use dark scroll bars, menus and other built-in controls"
+                        IsCheckedChanged="Dark_Changed" />
+            </Grid>
             <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
-              <editor:RichEditor x:Name="PreviewEditor" IsReadOnly="True" DefaultFontSize="12" />
+              <StackPanel x:Name="ColorRows" Spacing="10" Margin="0,0,14,0" />
             </ScrollViewer>
-            <Border x:Name="PreviewAccent" Grid.Row="3" Padding="12,8" CornerRadius="6" HorizontalAlignment="Left">
-              <TextBlock x:Name="PreviewAccentText" Text="Write a thought" />
+            <TextBlock x:Name="ContrastWarning" Grid.Row="3" TextWrapping="Wrap" Foreground="{DynamicResource AppErrorBrush}" />
+          </Grid>
+
+          <Grid Grid.Column="2" RowDefinitions="Auto,*">
+            <TextBlock Text="Preview" Margin="0,0,0,8" />
+            <Border x:Name="PreviewSurface" Grid.Row="1" BorderThickness="1" CornerRadius="8" Padding="16">
+              <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                  <TextBlock x:Name="PreviewIcon" Text="✎" FontSize="24" />
+                  <TextBlock x:Name="PreviewTitle" Grid.Column="1" Text="A thought of your own" FontSize="20" TextWrapping="Wrap" />
+                </Grid>
+                <Border x:Name="PreviewSelection" Grid.Row="1" Padding="10" CornerRadius="4">
+                  <TextBlock x:Name="PreviewSelectedText" Text="Selected thought" />
+                </Border>
+                <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+                  <editor:RichEditor x:Name="PreviewEditor" IsReadOnly="True" DefaultFontSize="12" />
+                </ScrollViewer>
+                <Border x:Name="PreviewAccent" Grid.Row="3" Padding="12,8" CornerRadius="6" HorizontalAlignment="Left">
+                  <TextBlock x:Name="PreviewAccentText" Text="Write a thought" />
+                </Border>
+              </Grid>
             </Border>
           </Grid>
-        </Border>
-      </Grid>
-    </Grid>
+        </Grid>
+      </TabItem>
+
+      <TabItem Header="Advanced (JSON)">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Text="Every theme as JSON, for copying a theme to share or pasting one in. Changes here show on the Colors tab."
+                     TextWrapping="Wrap" Opacity="0.7" Margin="0,0,0,8" />
+          <TextBox x:Name="JsonEditor" Grid.Row="1" AcceptsReturn="True" AcceptsTab="True"
+                   FontFamily="Consolas" FontSize="13" TextWrapping="NoWrap"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   AutomationProperties.Name="Theme JSON" TextChanged="Json_Changed" />
+        </Grid>
+      </TabItem>
+    </TabControl>
+
     <TextBlock x:Name="ValidationMessage" Grid.Row="2" Margin="0,12" TextWrapping="Wrap" MaxHeight="75" />
     <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
       <TextBlock Text="Ctrl+S to save · Esc to cancel" VerticalAlignment="Center" Opacity="0.6" />

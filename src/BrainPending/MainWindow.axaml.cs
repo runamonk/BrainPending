@@ -1036,12 +1036,6 @@ public partial class MainWindow : Window
             ApplyTheme();
             SaveStatus.Text = "Themes reloaded";
         });
-        Action("Reset built-in themes", () =>
-        {
-            var backup = _themes.ResetBuiltIns();
-            ApplyTheme();
-            ShowNotice("Built-in themes restored. Custom themes kept. Backup: " + backup);
-        });
         AppearanceButton.Flyout = menu;
         menu.ShowAt(AppearanceButton);
     }

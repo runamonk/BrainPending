@@ -98,20 +98,8 @@ internal sealed class ThemeCatalog
         Themes = themes;
     }
 
-    public string ResetBuiltIns()
-    {
-        EnsureFile();
-        // Refuse invalid input rather than risk discarding custom themes we cannot read.
-        var current = Read();
-        var names = AppThemes.All.Select(t => t.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var restored = AppThemes.All.Concat(current.Where(t => !names.Contains(t.Name))).ToArray();
-        var backup = FilePath + $".{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.bak";
-        File.Copy(FilePath, backup);
-        Write(restored);
-        Themes = restored;
-        return backup;
-    }
+    private void Write(IEnumerable<AppColorTheme> themes) => AtomicFile.WriteAllText(FilePath, Serialize(themes));
 
-    private void Write(IEnumerable<AppColorTheme> themes) =>
-        AtomicFile.WriteAllText(FilePath, JsonSerializer.Serialize(themes, JsonOptions) + Environment.NewLine);
+    internal static string Serialize(IEnumerable<AppColorTheme> themes) =>
+        JsonSerializer.Serialize(themes, JsonOptions) + Environment.NewLine;
 }

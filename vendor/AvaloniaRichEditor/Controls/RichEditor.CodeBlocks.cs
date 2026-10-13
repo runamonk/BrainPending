@@ -25,7 +25,16 @@ public partial class RichEditor
         get => GetValue(CodeBackgroundProperty);
         set => SetValue(CodeBackgroundProperty, value);
     }
-    private static readonly ImmutableSolidColorBrush CodeBarBrush = new(Color.FromArgb(110, 128, 128, 128));
+
+    /// <summary>The code block scroll bars and resize grip. The default is a gray that works on any background.</summary>
+    public static readonly StyledProperty<IBrush> CodeBarBrushProperty =
+        AvaloniaProperty.Register<RichEditor, IBrush>(nameof(CodeBarBrush), new ImmutableSolidColorBrush(Color.FromArgb(110, 128, 128, 128)));
+
+    public IBrush CodeBarBrush
+    {
+        get => GetValue(CodeBarBrushProperty);
+        set => SetValue(CodeBarBrushProperty, value);
+    }
     private static readonly ImmutableSolidColorBrush CodeMarkBrush = new(Color.FromArgb(150, 128, 128, 128));
 
     // Space a new code block keeps above and below, which its shading grows into.

@@ -11,6 +11,14 @@
       <Setter Property="MinHeight" Value="34" />
       <Setter Property="Padding" Value="10,4" />
     </Style>
+    <!-- Fluent's plain button fill is a fixed gray; color buttons follow the theme instead. -->
+    <Style Selector="Button.color">
+      <Setter Property="Background" Value="{DynamicResource AppSurfaceBrush}" />
+    </Style>
+    <Style Selector="Button.color:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.color:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AppSelectionBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource AppLineBrush}" />
+    </Style>
   </Window.Styles>
   <Grid Margin="20" RowDefinitions="Auto,*,Auto,Auto">
     <StackPanel Spacing="5" Margin="0,0,0,8">
@@ -32,11 +40,9 @@
                 <Button x:Name="ResetButton" Content="Reset" Classes="action quiet" ToolTip.Tip="Put this built-in theme back to its original colors" Click="Reset_Click" />
               </StackPanel>
             </Grid>
-            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="10">
               <TextBlock Text="Name" VerticalAlignment="Center" />
               <TextBox x:Name="ThemeName" Grid.Column="1" AutomationProperties.Name="Theme name" TextChanged="Name_Changed" />
-              <CheckBox x:Name="DarkCheck" Grid.Column="2" Content="Dark theme" ToolTip.Tip="Use dark scroll bars, menus and other built-in controls"
-                        IsCheckedChanged="Dark_Changed" />
             </Grid>
             <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
               <StackPanel x:Name="ColorRows" Spacing="10" Margin="0,0,14,0" />
@@ -47,7 +53,7 @@
           <Grid Grid.Column="2" RowDefinitions="Auto,*">
             <TextBlock Text="Preview" Margin="0,0,0,8" />
             <Border x:Name="PreviewSurface" Grid.Row="1" BorderThickness="1" CornerRadius="8" Padding="16">
-              <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="14">
+              <Grid RowDefinitions="Auto,Auto,*,Auto,Auto" RowSpacing="14">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
                   <TextBlock x:Name="PreviewIcon" Text="✎" FontSize="24" />
                   <TextBlock x:Name="PreviewTitle" Grid.Column="1" Text="A thought of your own" FontSize="20" TextWrapping="Wrap" />
@@ -58,7 +64,13 @@
                 <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
                   <editor:RichEditor x:Name="PreviewEditor" IsReadOnly="True" DefaultFontSize="12" />
                 </ScrollViewer>
-                <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="12">
+                <StackPanel Grid.Row="3" Spacing="8">
+                  <Border x:Name="PreviewNotice" Padding="10,8" CornerRadius="4">
+                    <TextBlock x:Name="PreviewNoticeText" Text="A notice, like a saved backup" TextWrapping="Wrap" />
+                  </Border>
+                  <TextBlock x:Name="PreviewError" Text="A problem to fix" FontSize="12" />
+                </StackPanel>
+                <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="12">
                   <Border x:Name="PreviewAccent" Padding="12,8" CornerRadius="6" VerticalAlignment="Center">
                     <TextBlock x:Name="PreviewAccentText" Text="Write a thought" />
                   </Border>

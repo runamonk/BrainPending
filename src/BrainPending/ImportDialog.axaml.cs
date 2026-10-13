@@ -27,6 +27,7 @@ public partial class ImportDialog : Window
         Preview.Bind(RichEditor.ThemeForegroundProperty, new DynamicResourceExtension("AppTextBrush"));
         Preview.Bind(RichEditor.LinkForegroundProperty, new DynamicResourceExtension("AppLinkBrush"));
         Preview.Bind(RichEditor.CodeBackgroundProperty, new DynamicResourceExtension("AppCodeBrush"));
+        Preview.Bind(RichEditor.CodeBarBrushProperty, new DynamicResourceExtension("AppLineBrush"));
         AddHandler(KeyDownEvent, (_, e) =>
         {
             if (e.Key == Key.Escape) { e.Handled = true; Cancel(); }

@@ -256,6 +256,14 @@ public sealed class CodeBlockTests
         Assert.All(AppThemes.All, t => Assert.NotNull(t.Code));
     }
 
+    [Fact]
+    public void WorkedOutThemeColorsAreNotSaved()
+    {
+        var json = ThemeCatalog.Serialize(AppThemes.All);
+        Assert.DoesNotContain("OrDefault", json);
+        Assert.Equal(AppThemes.All, ThemeCatalog.Parse(json));
+    }
+
     private static string Lines(int n) => string.Join("\n", Enumerable.Range(1, n).Select(i => $"line{i}"));
 
     [AvaloniaFact]

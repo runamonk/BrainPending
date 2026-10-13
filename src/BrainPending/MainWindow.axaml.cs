@@ -85,6 +85,7 @@ public partial class MainWindow : Window
         EditorView.Editor.Bind(RichEditor.ThemeForegroundProperty, new DynamicResourceExtension("AppTextBrush"));
         EditorView.Editor.Bind(RichEditor.LinkForegroundProperty, new DynamicResourceExtension("AppLinkBrush"));
         EditorView.Editor.Bind(RichEditor.CodeBackgroundProperty, new DynamicResourceExtension("AppCodeBrush"));
+        EditorView.Editor.Bind(RichEditor.CodeBarBrushProperty, new DynamicResourceExtension("AppLineBrush"));
         EditorView.Editor.Bind(RichEditor.SelectionBrushProperty, new DynamicResourceExtension("AppSelectionBrush"));
         EditorView.Editor.AllowRemoteImagesOnPaste = false;
         EditorView.Editor.LinkHandler = HandleAttachmentLink;

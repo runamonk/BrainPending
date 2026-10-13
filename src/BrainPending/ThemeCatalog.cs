@@ -80,7 +80,8 @@ internal sealed class ThemeCatalog
             foreach (var property in typeof(AppColorTheme).GetProperties().Where(p => p.PropertyType == typeof(string) && p.Name != "Name"))
             {
                 var value = (string?)property.GetValue(theme);
-                if (value == null && property.Name is nameof(AppColorTheme.Swatch) or nameof(AppColorTheme.Code) or nameof(AppColorTheme.Tooltip)) continue; // Optional.
+                if (value == null && property.Name is nameof(AppColorTheme.Swatch) or nameof(AppColorTheme.Code) or nameof(AppColorTheme.Tooltip)
+                    or nameof(AppColorTheme.AccentText) or nameof(AppColorTheme.Notice) or nameof(AppColorTheme.NoticeText) or nameof(AppColorTheme.Error)) continue; // Optional.
                 if (value == null || !Color.TryParse(value, out _))
                     throw new InvalidDataException($"Theme '{theme.Name}' has an invalid or missing {property.Name} color.");
             }

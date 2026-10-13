@@ -76,3 +76,4 @@ NuGet package without passing the persistence tests.
 - Toolbar `ActiveBackground` sets the background of toggle buttons that are on (Bold, Word Wrap, …);
   the default is the original slate blue, and Brain Pending binds it to the theme's selection color.
 - The link dialog opens with the URL box focused and its text selected, ready for a paste.
+- `CodeBarBrush` colors the code block scroll bars and resize grip (default a translucent gray).

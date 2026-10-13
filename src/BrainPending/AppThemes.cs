@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -10,10 +11,16 @@ namespace BrainPending;
 // Swatch is the menu circle's color; without one the menu shows Accent.
 // Code shades code blocks; without one it is Surface moved slightly toward Text.
 // Tooltip is the tooltip background; without one it is Surface moved a little further toward Text.
-internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon, string Line, string Link, string? Swatch = null, string? Code = null, string? Tooltip = null)
+// AccentText, Notice, NoticeText and Error fall back to fixed light or dark colors.
+internal sealed record AppColorTheme(string Name, bool Dark, string Surface, string Text, string Accent, string Selection, string Icon, string Line, string Link,
+    string? Swatch = null, string? Code = null, string? Tooltip = null, string? AccentText = null, string? Notice = null, string? NoticeText = null, string? Error = null)
 {
-    public string CodeOrDefault => Code ?? AppThemes.Mix(Surface, Text, 0.08);
-    public string TooltipOrDefault => Tooltip ?? AppThemes.Mix(Surface, Text, 0.12);
+    [JsonIgnore] public string CodeOrDefault => Code ?? AppThemes.Mix(Surface, Text, 0.08);
+    [JsonIgnore] public string TooltipOrDefault => Tooltip ?? AppThemes.Mix(Surface, Text, 0.12);
+    [JsonIgnore] public string AccentTextOrDefault => AccentText ?? (Dark ? Surface : "#FFFFFF");
+    [JsonIgnore] public string NoticeOrDefault => Notice ?? (Dark ? Selection : "#FFF0CA");
+    [JsonIgnore] public string NoticeTextOrDefault => NoticeText ?? (Dark ? Text : "#594718");
+    [JsonIgnore] public string ErrorOrDefault => Error ?? (Dark ? "#FF7777" : "#B42318");
 }
 
 internal static class AppThemes
@@ -108,15 +115,15 @@ internal static class AppThemes
         Brush("AppSurfaceBrush", theme.Surface);
         Brush("AppTextBrush", theme.Text);
         Brush("AppAccentBrush", theme.Accent);
-        Brush("AppAccentTextBrush", theme.Dark ? theme.Surface : "#FFFFFF");
+        Brush("AppAccentTextBrush", theme.AccentTextOrDefault);
         Brush("AppIconBrush", theme.Icon);
         Brush("AppLinkBrush", theme.Link);
         Brush("AppCodeBrush", theme.CodeOrDefault);
         Brush("AppTooltipBrush", theme.TooltipOrDefault);
         Brush("AppSelectionBrush", theme.Selection);
-        Brush("AppNoticeBrush", theme.Dark ? theme.Selection : "#FFF0CA");
-        Brush("AppNoticeTextBrush", theme.Dark ? theme.Text : "#594718");
-        Brush("AppErrorBrush", theme.Dark ? "#FF7777" : "#B42318");
+        Brush("AppNoticeBrush", theme.NoticeOrDefault);
+        Brush("AppNoticeTextBrush", theme.NoticeTextOrDefault);
+        Brush("AppErrorBrush", theme.ErrorOrDefault);
         app.RequestedThemeVariant = variant;
     }
 }

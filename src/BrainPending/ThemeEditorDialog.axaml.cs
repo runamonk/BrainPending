@@ -12,22 +12,26 @@ namespace BrainPending;
 
 public partial class ThemeEditorDialog : Window
 {
-    // Each color a theme has, with a plain name and what it colors. Optional ones can be left
-    // empty and are then worked out from the others.
-    private sealed record ColorField(string Key, string Label, string Description, bool Optional = false);
+    // Each color a theme has, with a plain name and what it colors, grouped by where it shows.
+    // Optional ones can be left empty and are then worked out from the others.
+    private sealed record ColorField(string Group, string Key, string Label, string Description, bool Optional = false);
 
     private static readonly ColorField[] Fields =
     [
-        new("Surface", "Background", "Window and page background."),
-        new("Text", "Text", "Thoughts, headings and menus."),
-        new("Accent", "Accent", "Main buttons and highlights."),
-        new("Selection", "Selected item", "The selected thought, and hover fills."),
-        new("Icon", "Icons", "Toolbar and sidebar icons."),
-        new("Line", "Borders and dividers", "Outlines, separators and control borders."),
-        new("Link", "Links", "Links in thoughts."),
-        new("Code", "Code blocks", "Shading behind code blocks. Auto blends the background toward the text.", true),
-        new("Tooltip", "Tooltips", "Background of the hints that show when you hover. Auto blends the background toward the text.", true),
-        new("Swatch", "Menu dot", "The dot beside the theme in the themes menu. Auto uses the accent.", true),
+        new("Window", "Surface", "Background", "Window and page background."),
+        new("Window", "Text", "Text", "Thoughts, headings and menus."),
+        new("Window", "Icon", "Icons", "Toolbar and sidebar icons."),
+        new("Window", "Line", "Borders and dividers", "Outlines, separators, control borders and code block scroll bars."),
+        new("Window", "Swatch", "Menu dot", "The dot beside the theme in the themes menu. Auto uses the accent.", true),
+        new("Thoughts", "Link", "Links", "Links in thoughts."),
+        new("Thoughts", "Code", "Code blocks", "Shading behind code blocks. Auto blends the background toward the text.", true),
+        new("Controls", "Accent", "Accent", "Main buttons and highlights."),
+        new("Controls", "AccentText", "Button text", "Text on accent buttons. Auto uses white, or the background on dark themes.", true),
+        new("Controls", "Selection", "Selected item", "The selected thought, and hover fills."),
+        new("Controls", "Tooltip", "Tooltips", "Background of the hints that show when you hover. Auto blends the background toward the text.", true),
+        new("Messages", "Notice", "Notice bar", "Background of the message bar in the main window. Auto suits the background.", true),
+        new("Messages", "NoticeText", "Notice text", "Text on the notice bar. Auto suits the background.", true),
+        new("Messages", "Error", "Errors", "Problems to fix, like a bad thought title. Auto suits the background.", true),
     ];
 
     private ThemeCatalog? _catalog;
@@ -86,20 +90,28 @@ public partial class ThemeEditorDialog : Window
     {
         "Surface" => t.Surface, "Text" => t.Text, "Accent" => t.Accent, "Selection" => t.Selection,
         "Icon" => t.Icon, "Line" => t.Line, "Link" => t.Link, "Code" => t.Code, "Tooltip" => t.Tooltip, "Swatch" => t.Swatch,
+        "AccentText" => t.AccentText, "Notice" => t.Notice, "NoticeText" => t.NoticeText, "Error" => t.Error,
         _ => null,
     };
 
+    // Dark follows the background: it picks the built-in controls' light or dark look and the Auto colors.
     private static AppColorTheme Set(AppColorTheme t, string key, string? value) => key switch
     {
-        "Surface" => t with { Surface = value! }, "Text" => t with { Text = value! }, "Accent" => t with { Accent = value! },
+        "Surface" => t with { Surface = value!, Dark = Contrast(value!, "#000000") < Contrast(value!, "#FFFFFF") }, "Text" => t with { Text = value! }, "Accent" => t with { Accent = value! },
         "Selection" => t with { Selection = value! }, "Icon" => t with { Icon = value! }, "Line" => t with { Line = value! },
         "Link" => t with { Link = value! }, "Code" => t with { Code = value }, "Tooltip" => t with { Tooltip = value }, "Swatch" => t with { Swatch = value },
+        "AccentText" => t with { AccentText = value }, "Notice" => t with { Notice = value },
+        "NoticeText" => t with { NoticeText = value }, "Error" => t with { Error = value },
         _ => t,
     };
 
     // What an empty optional color shows as.
     private static string Shown(AppColorTheme t, string key) =>
-        Get(t, key) ?? key switch { "Code" => t.CodeOrDefault, "Tooltip" => t.TooltipOrDefault, _ => t.Accent };
+        Get(t, key) ?? key switch
+        {
+            "Code" => t.CodeOrDefault, "Tooltip" => t.TooltipOrDefault, "AccentText" => t.AccentTextOrDefault,
+            "Notice" => t.NoticeOrDefault, "NoticeText" => t.NoticeTextOrDefault, "Error" => t.ErrorOrDefault, _ => t.Accent,
+        };
 
     private static string Hex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
 
@@ -141,15 +153,24 @@ public partial class ThemeEditorDialog : Window
         UpdateStatus();
     }
 
-    // Fills the name, dark box and color rows for the selected theme.
+    // Fills the name and color rows for the selected theme.
     private void ShowTheme()
     {
         _loading = true;
         ThemeName.Text = Current.Name;
-        DarkCheck.IsChecked = Current.Dark;
         _loading = false;
         ColorRows.Children.Clear();
-        foreach (var field in Fields) ColorRows.Children.Add(ColorRow(field));
+        foreach (var group in Fields.GroupBy(f => f.Group))
+        {
+            ColorRows.Children.Add(new Border
+            {
+                BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(0, 0, 0, 4),
+                Margin = new Thickness(0, ColorRows.Children.Count == 0 ? 0 : 12, 0, 0),
+                [!Border.BorderBrushProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppLineBrush"),
+                Child = new TextBlock { Text = group.Key, FontSize = 16 },
+            });
+            foreach (var field in group) ColorRows.Children.Add(ColorRow(field));
+        }
         Changed();
     }
 
@@ -160,6 +181,7 @@ public partial class ThemeEditorDialog : Window
         var button = new Button
         {
             Width = 170, HorizontalContentAlignment = HorizontalAlignment.Left,
+            Classes = { "color" },
             Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { swatch, code } },
         };
         Avalonia.Automation.AutomationProperties.SetName(button, field.Label + " color");
@@ -248,9 +270,13 @@ public partial class ThemeEditorDialog : Window
         PreviewTooltip.Background = Brush(theme.TooltipOrDefault);
         PreviewTooltip.BorderBrush = Brush(theme.Line);
         PreviewTooltipText.Foreground = Brush(theme.Text);
-        PreviewAccentText.Foreground = Brush(theme.Dark ? theme.Surface : "#FFFFFF");
+        PreviewAccentText.Foreground = Brush(theme.AccentTextOrDefault);
+        PreviewNotice.Background = Brush(theme.NoticeOrDefault);
+        PreviewNoticeText.Foreground = Brush(theme.NoticeTextOrDefault);
+        PreviewError.Foreground = Brush(theme.ErrorOrDefault);
         PreviewEditor.LinkForeground = Brush(theme.Link);
         PreviewEditor.CodeBackground = Brush(theme.CodeOrDefault);
+        PreviewEditor.CodeBarBrush = Brush(theme.Line);
         var document = new FlowDocument();
         var paragraph = new Paragraph();
         paragraph.Inlines.Add(new Run { Text = "Capture an idea, plan your day, or keep something worth remembering.\n\n", Foreground = Brush(theme.Text), FontSize = 12 });
@@ -288,7 +314,9 @@ public partial class ThemeEditorDialog : Window
             ("Links on the background", t.Link, t.Surface),
             ("Text on the selected item", t.Text, t.Selection),
             ("Tooltip text", t.Text, t.TooltipOrDefault),
-            ("Button text on the accent", t.Dark ? t.Surface : "#FFFFFF", t.Accent),
+            ("Button text on the accent", t.AccentTextOrDefault, t.Accent),
+            ("Notice text", t.NoticeTextOrDefault, t.NoticeOrDefault),
+            ("Errors on the background", t.ErrorOrDefault, t.Surface),
         };
         var problems = pairs.Select(p => (p.what, ratio: Contrast(p.fore, p.back))).Where(p => p.ratio < 4.5)
             .Select(p => $"⚠ {p.what} is hard to read ({p.ratio:0.0}:1, aim for 4.5:1).");
@@ -309,12 +337,6 @@ public partial class ThemeEditorDialog : Window
             RefreshThemeItem();
         }
         UpdateStatus();
-    }
-
-    private void Dark_Changed(object? sender, RoutedEventArgs e)
-    {
-        if (_loading) return;
-        Edit(Current with { Dark = DarkCheck.IsChecked == true });
     }
 
     private MenuFlyout NewMenu()

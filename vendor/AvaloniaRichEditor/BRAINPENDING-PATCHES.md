@@ -75,3 +75,4 @@ NuGet package without passing the persistence tests.
   Page view always shows every line.
 - Toolbar `ActiveBackground` sets the background of toggle buttons that are on (Bold, Word Wrap, …);
   the default is the original slate blue, and Brain Pending binds it to the theme's selection color.
+- The link dialog opens with the URL box focused and its text selected, ready for a paste.

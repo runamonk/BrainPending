@@ -35,7 +35,14 @@ internal static class InputDialog
             dialog.Close();
         }, RoutingStrategies.Tunnel);
 
-        ok.Click += (_, _) => { result = (textBox.Text ?? "", box.Text ?? ""); dialog.Close(); };
+        // Start in the URL box, selected, so a paste replaces it.
+        dialog.Opened += (_, _) =>
+        {
+            box.Focus();
+            box.SelectAll();
+        };
+
+        ok.Click +=(_, _) => { result = (textBox.Text ?? "", box.Text ?? ""); dialog.Close(); };
         cancel.Click += (_, _) => { result = null; dialog.Close(); };
 
         var buttons = new StackPanel

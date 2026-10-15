@@ -1099,7 +1099,11 @@ public partial class MainWindow : Window
             return;
         }
         _searchDialog = new ThoughtSearchDialog(this, _settingsPath);
-        _searchDialog.Closed += (_, _) => _searchDialog = null;
+        _searchDialog.Closed += (_, _) =>
+        {
+            _searchDialog = null;
+            ClearSearchHighlight();
+        };
         _searchDialog.Show(this);
     }
 

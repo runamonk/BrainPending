@@ -46,6 +46,8 @@ public partial class MainWindow : Window
     private bool _recoveryCurrent, _closeConfirmed;
     private string _saveFailureNotice = "";
     private (string Path, string Revision, long Length, DateTime Modified) _checkedStamp;
+    private static readonly TimeSpan MissingGrace = TimeSpan.FromSeconds(15);
+    private DateTime? _missingSinceUtc;
 
     public MainWindow() : this(null) { }
 
@@ -95,6 +97,7 @@ public partial class MainWindow : Window
         EditorView.Editor.TextChanged += (_, _) =>
         {
             if (_loading || _thought == null || !EditorView.Editor.IsModified) return;
+            ClaimOpenThought();
             ScheduleSave();
         };
         EditorView.Editor.TypingFormatChanged += (_, format) =>
@@ -150,7 +153,7 @@ public partial class MainWindow : Window
             }
             SaveWindowBounds();
         };
-        Closed += (_, _) => { _closed = true; _autosave.Stop(); _saveRetry.Stop(); _poll.Stop(); _watcher?.Dispose(); };
+        Closed += (_, _) => { _closed = true; _autosave.Stop(); _saveRetry.Stop(); _poll.Stop(); _watcher?.Dispose(); StopPresence(); };
         AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
         Browser.AddHandler(PointerPressedEvent, Browser_PointerPressed, RoutingStrategies.Tunnel);
         Browser.AddHandler(KeyDownEvent, Browser_KeyDown, RoutingStrategies.Tunnel);
@@ -284,11 +287,15 @@ public partial class MainWindow : Window
         catch { watcher.Dispose(); throw; }
         _watcher?.Dispose();
         _watcher = watcher;
+        StopPresence();
+        var presence = new ThoughtPresence(workspace.Root, Environment.MachineName);
+        _presence = presence;
         _workspace = workspace;
         _ = Task.Run(() =>
         {
             try
             {
+                presence.RemoveAbandoned(DateTime.UtcNow);
                 workspace.PruneHistory();
                 // After history, so attachments only old revisions linked to can go.
                 new AttachmentStore(workspace.Root).PruneUnlinked(TimeSpan.FromDays(7));
@@ -506,11 +513,12 @@ public partial class MainWindow : Window
         ItemCount.Text = $"{entries.Count(e => !e.IsCluster)} thoughts · {entries.Count(e => e.IsCluster)} clusters";
     }
 
-    private void CheckExternalChanges()
+    internal void CheckExternalChanges()
     {
         if (_workspace == null || _loading || _inDialog || _closed) return;
         try
         {
+            UpdatePresence();
             if (_thought != null)
             {
                 // Hash only when size or time changed. The stamp is taken before hashing,
@@ -518,7 +526,12 @@ public partial class MainWindow : Window
                 var info = new FileInfo(_thought.Path);
                 var stamp = (_thought.Path, _thought.Revision, info.Exists ? info.Length : -1, info.Exists ? info.LastWriteTimeUtc : default);
                 var revision = stamp == _checkedStamp ? _thought.Revision : _workspace.Revision(_thought.Path);
+                // Sync clients can delete a file and write it back while replacing it, so a missing
+                // thought only counts as moved or deleted once it has stayed gone for a while.
+                if (revision != null) _missingSinceUtc = null;
+                else _missingSinceUtc ??= DateTime.UtcNow;
                 if (revision == _thought.Revision) _checkedStamp = stamp;
+                else if (revision == null && DateTime.UtcNow - _missingSinceUtc < MissingGrace) { /* Check again on the next poll. */ }
                 else
                 {
                     if (_dirty || EditorView.Editor.IsModified)
@@ -529,6 +542,12 @@ public partial class MainWindow : Window
                     {
                         ClearThought();
                         ShowNotice("The open thought was moved or deleted outside this app. The cluster has been refreshed.");
+                    }
+                    else if ((_lockedBy != null || _reloadPending) && !CanReloadInPlace)
+                    {
+                        // Remember this version as seen, so only newer saves are hashed again.
+                        _checkedStamp = stamp;
+                        HoldReload();
                     }
                     else
                     {
@@ -689,6 +708,9 @@ public partial class MainWindow : Window
         _recentThoughts.RemoveAll(p => PathRules.AreEqual(p, thought.Path));
         _recentThoughts.Insert(0, thought.Path);
         RememberOpenThought(thought.Path);
+        _reloadPending = false;
+        _missingSinceUtc = null;
+        UpdatePresence();
     }
 
     private void ClearThought(bool forget = true)
@@ -699,6 +721,8 @@ public partial class MainWindow : Window
         CancelTitleEditing();
         if (forget && _thought != null) RememberOpenThought(null);
         _thought = null;
+        _reloadPending = false;
+        StopPresence();
         EditorView.FileSizeBytes = null;
         _dirty = false;
         _autosave.Stop();
@@ -779,7 +803,8 @@ public partial class MainWindow : Window
 
     internal void BeginTitleEditing()
     {
-        if (_thought == null) return;
+        // Renaming would pull the thought out from under the window editing it.
+        if (_thought == null || _lockedBy != null) return;
         _titleEditingPath = _thought.Path;
         ThoughtTitleInput.Text = Path.GetFileNameWithoutExtension(_thought.Path);
         ThoughtTitle.IsVisible = false;
@@ -1250,7 +1275,7 @@ public partial class MainWindow : Window
     // Dropped images embed as pictures unless Shift is held; anything else becomes an attachment.
     private bool HandleFileDrop(string[] paths, bool shift)
     {
-        if (_workspace == null || _thought == null || _inDialog) return true;
+        if (_workspace == null || _thought == null || _inDialog || _lockedBy != null) return true;
         _ = Run(() => AttachFiles(paths, !shift));
         return true;
     }
@@ -1259,7 +1284,7 @@ public partial class MainWindow : Window
 
     private async Task AttachFiles(string[] paths, bool embedImages)
     {
-        if (_workspace == null || _thought == null) return;
+        if (_workspace == null || _thought == null || _lockedBy != null) return;
         var workspace = _workspace;
         var thoughtPath = _thought.Path;
         var store = new AttachmentStore(workspace.Root);

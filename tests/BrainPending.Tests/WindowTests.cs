@@ -402,6 +402,104 @@ public sealed class WindowTests : IDisposable
         window.Close();
     }
 
+    [AvaloniaFact]
+    public void ThoughtBeingEditedInAnotherWindowIsReadOnlyUntilReleasedOrTakenOver()
+    {
+        var workspace = new BrainWorkspace(_root);
+        var shared = workspace.CreateThought(_root, "Shared",
+            BrainWorkspace.PlainTextRtf(string.Join("\n", Enumerable.Range(1, 200).Select(i => "Line " + i))));
+        var other = workspace.CreateThought(_root, "Other");
+        var first = OpenWindow();
+        var second = OpenWindow();
+        RichEditorView View(MainWindow window) => window.FindControl<RichEditorView>("EditorView")!;
+        string Text(MainWindow window) => View(window).Editor.GetPlainText();
+        bool Locked(MainWindow window) => View(window).Editor.IsReadOnly && window.FindControl<Border>("LockBanner")!.IsVisible && !View(window).Toolbar.IsVisible;
+        void Click(MainWindow window, string button) => window.FindControl<Button>(button)!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        // TextChanged is raised after the next render.
+        void Type(MainWindow window, string text)
+        {
+            View(window).Editor.InsertText(text);
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+        }
+        void Save(MainWindow window) => window.KeyPress(Key.S, RawInputModifiers.Control, PhysicalKey.S, null);
+
+        Select(first, shared.Path);
+        Select(second, shared.Path);
+        Assert.False(Locked(second));
+        Type(first, "Typing ");
+        second.UpdatePresence();
+        Assert.True(Locked(second));
+        Assert.Contains("Another Brain Pending window on this computer", second.FindControl<TextBlock>("LockText")!.Text);
+        Assert.False(Locked(first));
+
+        // At the top of the page there's no place to lose, so saves show up straight away.
+        Save(first);
+        second.CheckExternalChanges();
+        Assert.Contains("Typing", Text(second));
+        Assert.True(Locked(second));
+
+        // Scrolled down, they wait for Reload, even after the other window lets go.
+        View(second).ScrollOffset = new Vector(0, 300);
+        second.UpdateLayout();
+        Assert.True(View(second).ScrollOffset.Y > 0);
+        Type(first, "More ");
+        Save(first);
+        second.CheckExternalChanges();
+        Assert.DoesNotContain("More", Text(second));
+        Assert.True(second.FindControl<Button>("ReloadButton")!.IsVisible);
+        Select(first, other.Path);
+        second.CheckExternalChanges();
+        Assert.True(Locked(second));
+        Assert.Contains("has finished editing", second.FindControl<TextBlock>("LockText")!.Text);
+        Assert.False(second.FindControl<Button>("TakeOverButton")!.IsVisible);
+        Click(second, "ReloadButton");
+        Assert.False(Locked(second));
+        Assert.Contains("More", Text(second));
+        Assert.True(View(second).ScrollOffset.Y > 0);
+
+        // Taking over flips the lock to the other window, which keeps what it typed.
+        Select(first, shared.Path);
+        Type(first, "Again ");
+        second.UpdatePresence();
+        Assert.True(Locked(second));
+        Click(second, "TakeOverButton");
+        Assert.False(Locked(second));
+        first.UpdatePresence();
+        Assert.True(Locked(first));
+        Assert.Contains("Again", workspace.Read(shared.Path).Rtf);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ThoughtBrieflyMissingWhileSyncReplacesItStaysOpen(bool unsaved)
+    {
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Synced", BrainWorkspace.PlainTextRtf("Before"));
+        var window = OpenWindow();
+        Select(window, thought.Path);
+        var view = window.FindControl<RichEditorView>("EditorView")!;
+        if (unsaved)
+        {
+            view.Editor.InsertText("Mine ");
+            AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            Dispatcher.UIThread.RunJobs();
+        }
+        File.Delete(thought.Path);
+        window.CheckExternalChanges();
+        Assert.True(view.IsVisible);
+        Assert.False(window.FindControl<Border>("Notice")!.IsVisible);
+        // No conflict copy yet: the thought may be coming back.
+        Assert.Empty(Directory.GetFiles(_root, "*.rtf"));
+        // The sync client writes the new version back.
+        File.WriteAllBytes(thought.Path, BrainWorkspace.EncodeRtf(BrainWorkspace.PlainTextRtf("From the other computer")));
+        window.CheckExternalChanges();
+        Assert.True(view.IsVisible);
+        if (unsaved) Assert.Contains(Directory.GetFiles(_root, "*.rtf"), p => p.Contains("conflict") && File.ReadAllText(p).Contains("Mine"));
+        else Assert.Contains("From the other computer", view.Editor.GetPlainText());
+    }
+
     public void Dispose()
     {
         foreach (var window in _windows) window.Close();

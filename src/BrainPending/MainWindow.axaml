@@ -105,6 +105,15 @@
           </Grid>
         </Border>
         <DockPanel Grid.Row="1">
+          <Border x:Name="LockBanner" DockPanel.Dock="Top" IsVisible="False" Background="{DynamicResource AppNoticeBrush}" Padding="16,8">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+              <TextBlock x:Name="LockText" Foreground="{DynamicResource AppNoticeTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+              <Button x:Name="ReloadButton" Grid.Column="1" Content="Reload" Classes="action" IsVisible="False" Margin="12,0,0,0" Click="Reload_Click"
+                      ToolTip.Tip="Show the latest saved version, keeping your place." />
+              <Button x:Name="TakeOverButton" Grid.Column="2" Content="Edit anyway" Classes="quiet" Foreground="{DynamicResource AppNoticeTextBrush}" Margin="12,0,0,0" Click="TakeOver_Click"
+                      ToolTip.Tip="Edit here instead. The other window becomes read-only." />
+            </Grid>
+          </Border>
           <Border x:Name="FindPanel" DockPanel.Dock="Top" Height="0" ClipToBounds="True" IsVisible="False" Background="{DynamicResource AppSurfaceBrush}" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" Margin="16,8" MinHeight="34">
               <TextBox x:Name="FindInput" PlaceholderText="Find in thought…" AutomationProperties.Name="Find in thought" TextChanged="FindInput_Changed" />

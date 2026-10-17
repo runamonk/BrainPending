@@ -130,6 +130,14 @@ Your existing sync service transfers the files; Brain Pending reacts when they a
   separate conflict copy and preserves the other version.
 - Same-filesystem instances serialize their writes with a short exclusive lock.
   This lock is **not** a distributed lock between cloud replicas.
+- Typing in a thought claims it in `.brainpending/presence`, one file per window. Other
+  windows, on this computer or one that syncs the brain, show that thought read-only
+  with the editing computer's name and an Edit anyway button. A claim ends when its
+  window switches thoughts, closes, goes 10 minutes without typing, or stops refreshing
+  it for 2 minutes (sleep, crash, lost connection). Changes saved meanwhile load at once
+  when the reader is at the top of the thought; otherwise a Reload button waits so the
+  page never moves under them. An offline computer can't see claims, so conflict copies
+  remain the backstop.
 - Immutable RTF revisions are stored in `Brain/.brainpending/history`, with JSON files
   identifying the path each was saved under. History follows thoughts renamed or moved
   in the app; moves made in Explorer leave it behind. Deleted items live in `.brainpending/trash/items`

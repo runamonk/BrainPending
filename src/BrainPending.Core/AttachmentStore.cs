@@ -156,6 +156,32 @@ public sealed class AttachmentStore(string brainRoot)
             .Any(p => File.ReadAllText(p).Contains(id, StringComparison.Ordinal));
     }
 
+    // Deletes stored files that no RTF in the brain links to, counting history, Trash and backups.
+    // Recent folders are kept: a synced file can arrive before the thought that links to it.
+    public void PruneUnlinked(TimeSpan minimumAge)
+    {
+        var attachments = System.IO.Path.Combine(_root, ".brainpending", "attachments");
+        if (!Directory.Exists(attachments)) return;
+        var cutoff = DateTime.UtcNow - minimumAge;
+        // Pick candidates before scanning, so a file added during the scan is never one.
+        var candidates = new DirectoryInfo(attachments).EnumerateDirectories()
+            .Where(d => Guid.TryParseExact(d.Name, "N", out _) && (d.Attributes & FileAttributes.ReparsePoint) == 0 &&
+                d.CreationTimeUtc < cutoff && d.EnumerateFiles().All(f => f.LastWriteTimeUtc < cutoff))
+            .ToList();
+        if (candidates.Count == 0) return;
+        // An unreadable thought throws, so nothing is deleted on a partial scan.
+        var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = false };
+        var linked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in Directory.EnumerateFiles(_root, "*.rtf", options))
+            foreach (Match match in Regex.Matches(File.ReadAllText(path), Regex.Escape(Scheme) + "([0-9a-f]{32})"))
+                linked.Add(match.Groups[1].Value);
+        foreach (var directory in candidates.Where(d => !linked.Contains(d.Name)))
+        {
+            try { directory.Delete(true); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { } // Try again next time.
+        }
+    }
+
     // Only call for new files whose thought was never saved.
     public void Discard(StoredAttachment attachment)
     {

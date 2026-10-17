@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.IO.Enumeration;
 using System.Security.Cryptography;
 using System.Text;
@@ -220,7 +221,7 @@ public sealed class BrainWorkspace
             return new(conflict, true);
         }
         WriteRevision(path, disk);
-        WriteRevision(path, bytes);
+        WriteRevision(path, bytes, replaceable: true);
         var temp = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, $".save-{Guid.NewGuid():N}.tmp");
         try
         {
@@ -252,20 +253,57 @@ public sealed class BrainWorkspace
     }
 
     // Last revision this instance archived per thought, so unchanged disk content is not stored twice.
-    private readonly ConcurrentDictionary<string, string> _archived = new(PathRules.Comparer);
+    private sealed record Archived(string Hash, string File, DateTime WindowStartUtc, bool Replaceable);
+    private readonly ConcurrentDictionary<string, Archived> _archived = new(PathRules.Comparer);
 
-    private void WriteRevision(string path, byte[] bytes)
+    // Autosave fires on every pause in typing. Within this window a save replaces this
+    // instance's previous save revision instead of adding another full copy.
+    private static readonly TimeSpan RevisionWindow = TimeSpan.FromMinutes(5);
+
+    private void WriteRevision(string path, byte[] bytes, bool replaceable = false)
     {
         var relative = System.IO.Path.GetRelativePath(Root, path);
         var hash = Hash(bytes);
-        if (_archived.TryGetValue(relative, out var last) && last == hash) return;
+        _archived.TryGetValue(relative, out var last);
+        if (last?.Hash == hash) return;
         var key = Hash(Encoding.UTF8.GetBytes(relative));
         var directory = System.IO.Path.Combine(MetadataPath, "history", key);
         Directory.CreateDirectory(directory);
-        var revision = System.IO.Path.Combine(directory, $"{DateTime.UtcNow:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.rtf");
+        var now = DateTime.UtcNow;
+        var revision = System.IO.Path.Combine(directory, $"{now:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.rtf");
         File.WriteAllBytes(revision, bytes);
-        File.WriteAllText(revision + ".json", JsonSerializer.Serialize(new { OriginalPath = relative, SavedUtc = DateTime.UtcNow }));
-        _archived[relative] = hash;
+        File.WriteAllText(revision + ".json", JsonSerializer.Serialize(new { OriginalPath = relative, SavedUtc = now }));
+        var replace = replaceable && last is { Replaceable: true } && now - last.WindowStartUtc < RevisionWindow;
+        _archived[relative] = new(hash, revision, replace ? last!.WindowStartUtc : now, replaceable);
+        if (!replace) return;
+        // A file held by a sync client is left for PruneHistory to thin later.
+        try { File.Delete(last!.File); File.Delete(last.File + ".json"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
+    // Keeps every revision from the last day, then the newest per hour for a week,
+    // per day for a month and per month after that.
+    public void PruneHistory()
+    {
+        var history = System.IO.Path.Combine(MetadataPath, "history");
+        if (!Directory.Exists(history)) return;
+        var now = DateTime.UtcNow;
+        foreach (var directory in Directory.EnumerateDirectories(history))
+        {
+            var kept = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var file in Directory.GetFiles(directory, "*.rtf").OrderByDescending(System.IO.Path.GetFileName, StringComparer.Ordinal))
+            {
+                var name = System.IO.Path.GetFileName(file);
+                if (name.Length < 18 || !DateTime.TryParseExact(name[..18], "yyyyMMdd-HHmmssfff", CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var saved)) continue;
+                var age = now - saved;
+                var bucket = age < TimeSpan.FromDays(1) ? name
+                    : saved.ToString(age < TimeSpan.FromDays(7) ? "yyyyMMddHH" : age < TimeSpan.FromDays(30) ? "yyyyMMdd" : "yyyyMM", CultureInfo.InvariantCulture);
+                if (kept.Add(bucket)) continue;
+                try { File.Delete(file); File.Delete(file + ".json"); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            }
+        }
     }
 
     public string Rename(string path, string name)

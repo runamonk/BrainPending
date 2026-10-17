@@ -140,8 +140,10 @@ This is eventual file synchronization, not collaborative live editing. Offline
 edits reaching the sync provider simultaneously can still produce provider-level
 conflicts. History preserves local save revisions, but automated reconciliation
 of those conflicts is not implemented. Do not exclude `.brainpending/history` from
-sync if you want those revisions on another computer. History has no retention
-limit yet; image-heavy notes can consume substantial space.
+sync if you want those revisions on another computer. Saves within five minutes of
+each other share one revision. When a brain opens, history keeps every revision from
+the last day, then the newest per hour for a week, per day for a month and per month
+after that.
 
 ## Validation and current scope
 
@@ -244,8 +246,9 @@ so renaming/moving notes or moving the whole brain preserves them. Duplicate
 filenames are stored separately. Copy/back up the **whole brain including
 `.brainpending`** to preserve attachments; an individual RTF export contains links,
 not embedded attachment bytes. Files are retained for undo, history, and conflict
-copies even after their links are removed. Attachment previews and automatic
-cleanup of unreferenced files are not implemented.
+copies even after their links are removed. When a brain opens, files older than
+seven days that no RTF in the brain links to (counting history, Trash and backups)
+are deleted. Attachment previews are not implemented.
 
 To run the optional live import test against the generated dummy notebook, set
 `BRAINPENDING_TEST_ONENOTE` to its `.onetoc2` path before running `dotnet test`.

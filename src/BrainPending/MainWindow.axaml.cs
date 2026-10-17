@@ -285,6 +285,17 @@ public partial class MainWindow : Window
         _watcher?.Dispose();
         _watcher = watcher;
         _workspace = workspace;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                workspace.PruneHistory();
+                // After history, so attachments only old revisions linked to can go.
+                new AttachmentStore(workspace.Root).PruneUnlinked(TimeSpan.FromDays(7));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            { System.Diagnostics.Trace.TraceWarning("Could not prune history or attachments: " + error.Message); }
+        });
         _recentThoughts.Clear();
         _cluster = workspace.Root;
         ClearThought(forget: false);

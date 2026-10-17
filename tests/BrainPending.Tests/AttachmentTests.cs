@@ -164,5 +164,35 @@ public sealed class AttachmentTests : IDisposable
         Assert.False(AttachmentDialog.IsDangerous("no extension"));
     }
 
+    [Fact]
+    public void PruneUnlinkedDeletesOnlyOldFilesNothingLinksTo()
+    {
+        var workspace = new BrainWorkspace(_root);
+        var source = Path.Combine(_root, "source.bin");
+        File.WriteAllBytes(source, [1]);
+        var store = new AttachmentStore(_root);
+        var cancel = TestContext.Current.CancellationToken;
+        StoredAttachment Add(bool old)
+        {
+            var attachment = store.Add(source, "file.bin", cancel);
+            if (!old) return attachment;
+            var past = DateTime.UtcNow.AddDays(-30);
+            File.SetLastWriteTimeUtc(attachment.Path, past);
+            Directory.SetCreationTimeUtc(Path.GetDirectoryName(attachment.Path)!, past);
+            return attachment;
+        }
+        var inThought = Add(true);
+        var inHistory = Add(true);
+        var unlinked = Add(true);
+        var recent = Add(false);
+        var thought = workspace.CreateThought(_root, "Note", BrainWorkspace.PlainTextRtf(inHistory.Link));
+        workspace.Save(thought, BrainWorkspace.PlainTextRtf(inThought.Link));
+        store.PruneUnlinked(TimeSpan.FromDays(7));
+        Assert.True(File.Exists(inThought.Path));
+        Assert.True(File.Exists(inHistory.Path));
+        Assert.True(File.Exists(recent.Path));
+        Assert.False(Directory.Exists(Path.GetDirectoryName(unlinked.Path)));
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }

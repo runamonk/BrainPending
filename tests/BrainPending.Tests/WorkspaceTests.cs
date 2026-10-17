@@ -237,8 +237,55 @@ public sealed class WorkspaceTests : IDisposable
         var thought = w.CreateThought(w.Root, "History");
         thought = w.Save(thought, BrainWorkspace.PlainTextRtf("First")).Thought;
         w.Save(thought, BrainWorkspace.PlainTextRtf("Second"));
-        // Created, first and second: the content on disk is not archived again before each save.
-        Assert.Equal(3, Directory.GetFiles(Path.Combine(w.MetadataPath, "history"), "*.rtf", SearchOption.AllDirectories).Length);
+        // Created and second: the second save falls in the same window and replaces the first.
+        var revisions = Directory.GetFiles(Path.Combine(w.MetadataPath, "history"), "*.rtf", SearchOption.AllDirectories);
+        Assert.Equal(2, revisions.Length);
+        Assert.Equal(2, Directory.GetFiles(Path.Combine(w.MetadataPath, "history"), "*.json", SearchOption.AllDirectories).Length);
+        Assert.DoesNotContain(revisions, p => File.ReadAllText(p).Contains("First"));
+        Assert.Contains(revisions, p => File.ReadAllText(p).Contains("Second"));
+    }
+
+    [Fact]
+    public void FirstSaveOfASessionKeepsTheContentOnDisk()
+    {
+        var thought = Workspace.CreateThought(Workspace.Root, "Note", BrainWorkspace.PlainTextRtf("Original"));
+        var history = Path.Combine(Workspace.MetadataPath, "history");
+        foreach (var file in Directory.GetFiles(history, "*", SearchOption.AllDirectories)) File.Delete(file);
+        // A fresh instance has not archived the disk version yet, and must not replace it.
+        var w = Workspace;
+        thought = w.Save(thought, BrainWorkspace.PlainTextRtf("Edited")).Thought;
+        w.Save(thought, BrainWorkspace.PlainTextRtf("Edited again"));
+        var revisions = Directory.GetFiles(history, "*.rtf", SearchOption.AllDirectories);
+        Assert.Contains(revisions, p => File.ReadAllText(p).Contains("Original"));
+        Assert.Contains(revisions, p => File.ReadAllText(p).Contains("Edited again"));
+        Assert.Equal(2, revisions.Length);
+    }
+
+    [Fact]
+    public void PruneHistoryThinsOldRevisions()
+    {
+        var w = Workspace;
+        var directory = Path.Combine(w.MetadataPath, "history", "note");
+        Directory.CreateDirectory(directory);
+        var now = DateTime.UtcNow;
+        string Add(DateTime saved)
+        {
+            var file = Path.Combine(directory, $"{saved:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.rtf");
+            File.WriteAllText(file, "rtf");
+            File.WriteAllText(file + ".json", "{}");
+            return file;
+        }
+        var hour = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc).AddDays(-3);
+        var recent = new[] { Add(now.AddHours(-1)), Add(now.AddHours(-1).AddSeconds(-30)) };
+        var newerInHour = Add(hour.AddMinutes(50));
+        var olderInHour = Add(hour.AddMinutes(1));
+        var month = Add(new DateTime(now.Year - 2, 6, 15, 12, 0, 0, DateTimeKind.Utc));
+        var olderInMonth = Add(new DateTime(now.Year - 2, 6, 14, 12, 0, 0, DateTimeKind.Utc));
+        w.PruneHistory();
+        foreach (var kept in recent.Append(newerInHour).Append(month))
+            Assert.True(File.Exists(kept) && File.Exists(kept + ".json"));
+        Assert.False(File.Exists(olderInHour) || File.Exists(olderInHour + ".json"));
+        Assert.False(File.Exists(olderInMonth));
     }
 
     [Theory]

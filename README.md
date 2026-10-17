@@ -131,7 +131,8 @@ Your existing sync service transfers the files; Brain Pending reacts when they a
 - Same-filesystem instances serialize their writes with a short exclusive lock.
   This lock is **not** a distributed lock between cloud replicas.
 - Immutable RTF revisions are stored in `Brain/.brainpending/history`, with JSON files
-  identifying their original paths. Deleted items live in `.brainpending/trash/items`
+  identifying the path each was saved under. History follows thoughts renamed or moved
+  in the app; moves made in Explorer leave it behind. Deleted items live in `.brainpending/trash/items`
   and appear in the brain's Trash folder.
   Recover deleted items with Move to cluster or Move to parent; history recovery
   still requires copying an RTF from the history directory.
@@ -143,7 +144,8 @@ of those conflicts is not implemented. Do not exclude `.brainpending/history` fr
 sync if you want those revisions on another computer. Saves within five minutes of
 each other share one revision. When a brain opens, history keeps every revision from
 the last day, then the newest per hour for a week, per day for a month and per month
-after that.
+after that. History that no thought owns, because the thought was deleted for good or
+moved outside the app, is removed 30 days after its last save.
 
 ## Validation and current scope
 

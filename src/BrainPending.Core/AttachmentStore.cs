@@ -6,7 +6,7 @@ namespace BrainPending.Core;
 public sealed record StoredAttachment(string Name, string Path, long Size, string Link);
 
 // References are relative to the brain, so thought/cluster renames and brain moves
-// do not invalidate them. Keep files for undo, history and conflict copies as well.
+// do not invalidate them. Keep files for undo and conflict copies as well.
 public sealed class AttachmentStore(string brainRoot)
 {
     public const string Scheme = "brainpending-attachment:";
@@ -156,7 +156,7 @@ public sealed class AttachmentStore(string brainRoot)
             .Any(p => File.ReadAllText(p).Contains(id, StringComparison.Ordinal));
     }
 
-    // Deletes stored files that no RTF in the brain links to, counting history, Trash and backups.
+    // Deletes stored files that no RTF in the brain links to, counting Trash.
     // Recent folders are kept: a synced file can arrive before the thought that links to it.
     public void PruneUnlinked(TimeSpan minimumAge)
     {

@@ -7,10 +7,22 @@ internal sealed record BrainSettings(string? BrainPath = null, bool? DarkTheme =
     string[]? RecentBrains = null, bool SkipAutomaticBrain = false,
     double? WindowWidth = null, double? WindowHeight = null, bool WindowMaximized = false,
     Dictionary<string, string>? LastOpenThoughts = null, string? ColorTheme = null, bool SidebarPinned = true,
-    SearchSettings? Search = null, EditorSettings? Editor = null, UpdateSettings? Updates = null)
+    SearchSettings? Search = null, EditorSettings? Editor = null, UpdateSettings? Updates = null,
+    Dictionary<string, BackupSettings>? Backups = null)
 {
     public string? LastThought(string brain) => LastOpenThoughts?.FirstOrDefault(p =>
         PathRules.AreEqual(p.Key, brain)).Value;
+
+    // Kept in this computer's settings, not the brain: each computer decides where, or whether, it backs up.
+    public BackupSettings? Backup(string brain) => Backups?.FirstOrDefault(p => PathRules.AreEqual(p.Key, brain)).Value;
+
+    public BrainSettings RememberBackup(string brain, BackupSettings? backup)
+    {
+        var backups = new Dictionary<string, BackupSettings>(Backups ?? [], PathRules.Comparer);
+        if (backup == null) backups.Remove(brain);
+        else backups[brain] = backup;
+        return this with { Backups = backups };
+    }
 
     public BrainSettings RememberThought(string brain, string? relativePath)
     {
@@ -60,6 +72,9 @@ internal sealed record SearchSettings(bool WholeBrain = false, bool MatchCase = 
 internal sealed record EditorSettings(string FontFamily = "Segoe UI", double FontSize = 12, string? Color = null,
     bool EditAttachmentsInPlace = false, bool OpenAttachmentsOnClick = false, bool WordWrap = true,
     string[]? ToolbarItems = null, string[]? MenuItems = null, bool CodeWrap = false, bool CodeLineNumbers = true, string? CodeFontFamily = null, int CodeMaxLines = 0);
+
+// There is no default folder: nothing is copied anywhere until the user picks one.
+internal sealed record BackupSettings(string Folder, int KeepDays = 30);
 
 // EveryDays = 0 checks on every startup.
 internal sealed record UpdateSettings(bool CheckOnStartup = true, int EveryDays = 0, DateTime? LastCheckUtc = null);

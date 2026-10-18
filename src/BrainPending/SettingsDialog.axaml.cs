@@ -6,15 +6,18 @@ using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using AvaloniaRichEditor.Controls;
 
 namespace BrainPending;
 
 public partial class SettingsDialog : Window
 {
-    internal sealed record Result(EditorSettings Editor, UpdateSettings Updates);
+    // A null Backup turns backups off for the open brain.
+    internal sealed record Result(EditorSettings Editor, UpdateSettings Updates, BackupSettings? Backup);
 
     private readonly UpdateSettings _updates = new();
+    private readonly string? _brain;
     // First entry of the code font list; saved as null so the editor's fallback list applies.
     private const string DefaultCodeFont = "Default (Cascadia Mono, Consolas…)";
     // Null means the theme's text color.
@@ -26,9 +29,25 @@ public partial class SettingsDialog : Window
         InitializeComponent();
     }
 
-    internal SettingsDialog(EditorSettings editor, UpdateSettings updates) : this()
+    internal SettingsDialog(EditorSettings editor, UpdateSettings updates, string? brain = null, BackupSettings? backup = null) : this()
     {
         _updates = updates;
+        _brain = brain;
+        BackupBrain.Text = brain == null
+            ? "Open a brain to set up its backups."
+            : $"For the open brain, {brain}. Each computer keeps its own backup setting.";
+        BackupOn.IsEnabled = brain != null;
+        BackupOn.IsChecked = backup != null;
+        BackupFolder.Text = backup?.Folder;
+        KeepDays.Value = backup?.KeepDays ?? 30;
+        UpdateBackupRows();
+        BackupOn.IsCheckedChanged += (_, _) => UpdateBackupRows();
+        if (OldHistory is { } history && Directory.Exists(history))
+        {
+            var bytes = new DirectoryInfo(history).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length);
+            OldHistoryText.Text = $"This brain still has the per-save history from earlier versions ({bytes / 1048576.0:0.0} MB). Backups replace it, so it can go once you're happy with them.";
+            OldHistoryRow.IsVisible = true;
+        }
         var fonts = FontManager.Current.SystemFonts.Select(f => f.Name).Distinct()
             .Order(StringComparer.CurrentCultureIgnoreCase).ToList();
         if (!fonts.Contains(editor.FontFamily)) fonts.Insert(0, editor.FontFamily);
@@ -147,11 +166,60 @@ public partial class SettingsDialog : Window
         }
     }
 
-    private void Save_Click(object? sender, RoutedEventArgs e) => Close(new Result(
-        new EditorSettings(FontFamilies.SelectedItem as string ?? new EditorSettings().FontFamily, (double)(FontSizeInput.Value ?? 12),
-            _color is { } c ? Hex(c) : null, EditAttachmentsInPlace.IsChecked == true,
-            OpenAttachmentsOnClick.IsChecked == true) { CodeWrap = CodeWrap.IsChecked == true, CodeLineNumbers = CodeLineNumbers.IsChecked == true, CodeFontFamily = SelectedCodeFont, CodeMaxLines = (int)(CodeMaxLines.Value ?? 0) },
-        _updates with { CheckOnStartup = CheckOnStartup.IsChecked == true, EveryDays = (int)(EveryDays.Value ?? 0) }));
+    private string? OldHistory => _brain == null ? null : Path.Combine(_brain, ".brainpending", "history");
+
+    // Removed only from here: backing up never changes the brain.
+    private void DeleteOldHistory_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (OldHistory is { } history && Directory.Exists(history)) Directory.Delete(history, true);
+            OldHistoryText.Text = "Old history deleted.";
+            DeleteOldHistoryButton.IsEnabled = false;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            BackupError.Text = "Could not delete the old history: " + error.Message;
+            BackupError.IsVisible = true;
+        }
+    }
+
+    private void UpdateBackupRows()
+    {
+        var on = BackupOn.IsChecked == true;
+        BackupRows.IsEnabled = on;
+        BackupRows.Opacity = on ? 1 : 0.4;
+    }
+
+    private async void BrowseBackup_Click(object? sender, RoutedEventArgs e)
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose a backup folder" });
+        if (folders.FirstOrDefault()?.TryGetLocalPath() is { } path) BackupFolder.Text = path;
+    }
+
+    private void Save_Click(object? sender, RoutedEventArgs e)
+    {
+        BackupSettings? backup = null;
+        if (_brain != null && BackupOn.IsChecked == true)
+        {
+            var folder = BackupFolder.Text?.Trim() ?? "";
+            try { BrainPending.Core.BrainBackup.CheckFolder(_brain, folder); }
+            catch (IOException error)
+            {
+                BackupError.Text = error.Message;
+                BackupError.IsVisible = true;
+                BackupsTab.IsSelected = true;
+                return;
+            }
+            backup = new BackupSettings(folder, (int)(KeepDays.Value ?? 30));
+        }
+        Close(new Result(
+            new EditorSettings(FontFamilies.SelectedItem as string ?? new EditorSettings().FontFamily, (double)(FontSizeInput.Value ?? 12),
+                _color is { } c ? Hex(c) : null, EditAttachmentsInPlace.IsChecked == true,
+                OpenAttachmentsOnClick.IsChecked == true) { CodeWrap = CodeWrap.IsChecked == true, CodeLineNumbers = CodeLineNumbers.IsChecked == true, CodeFontFamily = SelectedCodeFont, CodeMaxLines = (int)(CodeMaxLines.Value ?? 0) },
+            _updates with { CheckOnStartup = CheckOnStartup.IsChecked == true, EveryDays = (int)(EveryDays.Value ?? 0) },
+            backup));
+    }
 
     private void Cancel_Click(object? sender, RoutedEventArgs e) => Close();
 }

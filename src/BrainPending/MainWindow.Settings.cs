@@ -104,7 +104,9 @@ public partial class MainWindow
 
     private async void Settings_Click(object? sender, RoutedEventArgs e) => await Run(async () =>
     {
-        var result = await ShowOwnedDialogAsync<SettingsDialog.Result?>(new SettingsDialog(_settings.Editor ?? new(), _settings.Updates ?? new()));
+        var brain = _workspace?.Root;
+        var result = await ShowOwnedDialogAsync<SettingsDialog.Result?>(new SettingsDialog(_settings.Editor ?? new(), _settings.Updates ?? new(),
+            brain, brain == null ? null : _settings.Backup(brain)));
         if (result == null) return;
         var saved = BrainSettings.Read(_settingsPath);
         _settings = saved with
@@ -113,7 +115,11 @@ public partial class MainWindow
             Editor = result.Editor with { WordWrap = EditorView.Editor.WordWrap, ToolbarItems = saved.Editor?.ToolbarItems, MenuItems = saved.Editor?.MenuItems },
             Updates = result.Updates with { LastCheckUtc = saved.Updates?.LastCheckUtc }
         };
+        if (brain != null) _settings = _settings.RememberBackup(brain, result.Backup);
         _settings.Save(_settingsPath);
         ApplyEditorSettings();
+        UpdateVersionsLink();
+        // A new folder has no backup yet, so this runs one now.
+        StartBackup();
     });
 }

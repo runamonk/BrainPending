@@ -50,16 +50,13 @@ public sealed class WorkspaceTests : IDisposable
     }
 
     [Fact]
-    public void SavePreservesOldAndNewRevisions()
+    public void SaveReplacesTheThoughtInPlace()
     {
         var w = Workspace;
         var thought = w.CreateThought(w.Root, "Note", BrainWorkspace.PlainTextRtf("Before"));
         var saved = w.Save(thought, BrainWorkspace.PlainTextRtf("After"));
         Assert.False(saved.IsConflict);
         Assert.Contains("After", w.Read(thought.Path).Rtf);
-        var revisions = Directory.GetFiles(Path.Combine(w.MetadataPath, "history"), "*.rtf", SearchOption.AllDirectories);
-        Assert.Contains(revisions, p => File.ReadAllText(p).Contains("Before"));
-        Assert.Contains(revisions, p => File.ReadAllText(p).Contains("After"));
         Assert.Single(w.List(w.Root));
         Assert.Single(w.List(w.Root, "Note"));
     }
@@ -101,6 +98,16 @@ public sealed class WorkspaceTests : IDisposable
         Assert.True(saved.IsConflict);
         Assert.False(File.Exists(thought.Path));
         Assert.Contains("Recovered", w.Read(saved.Thought.Path).Rtf);
+    }
+
+    [Fact]
+    public void SaveRefusesInsteadOfRebuildingABrainThatWasMovedAway()
+    {
+        var w = Workspace;
+        var thought = w.CreateThought(w.Root, "Note");
+        Directory.Move(w.Root, w.Root + " moved");
+        Assert.Throws<IOException>(() => w.Save(thought, BrainWorkspace.PlainTextRtf("Lost?")));
+        Assert.False(Directory.Exists(w.Root));
     }
 
     [Fact]
@@ -228,131 +235,6 @@ public sealed class WorkspaceTests : IDisposable
         Assert.Single(warnings);
         w.SetPinned(thought.Path, true);
         Assert.True(Assert.Single(w.List(w.Root)).IsPinned);
-    }
-
-    [Fact]
-    public void RepeatedSavesArchiveEachRevisionOnce()
-    {
-        var w = Workspace;
-        var thought = w.CreateThought(w.Root, "History");
-        thought = w.Save(thought, BrainWorkspace.PlainTextRtf("First")).Thought;
-        w.Save(thought, BrainWorkspace.PlainTextRtf("Second"));
-        // Created and second: the second save falls in the same window and replaces the first.
-        var revisions = Directory.GetFiles(Path.Combine(w.MetadataPath, "history"), "*.rtf", SearchOption.AllDirectories);
-        Assert.Equal(2, revisions.Length);
-        Assert.Equal(2, Directory.GetFiles(Path.Combine(w.MetadataPath, "history"), "*.json", SearchOption.AllDirectories).Length);
-        Assert.DoesNotContain(revisions, p => File.ReadAllText(p).Contains("First"));
-        Assert.Contains(revisions, p => File.ReadAllText(p).Contains("Second"));
-    }
-
-    [Fact]
-    public void FirstSaveOfASessionKeepsTheContentOnDisk()
-    {
-        var thought = Workspace.CreateThought(Workspace.Root, "Note", BrainWorkspace.PlainTextRtf("Original"));
-        var history = Path.Combine(Workspace.MetadataPath, "history");
-        foreach (var file in Directory.GetFiles(history, "*", SearchOption.AllDirectories)) File.Delete(file);
-        // A fresh instance has not archived the disk version yet, and must not replace it.
-        var w = Workspace;
-        thought = w.Save(thought, BrainWorkspace.PlainTextRtf("Edited")).Thought;
-        w.Save(thought, BrainWorkspace.PlainTextRtf("Edited again"));
-        var revisions = Directory.GetFiles(history, "*.rtf", SearchOption.AllDirectories);
-        Assert.Contains(revisions, p => File.ReadAllText(p).Contains("Original"));
-        Assert.Contains(revisions, p => File.ReadAllText(p).Contains("Edited again"));
-        Assert.Equal(2, revisions.Length);
-    }
-
-    [Fact]
-    public void RenamedThoughtKeepsItsHistory()
-    {
-        var w = Workspace;
-        var thought = w.CreateThought(w.Root, "Before", BrainWorkspace.PlainTextRtf("One"));
-        var renamed = w.Rename(thought.Path, "After");
-        w.Save(w.Read(renamed), BrainWorkspace.PlainTextRtf("Two"));
-        var directory = Assert.Single(Directory.GetDirectories(Path.Combine(w.MetadataPath, "history")));
-        Assert.Equal(2, Directory.GetFiles(directory, "*.rtf").Length);
-    }
-
-    [Fact]
-    public void HistoryFollowsClusterThroughRenameTrashAndBack()
-    {
-        var w = Workspace;
-        var cluster = w.CreateCluster(w.Root, "Projects");
-        var child = w.CreateCluster(cluster, "Website");
-        w.CreateThought(child, "Ideas", BrainWorkspace.PlainTextRtf("One"));
-        cluster = w.Rename(cluster, "Work");
-        cluster = w.Move(w.MoveToTrash(cluster), w.Root);
-        var path = Path.Combine(cluster, "Website", "Ideas.rtf");
-        w.Save(w.Read(path), BrainWorkspace.PlainTextRtf("Two"));
-        // A fresh instance has no memory of the moves, so this checks the folder on disk.
-        new BrainWorkspace(w.Root).Save(w.Read(path), BrainWorkspace.PlainTextRtf("Three"));
-        var directory = Assert.Single(Directory.GetDirectories(Path.Combine(w.MetadataPath, "history")));
-        var revisions = Directory.GetFiles(directory, "*.rtf").Select(File.ReadAllText).ToList();
-        Assert.Contains(revisions, r => r.Contains("One"));
-        Assert.Contains(revisions, r => r.Contains("Three"));
-    }
-
-    [Fact]
-    public void PruneHistoryDeletesOldHistoryNoThoughtOwns()
-    {
-        var w = Workspace;
-        var history = Path.Combine(w.MetadataPath, "history");
-        var live = w.CreateThought(w.Root, "Live");
-        var trashed = w.MoveToTrash(w.CreateThought(w.Root, "Trashed").Path);
-        string Folder(string name, DateTime saved, string originalPath)
-        {
-            var directory = Path.Combine(history, name);
-            Directory.CreateDirectory(directory);
-            var file = Path.Combine(directory, $"{saved:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.rtf");
-            File.WriteAllText(file, "rtf");
-            File.WriteAllText(file + ".json", System.Text.Json.JsonSerializer.Serialize(new { OriginalPath = originalPath }));
-            return directory;
-        }
-        var old = DateTime.UtcNow.AddDays(-40);
-        var orphan = Folder("orphan", old, "Gone.rtf");
-        var recentOrphan = Folder("recent", DateTime.UtcNow.AddDays(-1), "Gone too.rtf");
-        var stalePath = Folder("stale", old, "Live.rtf");
-        // Backdate the revisions of the live and trashed thoughts as if untouched for a while.
-        foreach (var file in Directory.GetFiles(history, "*.rtf", SearchOption.AllDirectories).Where(f => !f.Contains("orphan") && !f.Contains("recent") && !f.Contains("stale")))
-        {
-            var backdated = Path.Combine(Path.GetDirectoryName(file)!, $"{old:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.rtf");
-            File.Move(file, backdated);
-            File.Move(file + ".json", backdated + ".json");
-        }
-        var owners = Directory.GetDirectories(history).Except([orphan, recentOrphan, stalePath]).ToList();
-        Assert.Equal(2, owners.Count);
-        w.PruneHistory();
-        Assert.False(Directory.Exists(orphan));
-        Assert.True(Directory.Exists(recentOrphan));
-        Assert.True(Directory.Exists(stalePath));
-        Assert.All(owners, d => Assert.Single(Directory.GetFiles(d, "*.rtf")));
-        Assert.True(File.Exists(live.Path) && File.Exists(trashed));
-    }
-
-    [Fact]
-    public void PruneHistoryThinsOldRevisions()
-    {
-        var w = Workspace;
-        var directory = Path.Combine(w.MetadataPath, "history", "note");
-        Directory.CreateDirectory(directory);
-        var now = DateTime.UtcNow;
-        string Add(DateTime saved)
-        {
-            var file = Path.Combine(directory, $"{saved:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.rtf");
-            File.WriteAllText(file, "rtf");
-            File.WriteAllText(file + ".json", "{}");
-            return file;
-        }
-        var hour = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc).AddDays(-3);
-        var recent = new[] { Add(now.AddHours(-1)), Add(now.AddHours(-1).AddSeconds(-30)) };
-        var newerInHour = Add(hour.AddMinutes(50));
-        var olderInHour = Add(hour.AddMinutes(1));
-        var month = Add(new DateTime(now.Year - 2, 6, 15, 12, 0, 0, DateTimeKind.Utc));
-        var olderInMonth = Add(new DateTime(now.Year - 2, 6, 14, 12, 0, 0, DateTimeKind.Utc));
-        w.PruneHistory();
-        foreach (var kept in recent.Append(newerInHour).Append(month))
-            Assert.True(File.Exists(kept) && File.Exists(kept + ".json"));
-        Assert.False(File.Exists(olderInHour) || File.Exists(olderInHour + ".json"));
-        Assert.False(File.Exists(olderInMonth));
     }
 
     [Theory]

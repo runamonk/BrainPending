@@ -18,6 +18,10 @@ public class RichEditorView : UserControl
 
     public RichEditorToolbar Toolbar { get; }
 
+    /// <summary>Host controls shown at the start of the status bar, before the status text
+    /// (e.g. a link to a document's history). Add or remove controls and the bar updates.</summary>
+    public Avalonia.Collections.AvaloniaList<Control> StatusItems { get; } = new();
+
     /// <inheritdoc cref="ZoomFactor"/>
     public static readonly StyledProperty<double> ZoomFactorProperty =
         AvaloniaProperty.Register<RichEditorView, double>(nameof(ZoomFactor), 1.0, coerce: CoerceZoom);
@@ -347,11 +351,25 @@ public class RichEditorView : UserControl
         documentInfo.Children.Add(_fileSizeInfo);
         documentInfo.Children.Add(_zoomInfo);
 
+        var hostInfo = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            Margin = new Thickness(0, 0, 12, 0),
+        };
+        StatusItems.CollectionChanged += (_, _) =>
+        {
+            hostInfo.Children.Clear();
+            hostInfo.Children.AddRange(StatusItems);
+        };
+
         var panel = new DockPanel();
         DockPanel.SetDock(documentInfo, Dock.Right);
         DockPanel.SetDock(_limitInfo, Dock.Right);
+        DockPanel.SetDock(hostInfo, Dock.Left);
         panel.Children.Add(documentInfo);
         panel.Children.Add(_limitInfo);
+        panel.Children.Add(hostInfo);
         panel.Children.Add(_statusInfo);
 
         _statusBar = new Border

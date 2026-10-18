@@ -182,14 +182,11 @@ public sealed class AttachmentTests : IDisposable
             return attachment;
         }
         var inThought = Add(true);
-        var inHistory = Add(true);
         var unlinked = Add(true);
         var recent = Add(false);
-        var thought = workspace.CreateThought(_root, "Note", BrainWorkspace.PlainTextRtf(inHistory.Link));
-        workspace.Save(thought, BrainWorkspace.PlainTextRtf(inThought.Link));
+        workspace.CreateThought(_root, "Note", BrainWorkspace.PlainTextRtf(inThought.Link));
         store.PruneUnlinked(TimeSpan.FromDays(7));
         Assert.True(File.Exists(inThought.Path));
-        Assert.True(File.Exists(inHistory.Path));
         Assert.True(File.Exists(recent.Path));
         Assert.False(Directory.Exists(Path.GetDirectoryName(unlinked.Path)));
     }

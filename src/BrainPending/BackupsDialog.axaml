@@ -1,0 +1,57 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:BrainPending"
+        xmlns:rte="using:AvaloniaRichEditor.Controls"
+        x:Class="BrainPending.BackupsDialog"
+        Title="Previous versions" Width="920" Height="620" MinWidth="620" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource AppSurfaceBrush}">
+  <Grid Margin="24" RowDefinitions="Auto,*,Auto">
+    <Grid ColumnDefinitions="*,Auto">
+      <TextBlock x:Name="Heading" Text="Previous versions" FontSize="21" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+      <Button x:Name="BrowseAllButton" Grid.Column="1" Classes="quiet" Content="Browse all backups…" IsVisible="False" VerticalAlignment="Center"
+              Foreground="{DynamicResource AppLinkBrush}" Click="BrowseAll_Click" ToolTip.Tip="Every backed-up thought, including ones no longer in the brain" />
+    </Grid>
+    <Grid x:Name="Body" Grid.Row="1" ColumnDefinitions="280,*" ColumnSpacing="16" Margin="0,16,0,0">
+      <Grid x:Name="ThoughtPanel" RowDefinitions="Auto,Auto,*" RowSpacing="8">
+        <TextBox x:Name="Filter" PlaceholderText="Filter thoughts" AutomationProperties.Name="Filter thoughts" TextChanged="Filter_Changed" />
+        <CheckBox x:Name="GoneOnly" Grid.Row="1" Content="Only thoughts no longer in the brain" IsCheckedChanged="Filter_Changed" />
+        <ListBox x:Name="Thoughts" Grid.Row="2" Background="Transparent" SelectionChanged="Thoughts_SelectionChanged" AutomationProperties.Name="Backed up thoughts">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="local:BackupThoughtRow">
+              <StackPanel Margin="0,2">
+                <TextBlock Text="{Binding Name}" FontWeight="Medium" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding Detail}" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Thought}" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+      <Grid Grid.Column="1" RowDefinitions="Auto,*" RowSpacing="8">
+        <ComboBox x:Name="Days" HorizontalAlignment="Stretch" SelectionChanged="Days_SelectionChanged" AutomationProperties.Name="Backup date">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="local:BackupDayRow">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Border Grid.Row="1" BorderBrush="{DynamicResource AppLineBrush}" BorderThickness="1" CornerRadius="6" ClipToBounds="True">
+          <Grid>
+            <rte:RichEditorView x:Name="Preview" ShowFileActions="False" ShowStatusBar="False" Background="Transparent" />
+            <TextBlock x:Name="Empty" IsVisible="False" Opacity="0.6" TextWrapping="Wrap" TextAlignment="Center"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="32" />
+          </Grid>
+        </Border>
+      </Grid>
+    </Grid>
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="0,16,0,0">
+      <TextBlock x:Name="Error" Foreground="{DynamicResource AppErrorBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+        <Button Classes="action quiet" Content="Close" Click="Close_Click" />
+        <Button x:Name="RestoreButton" Classes="action" Content="Restore as new thought" IsEnabled="False"
+                Background="{DynamicResource AppAccentBrush}" Foreground="{DynamicResource AppAccentTextBrush}" Click="Restore_Click"
+                ToolTip.Tip="Adds this version as a new thought next to the original. The original isn't changed." />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

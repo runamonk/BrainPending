@@ -25,6 +25,8 @@ public sealed class ThoughtPresence(string brainRoot, string machine)
     {
         var unbroken = Claim != null && PathRules.AreEqual(Claim.Thought, thought) && now - Claim.HeartbeatUtc < StaleAfter;
         var claim = new PresenceClaim(Instance, machine, thought, claimedUtc ?? (unbroken ? Claim!.ClaimedUtc : now), now);
+        // Writing would recreate a brain that was renamed or moved away.
+        if (!Directory.Exists(Path.GetDirectoryName(_folder))) throw new IOException("The brain folder is missing.");
         AtomicFile.WriteAllText(OwnFile, JsonSerializer.Serialize(claim));
         Claim = claim;
     }

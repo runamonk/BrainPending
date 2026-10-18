@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Globalization;
 using System.IO.Enumeration;
 using System.Security.Cryptography;
 using System.Text;
@@ -181,7 +179,6 @@ public sealed class BrainWorkspace
                 file.Write(bytes);
                 file.Flush(true);
             }
-            WriteRevision(path, bytes);
             File.Move(temp, path);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
@@ -205,8 +202,10 @@ public sealed class BrainWorkspace
     {
         var path = CheckPath(original.Path, false);
         var bytes = EncodeRtf(rtf);
+        // Creating the locks folder would quietly rebuild a renamed or moved brain at its old path.
+        if (!Directory.Exists(MetadataPath)) throw new IOException($"The brain folder {Root} is missing or was moved, so this thought wasn't saved there.");
         Directory.CreateDirectory(System.IO.Path.Combine(MetadataPath, "locks"));
-        // This lock coordinates local instances only; cloud replicas still need conflict copies and revisions.
+        // This lock coordinates local instances only; cloud replicas still need conflict copies.
         using var lease = AcquireLock(path);
         var disk = File.Exists(path) ? File.ReadAllBytes(path) : null;
         var revision = Hash(bytes);
@@ -220,8 +219,6 @@ public sealed class BrainWorkspace
             var conflict = CreateThought(parent, $"{conflictName} (conflict {DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N})", rtf);
             return new(conflict, true);
         }
-        WriteRevision(path, disk);
-        WriteRevision(path, bytes, replaceable: true);
         var temp = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, $".save-{Guid.NewGuid():N}.tmp");
         try
         {
@@ -252,141 +249,6 @@ public sealed class BrainWorkspace
         }
     }
 
-    // Last revision this instance archived per thought, so unchanged disk content is not stored twice.
-    private sealed record Archived(string Hash, string File, DateTime WindowStartUtc, bool Replaceable);
-    private readonly ConcurrentDictionary<string, Archived> _archived = new(PathRules.Comparer);
-
-    // Autosave fires on every pause in typing. Within this window a save replaces this
-    // instance's previous save revision instead of adding another full copy.
-    private static readonly TimeSpan RevisionWindow = TimeSpan.FromMinutes(5);
-
-    private void WriteRevision(string path, byte[] bytes, bool replaceable = false)
-    {
-        var relative = System.IO.Path.GetRelativePath(Root, path);
-        var hash = Hash(bytes);
-        _archived.TryGetValue(relative, out var last);
-        if (last?.Hash == hash) return;
-        var directory = HistoryDirectory(relative);
-        Directory.CreateDirectory(directory);
-        var now = DateTime.UtcNow;
-        var revision = System.IO.Path.Combine(directory, $"{now:yyyyMMdd-HHmmssfff}-{Guid.NewGuid():N}.rtf");
-        File.WriteAllBytes(revision, bytes);
-        File.WriteAllText(revision + ".json", JsonSerializer.Serialize(new { OriginalPath = relative, SavedUtc = now }));
-        var replace = replaceable && last is { Replaceable: true } && now - last.WindowStartUtc < RevisionWindow;
-        _archived[relative] = new(hash, revision, replace ? last!.WindowStartUtc : now, replaceable);
-        if (!replace) return;
-        // A file held by a sync client is left for PruneHistory to thin later.
-        try { File.Delete(last!.File); File.Delete(last.File + ".json"); }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-    }
-
-    private string HistoryDirectory(string relative) =>
-        System.IO.Path.Combine(MetadataPath, "history", Hash(Encoding.UTF8.GetBytes(relative)));
-
-    // History is filed by path, so it has to follow a thought, or every thought in a cluster, when it moves.
-    private void RelocateHistory(string source, string target)
-    {
-        try
-        {
-            var moved = Directory.Exists(target)
-                ? Directory.GetFiles(target, "*.rtf", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint })
-                : [target];
-            foreach (var path in moved)
-            {
-                var oldRelative = System.IO.Path.GetRelativePath(Root, path == target ? source : System.IO.Path.Combine(source, System.IO.Path.GetRelativePath(target, path)));
-                var newRelative = System.IO.Path.GetRelativePath(Root, path);
-                var from = HistoryDirectory(oldRelative);
-                var to = HistoryDirectory(newRelative);
-                _archived.TryRemove(oldRelative, out var archived);
-                if (archived != null) _archived[newRelative] = archived with { File = System.IO.Path.Combine(to, System.IO.Path.GetFileName(archived.File)) };
-                if (from == to || !Directory.Exists(from)) continue;
-                // A thought that once lived at the new path may have left history there; keep both.
-                if (!Directory.Exists(to)) { Directory.Move(from, to); continue; }
-                foreach (var file in Directory.GetFiles(from)) File.Move(file, System.IO.Path.Combine(to, System.IO.Path.GetFileName(file)));
-                Directory.Delete(from);
-            }
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-        {
-            // The file operation has already succeeded.
-            Warning?.Invoke(this, "The item was moved, but its history could not be moved with it: " + error.Message);
-        }
-    }
-
-    // History of a thought deleted for good, or moved outside the app, is kept this long after its last save.
-    private static readonly TimeSpan OrphanedHistoryAge = TimeSpan.FromDays(30);
-
-    // Keeps every revision from the last day, then the newest per hour for a week,
-    // per day for a month and per month after that.
-    public void PruneHistory()
-    {
-        var history = System.IO.Path.Combine(MetadataPath, "history");
-        if (!Directory.Exists(history)) return;
-        var now = DateTime.UtcNow;
-        var owned = OwnedHistoryFolders();
-        foreach (var directory in Directory.EnumerateDirectories(history))
-        {
-            var files = Directory.GetFiles(directory, "*.rtf").OrderByDescending(System.IO.Path.GetFileName, StringComparer.Ordinal).ToList();
-            if (!owned.Contains(System.IO.Path.GetFileName(directory)) && files.Count > 0 &&
-                TryRevisionTime(files[0], out var newest) && now - newest > OrphanedHistoryAge && !SavedPathExists(directory))
-            {
-                try { Directory.Delete(directory, true); }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-                continue;
-            }
-            var kept = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var file in files)
-            {
-                var name = System.IO.Path.GetFileName(file);
-                if (!TryRevisionTime(file, out var saved)) continue;
-                var age = now - saved;
-                var bucket = age < TimeSpan.FromDays(1) ? name
-                    : saved.ToString(age < TimeSpan.FromDays(7) ? "yyyyMMddHH" : age < TimeSpan.FromDays(30) ? "yyyyMMdd" : "yyyyMM", CultureInfo.InvariantCulture);
-                if (kept.Add(bucket)) continue;
-                try { File.Delete(file); File.Delete(file + ".json"); }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
-            }
-        }
-    }
-
-    private static bool TryRevisionTime(string file, out DateTime saved)
-    {
-        var name = System.IO.Path.GetFileName(file);
-        saved = default;
-        return name.Length >= 18 && DateTime.TryParseExact(name[..18], "yyyyMMdd-HHmmssfff", CultureInfo.InvariantCulture,
-            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out saved);
-    }
-
-    // History folders of every thought in the brain and in Trash. An unreadable folder throws,
-    // so no history is treated as orphaned on a partial scan.
-    private HashSet<string> OwnedHistoryFolders()
-    {
-        var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = false };
-        var thoughts = new FileSystemEnumerable<string>(Root, (ref FileSystemEntry entry) => entry.ToFullPath(), options)
-        {
-            ShouldRecursePredicate = (ref FileSystemEntry entry) => !entry.FileName.StartsWith("."),
-            ShouldIncludePredicate = (ref FileSystemEntry entry) => !entry.IsDirectory && entry.FileName.EndsWith(".rtf", StringComparison.OrdinalIgnoreCase)
-        };
-        var trashed = Directory.Exists(TrashPath) ? Directory.EnumerateFiles(TrashPath, "*.rtf", options) : [];
-        return thoughts.Concat(trashed).Select(p => System.IO.Path.GetFileName(HistoryDirectory(System.IO.Path.GetRelativePath(Root, p)))).ToHashSet();
-    }
-
-    // Belt and braces: a revision whose saved path still holds a thought is never orphaned.
-    private bool SavedPathExists(string directory)
-    {
-        foreach (var file in Directory.GetFiles(directory, "*.json"))
-        {
-            try
-            {
-                using var json = JsonDocument.Parse(File.ReadAllText(file));
-                if (json.RootElement.TryGetProperty("OriginalPath", out var path) && path.GetString() is { } relative &&
-                    File.Exists(System.IO.Path.Combine(Root, relative))) return true;
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { return true; } // Unsure, so keep it.
-        }
-        return false;
-    }
-
     public string Rename(string path, string name)
     {
         path = CheckPath(path, false);
@@ -398,7 +260,6 @@ public sealed class BrainWorkspace
             throw new IOException("An item with that name already exists.");
         if (isCluster) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
-        RelocateHistory(path, target);
         return target;
     }
 
@@ -415,7 +276,6 @@ public sealed class BrainWorkspace
         if (File.Exists(target) || Directory.Exists(target)) throw new IOException("An item with that name already exists in the destination cluster.");
         if (isCluster) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
-        RelocateHistory(path, target);
         if (IsInTrash(path) != IsInTrash(target)) MoveAttachments(target, IsInTrash(target));
         return target;
     }
@@ -458,7 +318,6 @@ public sealed class BrainWorkspace
         var target = AvailableTrashPath(path);
         if (Directory.Exists(path)) Directory.Move(path, target); else File.Move(path, target);
         RelocatePins(path, target);
-        RelocateHistory(path, target);
         // Write the record after the move so a failed move leaves no orphan record.
         try
         {

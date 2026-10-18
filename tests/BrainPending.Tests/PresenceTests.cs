@@ -7,7 +7,8 @@ public sealed class PresenceTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "BrainPending-presence-test-" + Guid.NewGuid().ToString("N"));
     private static readonly DateTime Start = new(2026, 10, 17, 12, 0, 0, DateTimeKind.Utc);
 
-    private ThoughtPresence Instance(string machine = "DESK") => new(_root, machine);
+    // A real brain always has its .brainpending folder.
+    private ThoughtPresence Instance(string machine = "DESK") => new(new BrainWorkspace(_root).Root, machine);
 
     [Fact]
     public void ClaimLocksOthersUntilReleased()

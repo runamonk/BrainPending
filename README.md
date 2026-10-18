@@ -138,22 +138,40 @@ Your existing sync service transfers the files; Brain Pending reacts when they a
   when the reader is at the top of the thought; otherwise a Reload button waits so the
   page never moves under them. An offline computer can't see claims, so conflict copies
   remain the backstop.
-- Immutable RTF revisions are stored in `Brain/.brainpending/history`, with JSON files
-  identifying the path each was saved under. History follows thoughts renamed or moved
-  in the app; moves made in Explorer leave it behind. Deleted items live in `.brainpending/trash/items`
-  and appear in the brain's Trash folder.
-  Recover deleted items with Move to cluster or Move to parent; history recovery
-  still requires copying an RTF from the history directory.
+- Deleted items live in `.brainpending/trash/items` and appear in the brain's Trash
+  folder. Recover them with Move to cluster or Move to parent.
 
 This is eventual file synchronization, not collaborative live editing. Offline
 edits reaching the sync provider simultaneously can still produce provider-level
-conflicts. History preserves local save revisions, but automated reconciliation
-of those conflicts is not implemented. Do not exclude `.brainpending/history` from
-sync if you want those revisions on another computer. Saves within five minutes of
-each other share one revision. When a brain opens, history keeps every revision from
-the last day, then the newest per hour for a week, per day for a month and per month
-after that. History that no thought owns, because the thought was deleted for good or
-moved outside the app, is removed 30 days after its last save.
+conflicts; automated reconciliation of those is not implemented.
+
+## Backups and previous versions
+
+Backups are off until you choose a folder in Settings, under Backups. Nothing is
+copied anywhere before that: backups are plain, unencrypted copies. The setting
+belongs to this computer, so each computer decides where, or whether, it backs up.
+
+- The chosen folder is this brain's backup, so use one folder per brain. It can't be
+  inside the brain, contain the brain, or be another brain. Another computer finds the
+  same backups when pointed at the same folder.
+- Once a day, on opening the brain or on an hourly check while it stays open, every
+  thought that changed since its last copy is copied into `<backup folder>/<yyyy-MM-dd>/`,
+  keeping its cluster path. Attachments are copied once into `attachments/`, since they
+  never change.
+- Backing up only reads the brain. If the brain folder is missing, for example renamed
+  or moved while open, nothing is backed up and the app closes the brain instead of
+  writing to the old location.
+- Keep backups for N days (30 by default). Older days are deleted, and a thought that
+  hasn't changed gets a fresh copy, so its latest version is always there.
+- Previous versions, in the editor's status bar or on a thought's right-click menu,
+  lists the backups of that thought. Pick a date to preview it, then Restore as new
+  thought: the copy is added next to the original, or at the top of the brain if its
+  cluster is gone, with any attachments it needs. The original is never changed.
+  Browse all backups lists every backed-up thought, including ones no longer in the brain.
+- Backups are filed by path, so a renamed thought's versions from before the rename
+  are listed under its old name.
+- Earlier versions kept a copy of every save in `.brainpending/history`. It's left alone;
+  Settings, under Backups, has a Delete old history button once you no longer need it.
 
 ## Validation and current scope
 
@@ -165,15 +183,15 @@ Tests cover persistence, competing instances, external changes in an open window
 save-on-close and RTF round-trips for links, images, Unicode, fonts,
 highlighting, lists and alignment.
 
-This is the first working version. Full-brain content search,
-history restore screens, and automatic handling
+This is the first working version. Full-brain content search
+and automatic handling
 of sync-provider conflict files are still to come. Moving files with Explorer
 is supported through refresh; avoid moving a note while actively editing it.
 
 The free editor implements a subset of RTF, not full Word compatibility. Complex
 external RTF objects and advanced table/page formatting need further compatibility
-testing. Original bytes are retained until the user edits, and previous revisions
-are kept. Windows is the validated target; macOS/Linux have not been validated.
+testing. Original bytes are retained until the user edits, and backups keep previous
+versions when turned on. Windows is the validated target; macOS/Linux have not been validated.
 
 ## App icon
 
@@ -255,10 +273,10 @@ Attachment files live in `.brainpending/attachments` and use brain-relative link
 so renaming/moving notes or moving the whole brain preserves them. Duplicate
 filenames are stored separately. Copy/back up the **whole brain including
 `.brainpending`** to preserve attachments; an individual RTF export contains links,
-not embedded attachment bytes. Files are retained for undo, history, and conflict
+not embedded attachment bytes. Files are retained for undo and conflict
 copies even after their links are removed. When a brain opens, files older than
-seven days that no RTF in the brain links to (counting history, Trash and backups)
-are deleted. Attachment previews are not implemented.
+seven days that no RTF in the brain links to (counting Trash) are deleted; a backup
+keeps its own copy. Attachment previews are not implemented.
 
 To run the optional live import test against the generated dummy notebook, set
 `BRAINPENDING_TEST_ONENOTE` to its `.onetoc2` path before running `dotnet test`.

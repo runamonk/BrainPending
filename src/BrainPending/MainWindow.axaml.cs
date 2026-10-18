@@ -80,6 +80,7 @@ public partial class MainWindow : Window
         EditorView.Editor.HostTextMenuItems["attach"] = ("Attach file…", () => AttachFile_Click(null, EventArgs.Empty));
         EditorView.Editor.HostTextMenuItems["find"] = ("Find…", OpenFind);
         EditorView.Toolbar.HostItems["find"] = ("Find", FindButton);
+        InitializeBackups();
         ApplyEditorSettings();
         // The editor adds a 10px text inset; align with the 14px title inset.
         EditorView.Editor.Margin = new Thickness(4, 0, 4, 24);
@@ -153,7 +154,7 @@ public partial class MainWindow : Window
             }
             SaveWindowBounds();
         };
-        Closed += (_, _) => { _closed = true; _autosave.Stop(); _saveRetry.Stop(); _poll.Stop(); _watcher?.Dispose(); StopPresence(); };
+        Closed += (_, _) => { _closed = true; _autosave.Stop(); _saveRetry.Stop(); _poll.Stop(); _backupTimer.Stop(); _watcher?.Dispose(); StopPresence(); };
         AddHandler(KeyDownEvent, OnShortcut, RoutingStrategies.Tunnel);
         Browser.AddHandler(PointerPressedEvent, Browser_PointerPressed, RoutingStrategies.Tunnel);
         Browser.AddHandler(KeyDownEvent, Browser_KeyDown, RoutingStrategies.Tunnel);
@@ -291,18 +292,22 @@ public partial class MainWindow : Window
         var presence = new ThoughtPresence(workspace.Root, Environment.MachineName);
         _presence = presence;
         _workspace = workspace;
+        var backup = _settings.Backup(workspace.Root);
         _ = Task.Run(() =>
         {
             try
             {
                 presence.RemoveAbandoned(DateTime.UtcNow);
-                workspace.PruneHistory();
-                // After history, so attachments only old revisions linked to can go.
+                // Before pruning, so an attachment about to go still gets its backup copy.
+                if (backup != null) RunBackup(workspace, backup);
                 new AttachmentStore(workspace.Root).PruneUnlinked(TimeSpan.FromDays(7));
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            { System.Diagnostics.Trace.TraceWarning("Could not prune history or attachments: " + error.Message); }
+            { System.Diagnostics.Trace.TraceWarning("Could not prune attachments: " + error.Message); }
         });
+        _backupTimer.Stop();
+        _backupTimer.Start();
+        UpdateVersionsLink();
         _recentThoughts.Clear();
         _cluster = workspace.Root;
         ClearThought(forget: false);
@@ -518,6 +523,7 @@ public partial class MainWindow : Window
         if (_workspace == null || _loading || _inDialog || _closed) return;
         try
         {
+            if (!Directory.Exists(_workspace.MetadataPath)) { CloseMissingBrain(); return; }
             UpdatePresence();
             if (_thought != null)
             {
@@ -561,6 +567,30 @@ public partial class MainWindow : Window
         catch (IOException) { /* Sync clients can briefly hold/replace a file. Retry on the next poll. */ }
         catch (UnauthorizedAccessException e) { ShowNotice("Cannot read brain changes: " + e.Message); }
         catch (Exception e) { ShowNotice("Could not load an incoming change: " + e.Message); }
+    }
+
+    // The brain folder was renamed, moved or deleted while open. Stop instead of writing to the
+    // old path, which would rebuild an empty brain there and make the real one look wiped.
+    private void CloseMissingBrain()
+    {
+        var root = _workspace!.Root;
+        var unsaved = _thought != null && (_dirty || EditorView.Editor.IsModified);
+        if (unsaved) WriteRecovery(EditorView.Editor.ToRtf());
+        _poll.Stop();
+        _autosave.Stop();
+        _saveRetry.Stop();
+        _backupTimer.Stop();
+        _watcher?.Dispose();
+        _watcher = null;
+        ClearThought(forget: false);
+        _workspace = null;
+        _cluster = "";
+        Browser.ItemsSource = null;
+        BrainPath.Text = "Open brain";
+        SaveStatus.Text = "Brain folder missing";
+        UpdateVersionsLink();
+        ShowNotice($"The brain folder {root} is gone. Was it renamed or moved? Nothing was written to the old location. Use Open brain to open it where it is now."
+            + (unsaved ? (_recoveryCurrent ? " Your unsaved changes were kept in a recovery copy." : " Your unsaved changes could not be kept.") : ""));
     }
 
     private void ScheduleSave()
@@ -950,6 +980,9 @@ public partial class MainWindow : Window
                 return Task.CompletedTask;
             });
             actions.Add(pin);
+            var versions = new MenuItem { Header = "Previous versions…" };
+            versions.Click += async (_, _) => await Run(() => OpenBackups(item.Path));
+            actions.Add(versions);
             actions.Add(new Separator());
         }
         actions.AddRange(new Control[] { rename, moveUp, moveTo, new Separator(), trash });

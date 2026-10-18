@@ -500,6 +500,94 @@ public sealed class WindowTests : IDisposable
         else Assert.Contains("From the other computer", view.Editor.GetPlainText());
     }
 
+    [AvaloniaFact]
+    public void BackupsDialogPreviewsTheThoughtAndFindsOnesNoLongerInTheBrain()
+    {
+        var workspace = new BrainWorkspace(_root);
+        workspace.CreateThought(_root, "Keep", BrainWorkspace.PlainTextRtf("Kept text"));
+        var gone = workspace.CreateThought(_root, "Gone", BrainWorkspace.PlainTextRtf("Gone text"));
+        var backups = _root + "-backups";
+        try
+        {
+            var backup = new BrainBackup(_root, backups);
+            backup.Run(DateTime.Now, 30);
+            File.Delete(gone.Path);
+            var dialog = new BackupsDialog(backup, "Keep.rtf");
+            dialog.Show();
+            var list = dialog.FindControl<ListBox>("Thoughts")!;
+            // Opened for a thought, only its versions show.
+            Assert.False(dialog.FindControl<Grid>("ThoughtPanel")!.IsVisible);
+            Assert.Contains("Keep", dialog.FindControl<TextBlock>("Heading")!.Text);
+            Assert.Equal("Keep", Assert.IsType<BackupThoughtRow>(list.SelectedItem).Name);
+            Assert.Contains("Kept text", dialog.FindControl<RichEditorView>("Preview")!.Editor.GetPlainText());
+            Assert.True(dialog.FindControl<Button>("RestoreButton")!.IsEnabled);
+
+            dialog.FindControl<Button>("BrowseAllButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.True(dialog.FindControl<Grid>("ThoughtPanel")!.IsVisible);
+            dialog.FindControl<CheckBox>("GoneOnly")!.IsChecked = true;
+            var row = Assert.Single(Assert.IsAssignableFrom<IEnumerable<BackupThoughtRow>>(list.ItemsSource));
+            Assert.Equal("Gone", row.Name);
+            Assert.StartsWith("No longer in the brain", row.Detail);
+            dialog.Close();
+        }
+        finally { if (Directory.Exists(backups)) Directory.Delete(backups, true); }
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PreviousVersionsLinkShowsInTheStatusBarOnlyWhenBackupsAreOn(bool backups)
+    {
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Note");
+        if (backups)
+            new BrainSettings().RememberBackup(_root, new BackupSettings(_root + "-backups"))
+                .Save(Path.Combine(_root, ".brainpending", "settings.json"));
+        try
+        {
+            var window = OpenWindow();
+            Select(window, thought.Path);
+            var link = window.FindControl<RichEditorView>("EditorView")!.StatusItems.OfType<Button>().Single();
+            Assert.Equal("Previous versions", link.Content);
+            Assert.Equal(backups, link.IsVisible);
+        }
+        // Opening the brain runs its first backup in the background.
+        finally { for (var i = 0; i < 20 && Directory.Exists(_root + "-backups"); i++) try { Directory.Delete(_root + "-backups", true); } catch (IOException) { Thread.Sleep(50); } }
+    }
+
+    [AvaloniaFact]
+    public void BrainRenamedWhileOpenIsClosedWithoutRebuildingItAtTheOldPath()
+    {
+        var workspace = new BrainWorkspace(_root);
+        var thought = workspace.CreateThought(_root, "Note", BrainWorkspace.PlainTextRtf("Before"));
+        // Settings and recovery copies live outside the brain, as they do in the app.
+        var settings = _root + "-settings";
+        var renamed = _root + " renamed";
+        var window = new MainWindow(_root, Path.Combine(settings, "settings.json"));
+        _windows.Add(window);
+        window.Show();
+        Select(window, thought.Path);
+        window.FindControl<RichEditorView>("EditorView")!.Editor.InsertText("Unsaved ");
+        AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+        Dispatcher.UIThread.RunJobs();
+        Directory.Move(_root, renamed);
+        try
+        {
+            window.CheckExternalChanges();
+            Assert.False(Directory.Exists(_root));
+            Assert.Contains("is gone", window.FindControl<TextBlock>("NoticeText")!.Text);
+            Assert.Contains("recovery copy", window.FindControl<TextBlock>("NoticeText")!.Text);
+            Assert.False(window.FindControl<RichEditorView>("EditorView")!.IsVisible);
+            Assert.Contains("Before", File.ReadAllText(Path.Combine(renamed, "Note.rtf")));
+        }
+        finally
+        {
+            if (!Directory.Exists(_root)) Directory.Move(renamed, _root);
+            if (Directory.Exists(renamed)) Directory.Delete(renamed, true);
+            if (Directory.Exists(settings)) Directory.Delete(settings, true);
+        }
+    }
+
     public void Dispose()
     {
         foreach (var window in _windows) window.Close();

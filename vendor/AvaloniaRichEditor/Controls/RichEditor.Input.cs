@@ -869,6 +869,7 @@ public partial class RichEditor
             case ShortcutId.BulletList: ToggleBullet(); break;
             case ShortcutId.CodeBlock: ToggleCodeBlock(); break;
             case ShortcutId.PasteCode: _ = PasteAsCodeAsync(); break;
+            case ShortcutId.InsertLink: _ = EditLinkFromToolbarAsync(); break;
             case ShortcutId.LineSpacingSingle: SetLineSpacing(1.0); break;
             case ShortcutId.LineSpacingOneHalf: SetLineSpacing(1.5); break;
             case ShortcutId.LineSpacingDouble: SetLineSpacing(2.0); break;

@@ -485,7 +485,7 @@ public partial class RichEditorToolbar : UserControl
             Add(_tableBtn); Add(_imageBtn);
             if (_attachFileRequested != null) Add(_attachmentBtn = BuildAttachmentButton());
             Add(_dividerBtn);
-            Add(linkButton = Btn("Link", "Insert or edit hyperlink", () => { _ = Target?.EditLinkFromToolbarAsync(); }, RichEditorIcon.InsertLink));           
+            Add(linkButton = Btn("Link", "Insert or edit hyperlink (Ctrl+K)",() => { _ = Target?.EditLinkFromToolbarAsync(); }, RichEditorIcon.InsertLink));           
             Add(clearButton = Btn("Clear", "Clear formatting", () => Target?.ClearFormatting()));
 
             // Not in the built-in layout; shown only when listed in Items.

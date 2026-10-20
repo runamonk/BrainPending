@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Media;
 using AvaloniaRichEditor.Documents;
 
@@ -523,6 +524,9 @@ public partial class RichEditor
         if (Document == null || IsReadOnly || TopLevel.GetTopLevel(this) is not Window owner) return;
         var range = new TextRange(_selectionStart, _selectionEnd);
         string initialText = range.IsEmpty ? targetRun?.Text ?? "" : range.GetText();
+        // A new link starts with the copied URL, if there is one, so Enter inserts it.
+        current ??= await ClipboardUrlAsync();
+        if (Document == null || IsReadOnly) return;
         var result = await InputDialog.ShowAsync(owner, Loc("Hyperlink"), initialText, current ?? "https://");
         if (result is not { } link || string.IsNullOrWhiteSpace(link.Url)) return;
         string text = string.IsNullOrEmpty(link.Text) ? link.Url : link.Text;
@@ -559,6 +563,17 @@ public partial class RichEditor
         InvalidateMeasure();
         InvalidateVisual();
         Focus();
+    }
+
+    private async Task<string?> ClipboardUrlAsync()
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return null;
+        string? text = null;
+        try { text = (await clipboard.TryGetTextAsync())?.Trim(); }
+        catch (Exception ex) { RichEditorDiagnostics.Report(ex); }
+        return Uri.TryCreate(text, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
+            && !string.IsNullOrEmpty(uri.Host) ? text : null;
     }
 
     internal async Task EditLinkFromToolbarAsync()

@@ -494,7 +494,7 @@ public partial class RichEditor
                         items.Add(Mi(Loc("RemoveLink"), () => SetHyperlink(null, link), icon: RichEditorIcon.RemoveLink));
                     }
                     else
-                        items.Add(Mi(Loc("InsertLink"), () => { _ = EditHyperlinkAsync(null, null); }, _caretPosition.Paragraph != null, RichEditorIcon.InsertLink));
+                        items.Add(Mi(Loc("InsertLink"), () => { _ = EditHyperlinkAsync(null, null); }, _caretPosition.Paragraph != null, RichEditorIcon.InsertLink, RichEditorShortcuts.Gesture(ShortcutId.InsertLink)));
                     break;
                 // Page view always wraps, so the toggle would do nothing there.
                 case "wrap": if (!IsPaged) items.Add(CheckItem(Loc("WordWrap"), WordWrap, () => WordWrap = !WordWrap)); break;

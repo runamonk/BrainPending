@@ -106,14 +106,15 @@ public partial class MainWindow
     {
         var brain = _workspace?.Root;
         var result = await ShowOwnedDialogAsync<SettingsDialog.Result?>(new SettingsDialog(_settings.Editor ?? new(), _settings.Updates ?? new(),
-            brain, brain == null ? null : _settings.Backup(brain)));
+            brain, brain == null ? null : _settings.Backup(brain), _settings.AllowMultipleCopies));
         if (result == null) return;
         var saved = BrainSettings.Read(_settingsPath);
         _settings = saved with
         {
             // Not on the dialog.
             Editor = result.Editor with { WordWrap = EditorView.Editor.WordWrap, ToolbarItems = saved.Editor?.ToolbarItems, MenuItems = saved.Editor?.MenuItems },
-            Updates = result.Updates with { LastCheckUtc = saved.Updates?.LastCheckUtc }
+            Updates = result.Updates with { LastCheckUtc = saved.Updates?.LastCheckUtc },
+            AllowMultipleCopies = result.AllowMultipleCopies
         };
         if (brain != null) _settings = _settings.RememberBackup(brain, result.Backup);
         _settings.Save(_settingsPath);

@@ -14,7 +14,7 @@ namespace BrainPending;
 public partial class SettingsDialog : Window
 {
     // A null Backup turns backups off for the open brain.
-    internal sealed record Result(EditorSettings Editor, UpdateSettings Updates, BackupSettings? Backup);
+    internal sealed record Result(EditorSettings Editor, UpdateSettings Updates, BackupSettings? Backup, bool AllowMultipleCopies);
 
     private readonly UpdateSettings _updates = new();
     private readonly string? _brain;
@@ -29,7 +29,8 @@ public partial class SettingsDialog : Window
         InitializeComponent();
     }
 
-    internal SettingsDialog(EditorSettings editor, UpdateSettings updates, string? brain = null, BackupSettings? backup = null) : this()
+    internal SettingsDialog(EditorSettings editor, UpdateSettings updates, string? brain = null, BackupSettings? backup = null,
+        bool allowMultipleCopies = false) : this()
     {
         _updates = updates;
         _brain = brain;
@@ -69,6 +70,7 @@ public partial class SettingsDialog : Window
         CheckOnStartup.IsChecked = updates.CheckOnStartup;
         EveryDays.Value = updates.EveryDays;
         UpdateEveryDaysRow();
+        AllowMultipleCopies.IsChecked = allowMultipleCopies;
 
         FontFamilies.SelectionChanged += (_, _) => UpdatePreview();
         FontSizeInput.ValueChanged += (_, _) => UpdatePreview();
@@ -218,7 +220,7 @@ public partial class SettingsDialog : Window
                 _color is { } c ? Hex(c) : null, EditAttachmentsInPlace.IsChecked == true,
                 OpenAttachmentsOnClick.IsChecked == true) { CodeWrap = CodeWrap.IsChecked == true, CodeLineNumbers = CodeLineNumbers.IsChecked == true, CodeFontFamily = SelectedCodeFont, CodeMaxLines = (int)(CodeMaxLines.Value ?? 0) },
             _updates with { CheckOnStartup = CheckOnStartup.IsChecked == true, EveryDays = (int)(EveryDays.Value ?? 0) },
-            backup));
+            backup, AllowMultipleCopies.IsChecked == true));
     }
 
     private void Cancel_Click(object? sender, RoutedEventArgs e) => Close();

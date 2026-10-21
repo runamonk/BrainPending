@@ -8,7 +8,7 @@ internal sealed record BrainSettings(string? BrainPath = null, bool? DarkTheme =
     double? WindowWidth = null, double? WindowHeight = null, bool WindowMaximized = false,
     Dictionary<string, string>? LastOpenThoughts = null, string? ColorTheme = null, bool SidebarPinned = true,
     SearchSettings? Search = null, EditorSettings? Editor = null, UpdateSettings? Updates = null,
-    Dictionary<string, BackupSettings>? Backups = null)
+    Dictionary<string, BackupSettings>? Backups = null, bool AllowMultipleCopies = false)
 {
     public string? LastThought(string brain) => LastOpenThoughts?.FirstOrDefault(p =>
         PathRules.AreEqual(p.Key, brain)).Value;

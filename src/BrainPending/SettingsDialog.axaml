@@ -17,8 +17,33 @@
 
     <!-- Every tab gets the same height, so switching doesn't resize the window. -->
     <TabControl Padding="0,12,0,0">
+      <TabItem Header="General">
+        <StackPanel Spacing="14" MinHeight="476">
+          <TextBlock Text="ATTACHMENTS" FontSize="12" FontWeight="SemiBold" />
+          <CheckBox x:Name="EditAttachmentsInPlace" Content="Open attachments for editing" />
+          <TextBlock Text="Open attachments directly from brain location. Otherwise attachments are copied out to a temporary folder for editing. This is safer, but slower."
+                     TextWrapping="Wrap" Opacity="0.65" Margin="28,-8,0,0" />
+          <CheckBox x:Name="OpenAttachmentsOnClick" Content="Open attachments when clicked" />
+          <TextBlock Text="Skips the attachment window. Right-click an attachment to save it. Files that can run programs still ask first."
+                     TextWrapping="Wrap" Opacity="0.65" Margin="28,-8,0,0" />
+
+          <TextBlock Text="WINDOWS" FontSize="12" FontWeight="SemiBold" Margin="0,10,0,0" />
+          <CheckBox x:Name="AllowMultipleCopies" Content="Allow more than one copy of Brain Pending" />
+          <TextBlock Text="Otherwise starting Brain Pending again brings the open window forward."
+                     TextWrapping="Wrap" Opacity="0.65" Margin="28,-8,0,0" />
+
+          <TextBlock Text="UPDATES" FontSize="12" FontWeight="SemiBold" Margin="0,10,0,0" />
+          <CheckBox x:Name="CheckOnStartup" Content="Check for updates when Brain Pending starts" />
+          <StackPanel x:Name="EveryDaysRow" Orientation="Horizontal" Spacing="10" Margin="28,0,0,0">
+            <TextBlock Text="Only once every" VerticalAlignment="Center" />
+            <NumericUpDown x:Name="EveryDays" Width="120" Minimum="0" Maximum="365" Increment="1" FormatString="0" AutomationProperties.Name="Days between update checks" />
+            <TextBlock Text="days (0 checks every time)" VerticalAlignment="Center" Opacity="0.65" />
+          </StackPanel>
+        </StackPanel>
+      </TabItem>
+
       <TabItem Header="Editor">
-        <StackPanel Spacing="14" MinHeight="346">
+        <StackPanel Spacing="14" MinHeight="476">
           <TextBlock Text="Applies to new text. Text that already has its own font, size or color keeps it." TextWrapping="Wrap" Opacity="0.65" />
           <Grid ColumnDefinitions="70,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="10">
             <TextBlock Text="Font" VerticalAlignment="Center" />
@@ -42,7 +67,7 @@
       </TabItem>
 
       <TabItem Header="Code blocks">
-        <StackPanel Spacing="14" MinHeight="346">
+        <StackPanel Spacing="14" MinHeight="476">
           <Grid ColumnDefinitions="70,*">
             <TextBlock Text="Font" VerticalAlignment="Center" />
             <ComboBox x:Name="CodeFonts" Grid.Column="1" HorizontalAlignment="Stretch" MaxDropDownHeight="320" AutomationProperties.Name="Code block font" />
@@ -65,28 +90,8 @@
         </StackPanel>
       </TabItem>
 
-      <TabItem Header="General">
-        <StackPanel Spacing="14" MinHeight="346">
-          <TextBlock Text="ATTACHMENTS" FontSize="12" FontWeight="SemiBold" />
-          <CheckBox x:Name="EditAttachmentsInPlace" Content="Open attachments for editing" />
-          <TextBlock Text="Open attachments directly from brain location. Otherwise attachments are copied out to a temporary folder for editing. This is safer, but slower."
-                     TextWrapping="Wrap" Opacity="0.65" Margin="28,-8,0,0" />
-          <CheckBox x:Name="OpenAttachmentsOnClick" Content="Open attachments when clicked" />
-          <TextBlock Text="Skips the attachment window. Right-click an attachment to save it. Files that can run programs still ask first."
-                     TextWrapping="Wrap" Opacity="0.65" Margin="28,-8,0,0" />
-
-          <TextBlock Text="UPDATES" FontSize="12" FontWeight="SemiBold" Margin="0,10,0,0" />
-          <CheckBox x:Name="CheckOnStartup" Content="Check for updates when Brain Pending starts" />
-          <StackPanel x:Name="EveryDaysRow" Orientation="Horizontal" Spacing="10" Margin="28,0,0,0">
-            <TextBlock Text="Only once every" VerticalAlignment="Center" />
-            <NumericUpDown x:Name="EveryDays" Width="120" Minimum="0" Maximum="365" Increment="1" FormatString="0" AutomationProperties.Name="Days between update checks" />
-            <TextBlock Text="days (0 checks every time)" VerticalAlignment="Center" Opacity="0.65" />
-          </StackPanel>
-        </StackPanel>
-      </TabItem>
-
       <TabItem x:Name="BackupsTab" Header="Backups">
-        <StackPanel Spacing="14" MinHeight="346">
+        <StackPanel Spacing="14" MinHeight="476">
           <TextBlock x:Name="BackupBrain" TextWrapping="Wrap" Opacity="0.65" />
           <CheckBox x:Name="BackupOn" Content="Back up this brain once a day" />
           <StackPanel x:Name="BackupRows" Spacing="14" Margin="28,0,0,0">
